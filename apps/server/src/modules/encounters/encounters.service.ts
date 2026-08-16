@@ -252,6 +252,60 @@ export class EncountersService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
+  async listFollowUps(
+    tenantId: string,
+    params: { status?: string; doctorId?: string; search?: string; limit?: number } = {},
+  ) {
+    const limit = Math.min(200, Number(params.limit) || 50);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const where: any = { tenantId, followUpDate: { not: null } };
+    if (params.doctorId) where.doctorId = params.doctorId;
+    if (params.status === "upcoming") {
+      where.followUpDate = { gte: tomorrow };
+    } else if (params.status === "today") {
+      where.followUpDate = { gte: today, lt: tomorrow };
+    } else if (params.status === "overdue") {
+      where.followUpDate = { lt: today };
+    }
+    if (params.search?.trim()) {
+      const term = params.search.trim();
+      where.patient = {
+        is: {
+          OR: [
+            { firstName: { contains: term, mode: "insensitive" } },
+            { middleName: { contains: term, mode: "insensitive" } },
+            { lastName: { contains: term, mode: "insensitive" } },
+            { mrn: { contains: term, mode: "insensitive" } },
+          ],
+        },
+      };
+    }
+
+    return this.prisma.encounter.findMany({
+      where,
+      include: {
+        patient: {
+          select: {
+            id: true,
+            firstName: true,
+            middleName: true,
+            lastName: true,
+            mrn: true,
+          },
+        },
+        doctor: {
+          include: { user: { select: { firstName: true, lastName: true } } },
+        },
+      },
+      orderBy: { followUpDate: "asc" },
+      take: limit,
+    });
+  }
+
   async findById(tenantId: string, id: string) {
     const encounter = await this.prisma.encounter.findFirst({
       where: { id, tenantId },

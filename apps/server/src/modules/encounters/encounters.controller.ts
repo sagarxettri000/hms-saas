@@ -137,6 +137,13 @@ export class EncountersController {
     );
   }
 
+  @Get("follow-ups")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List scheduled patient follow-ups" })
+  listFollowUps(@Query() query: any, @Req() req: any) {
+    return this.encountersService.listFollowUps(req.user.tenantId, query);
+  }
+
   @Patch(":id")
   @Permissions(PermissionAction.EDIT)
   @ApiOperation({ summary: "Update encounter" })

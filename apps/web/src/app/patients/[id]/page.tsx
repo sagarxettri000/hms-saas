@@ -103,6 +103,15 @@ export default function PatientDetailPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [showAdmit, setShowAdmit] = useState(false);
   const [dischargeTarget, setDischargeTarget] = useState<Row | null>(null);
+  const [followupTarget, setFollowupTarget] = useState<Row | null>(null);
+  const [showFollowup, setShowFollowup] = useState(false);
+  const [followupValues, setFollowupValues] = useState<{
+    encounterId: string;
+    followUpDate: string;
+    followUpNotes: string;
+  }>({ encounterId: '', followUpDate: '', followUpNotes: '' });
+  const [savingFollowup, setSavingFollowup] = useState(false);
+  const [followupError, setFollowupError] = useState<string | null>(null);
 
   useEffect(() => {
     setRole(localStorage.getItem('role') || '');
@@ -265,6 +274,10 @@ export default function PatientDetailPage() {
     typeof a === 'string' ? a : `${a.allergen || a.name || ''}${a.severity ? ` (${a.severity})` : ''}`,
   );
 
+  const followups = (data.encounters || [])
+    .filter((e: Row) => e.followUpDate)
+    .sort((a: Row, b: Row) => (a.followUpDate > b.followUpDate ? 1 : -1));
+
   const tabs = [
     { key: 'overview', label: 'Overview' },
     ...(canManageEncounters ? [{ key: 'encounters', label: `Encounters (${data.encounters?.length ?? 0})` }] : []),
@@ -274,6 +287,7 @@ export default function PatientDetailPage() {
     { key: 'billing', label: `Billing (${data.invoices?.length ?? 0})` },
     { key: 'admissions', label: `Admit (${data.admissions?.length ?? 0})` },
     { key: 'appointments', label: `Appointments (${data.appointments?.length ?? 0})` },
+    { key: 'followup', label: `Follow-up (${followups.length})` },
   ];
 
   const encCols = [
@@ -353,6 +367,107 @@ export default function PatientDetailPage() {
     { key: 'doctor', label: 'Doctor', render: (r: Row) => [r.doctor?.user?.firstName, r.doctor?.user?.lastName].filter(Boolean).join(' ') || [r.doctor?.firstName, r.doctor?.lastName].filter(Boolean).join(' ') || r.doctorId },
     { key: 'status', label: 'Status', render: (r: Row) => <span className={`badge badge-${badgeTone(r.status)}`}>{r.status}</span> },
   ];
+
+  const doctorName = (r: Row) =>
+    [r.doctor?.user?.firstName, r.doctor?.user?.lastName].filter(Boolean).join(' ') ||
+    [r.doctor?.firstName, r.doctor?.lastName].filter(Boolean).join(' ') ||
+    r.doctorId ||
+    '—';
+
+  function followupStatus(r: Row) {
+    if (r.status === 'COMPLETED' || r.status === 'DISCHARGED' || r.status === 'CANCELLED') {
+      return { label: r.status === 'CANCELLED' ? 'Cancelled' : 'Completed', tone: 'secondary' };
+    }
+    const raw = r.followUpDate ? new Date(r.followUpDate) : null;
+    if (!raw || isNaN(raw.getTime())) return { label: 'Unscheduled', tone: 'secondary' };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const date = new Date(raw);
+    date.setHours(0, 0, 0, 0);
+    const diff = Math.round((date.getTime() - today.getTime()) / 86400000);
+    if (diff < 0) return { label: `Overdue ${Math.abs(diff)}d`, tone: 'danger' };
+    if (diff === 0) return { label: 'Due today', tone: 'warning' };
+    return { label: `In ${diff}d`, tone: 'primary' };
+  }
+
+  const followupCols = [
+    { key: 'followUpDate', label: 'Follow-up', render: (r: Row) => <strong>{formatDate(r.followUpDate)}</strong> },
+    { key: 'doctor', label: 'Doctor', render: (r: Row) => doctorName(r) },
+    { key: 'type', label: 'Type', render: (r: Row) => <span className={`badge badge-${badgeTone(r.type)}`}>{r.type}</span> },
+    { key: 'diagnosis', label: 'Reason', render: (r: Row) => r.diagnosis || r.chiefComplaint || '—' },
+    { key: 'followUpNotes', label: 'Notes' },
+    {
+      key: '_status',
+      label: 'Status',
+      render: (r: Row) => {
+        const s = followupStatus(r);
+        return <span className={`badge badge-${s.tone}`}>{s.label}</span>;
+      },
+    },
+    ...(canManageClinical
+      ? [{
+          key: '_action',
+          label: 'Action',
+          render: (r: Row) => (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                setFollowupValues({
+                  encounterId: r.id,
+                  followUpDate: r.followUpDate ? String(r.followUpDate).slice(0, 10) : '',
+                  followUpNotes: r.followUpNotes || '',
+                });
+                setFollowupError(null);
+                setShowFollowup(true);
+              }}
+            >
+              Edit
+            </button>
+          ),
+        }]
+      : []),
+  ];
+
+  function openScheduleFollowup() {
+    const first = (data.encounters || [])[0];
+    setFollowupValues({
+      encounterId: first?.id || '',
+      followUpDate: '',
+      followUpNotes: '',
+    });
+    setFollowupError(null);
+    setShowFollowup(true);
+  }
+
+  async function saveFollowup(e: React.FormEvent) {
+    e.preventDefault();
+    if (!followupValues.encounterId) {
+      setFollowupError('Select an encounter to schedule the follow-up for.');
+      return;
+    }
+    if (!followupValues.followUpDate) {
+      setFollowupError('Follow-up date is required.');
+      return;
+    }
+    setSavingFollowup(true);
+    setFollowupError(null);
+    try {
+      await api(`/encounters/${followupValues.encounterId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          followUpDate: new Date(followupValues.followUpDate).toISOString(),
+          followUpNotes: followupValues.followUpNotes,
+        }),
+      });
+      setShowFollowup(false);
+      setFlash('Follow-up scheduled successfully');
+      reload();
+    } catch (err) {
+      setFollowupError(err instanceof Error ? err.message : 'Failed to save follow-up');
+    } finally {
+      setSavingFollowup(false);
+    }
+  }
 
   const activeAdmission = (data.admissions || []).find((a: Row) => a.status === 'ADMITTED' && !a.isDischarged);
 
@@ -451,6 +566,35 @@ export default function PatientDetailPage() {
               <dt>Total admits</dt><dd>{(data.admissions || []).length}</dd>
             </dl>
           </div>
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 className="card-title" style={{ margin: 0 }}>Follow-up</h3>
+              {canManageClinical && (
+                <button className="btn btn-secondary btn-sm" onClick={openScheduleFollowup}>+ Schedule</button>
+              )}
+            </div>
+            {followups.length ? (
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {followups.slice(0, 4).map((r: Row) => {
+                  const s = followupStatus(r);
+                  return (
+                    <li key={r.id} style={{ marginBottom: 8 }}>
+                      <strong>{formatDate(r.followUpDate)}</strong>{' '}
+                      <span className={`badge badge-${s.tone}`}>{s.label}</span>
+                      <div className="muted" style={{ fontSize: 13 }}>
+                        {doctorName(r)} · {r.diagnosis || r.chiefComplaint || 'Follow-up'}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="muted">No follow-ups scheduled.</p>
+            )}
+            <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => setActive('followup')}>
+              View all →
+            </button>
+          </div>
         </div>
       )}
 
@@ -461,6 +605,21 @@ export default function PatientDetailPage() {
       {active === 'billing' && <SectionTable title="Invoices" rows={data.invoices || []} columns={invCols} />}
       {active === 'admissions' && <SectionTable title="Admit history" rows={data.admissions || []} columns={admCols} />}
       {active === 'appointments' && <SectionTable title="Appointments" rows={data.appointments || []} columns={apptCols} />}
+      {active === 'followup' && (
+        <>
+          {canManageClinical && (
+            <div style={{ marginBottom: 12, textAlign: 'right' }}>
+              <button className="btn" onClick={openScheduleFollowup}>+ Schedule follow-up</button>
+            </div>
+          )}
+          <SectionTable title="Follow-up schedule" rows={followups} columns={followupCols} />
+          {!followups.length && (
+            <div className="empty">
+              No follow-ups scheduled yet. Click “+ Schedule follow-up” to plan the next visit.
+            </div>
+          )}
+        </>
+      )}
       {active !== 'overview' && !(data[active]?.length) && <div className="empty">No records in this section.</div>}
 
       {showEncounter && (
@@ -487,6 +646,65 @@ export default function PatientDetailPage() {
           onClose={() => setDischargeTarget(null)}
           onDone={handleDischarged}
         />
+      )}
+
+      {showFollowup && (
+        <div className="modal-backdrop" onClick={() => setShowFollowup(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">Schedule follow-up</h3>
+              <button className="modal-close" onClick={() => setShowFollowup(false)} aria-label="Close">×</button>
+            </div>
+            <form onSubmit={saveFollowup}>
+              <div className="form-grid">
+                <div className="field field-full">
+                  <label className="label" htmlFor="fu-encounter">Encounter</label>
+                  <select
+                    id="fu-encounter"
+                    className="input"
+                    value={followupValues.encounterId}
+                    onChange={(e) => setFollowupValues((prev) => ({ ...prev, encounterId: e.target.value }))}
+                  >
+                    <option value="">— Select encounter —</option>
+                    {(data.encounters || []).map((enc: Row) => (
+                      <option key={enc.id} value={enc.id}>
+                        {formatDate(enc.createdAt)} · {enc.type || 'OPD'} · {enc.diagnosis || enc.chiefComplaint || 'Encounter'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="label" htmlFor="fu-date">Follow-up date</label>
+                  <input
+                    id="fu-date"
+                    type="date"
+                    className="input"
+                    value={followupValues.followUpDate}
+                    onChange={(e) => setFollowupValues((prev) => ({ ...prev, followUpDate: e.target.value }))}
+                  />
+                </div>
+                <div className="field field-full">
+                  <label className="label" htmlFor="fu-notes">Notes</label>
+                  <textarea
+                    id="fu-notes"
+                    className="input"
+                    style={{ minHeight: 80 }}
+                    placeholder="What should be reviewed at the next visit?"
+                    value={followupValues.followUpNotes}
+                    onChange={(e) => setFollowupValues((prev) => ({ ...prev, followUpNotes: e.target.value }))}
+                  />
+                </div>
+              </div>
+              {followupError && <div className="alert alert-error" style={{ marginTop: 14 }}>{followupError}</div>}
+              <div className="form-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowFollowup(false)}>Cancel</button>
+                <button type="submit" className="btn" disabled={savingFollowup}>
+                  {savingFollowup ? 'Saving...' : 'Save follow-up'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {showEdit && (

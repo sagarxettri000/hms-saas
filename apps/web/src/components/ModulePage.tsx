@@ -26,6 +26,7 @@ interface ModulePageProps {
     render?: () => React.ReactNode;
   }[];
   extra?: (reload: () => void) => React.ReactNode;
+  headerActions?: (reload: () => void) => React.ReactNode;
   detailHref?: (row: Row) => string | undefined;
   initialTab?: string;
   initialCreateValues?: Record<string, any>;

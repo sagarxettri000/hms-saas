@@ -1,15 +1,22 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import ModulePage from '@/components/ModulePage';
 import { BLOOD_GROUPS, GENDERS, MARITAL_STATUS, PATIENT_TYPES } from '@/lib/options';
 
 export default function PatientsPage() {
+  const router = useRouter();
   return (
     <ModulePage
       title="Patients"
       subtitle="Patient registry & master index"
       endpoint="/patients"
       createLabel="Register patient"
+      headerActions={() => (
+        <button className="btn btn-secondary" onClick={() => router.push('/patients/follow-ups')}>
+          Follow Up
+        </button>
+      )}
       columns={[
         { key: 'mrn', label: 'MRN', render: (r) => <span className="mono">{r.mrn}</span> },
         {

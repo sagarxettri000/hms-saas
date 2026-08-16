@@ -31,6 +31,7 @@ interface EntityPageProps {
   searchable?: boolean;
   tabs?: TabConfig[];
   extra?: (reload: () => void) => React.ReactNode;
+  headerActions?: (reload: () => void) => React.ReactNode;
   detailHref?: (row: Row) => string | undefined;
   editable?: boolean;
   initialTab?: string;
@@ -806,6 +807,7 @@ export default function EntityPage(props: EntityPageProps) {
     searchable,
     tabs,
     extra,
+    headerActions,
     detailHref,
     initialTab,
     initialCreateValues,
@@ -946,6 +948,7 @@ export default function EntityPage(props: EntityPageProps) {
             + {effectiveCreateLabel || 'Create'}
           </button>
         )}
+        {headerActions?.(load)}
       </div>
 
       {tabs?.length ? (

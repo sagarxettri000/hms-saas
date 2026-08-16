@@ -80,6 +80,8 @@ const OPTION_FILTERS = [
 
 const AGE_GROUPS = ['0-5', '6-12', '13-18', '19-30', '31-45', '46-60', '61+'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const MIN_DATE = '1900-01-01';
+const MAX_DATE = '2100-12-31';
 
 function localDate(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -109,15 +111,19 @@ function FilterControl({
   options,
   onChange,
   inputId,
+  min,
+  max,
 }: {
   kind: string;
   value: string;
   options: FilterOption[];
   onChange: (v: string) => void;
   inputId: string;
+  min?: string;
+  max?: string;
 }) {
   if (kind === 'fromDate' || kind === 'toDate') {
-    return <input id={inputId} type="date" className="input" value={value} onChange={(e) => onChange(e.target.value)} />;
+    return <input id={inputId} type="date" className="input" value={value} min={min} max={max} onChange={(e) => onChange(e.target.value)} />;
   }
   if (kind === 'month') {
     return (
@@ -211,6 +217,7 @@ function FilterControl({
         id={inputId}
         className="input"
         type="text"
+        maxLength={100}
         placeholder="Search patient, UHID…"
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -222,6 +229,7 @@ function FilterControl({
       id={inputId}
       className="input"
       type="text"
+      maxLength={100}
       placeholder="Any"
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -268,6 +276,7 @@ export default function ReportViewer({ reportId }: { reportId: string | null }) 
   const [exporting, setExporting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const reportIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -280,10 +289,13 @@ export default function ReportViewer({ reportId }: { reportId: string | null }) 
     setGenerated(null);
     setError(null);
     setOptions({});
+    setLoadingGenerate(false);
+    setExporting(null);
   }, []);
 
   useEffect(() => {
     reset();
+    reportIdRef.current = reportId;
     if (!reportId) {
       setDef(null);
       setFilters({});
@@ -343,6 +355,21 @@ export default function ReportViewer({ reportId }: { reportId: string | null }) 
 
   const generate = useCallback(async () => {
     if (!reportId) return;
+    const from = filters.fromDate;
+    const to = filters.toDate;
+    if (from && to && from > to) {
+      setError('To date must be on or after From date');
+      return;
+    }
+    if (from && (from < MIN_DATE || from > MAX_DATE)) {
+      setError(`From date is out of range (${MIN_DATE} - ${MAX_DATE})`);
+      return;
+    }
+    if (to && (to < MIN_DATE || to > MAX_DATE)) {
+      setError(`To date is out of range (${MIN_DATE} - ${MAX_DATE})`);
+      return;
+    }
+    const target = reportIdRef.current;
     setLoadingGenerate(true);
     setError(null);
     try {
@@ -355,11 +382,11 @@ export default function ReportViewer({ reportId }: { reportId: string | null }) 
         body: JSON.stringify(body),
       });
       const g = r?.data?.data ?? r?.data ?? r;
-      if (mountedRef.current) {
+      if (mountedRef.current && reportIdRef.current === target) {
         setGenerated(g as GeneratedReport);
       }
     } catch (err) {
-      if (mountedRef.current) {
+      if (mountedRef.current && reportIdRef.current === target) {
         setError(err instanceof Error ? err.message : 'Failed to generate report');
       }
     } finally {
@@ -371,6 +398,7 @@ export default function ReportViewer({ reportId }: { reportId: string | null }) 
   const exportTo = useCallback(
     async (format: string) => {
       if (!reportId || !generated) return;
+      const target = reportIdRef.current;
       setExporting(format);
       setError(null);
       try {
@@ -383,30 +411,30 @@ export default function ReportViewer({ reportId }: { reportId: string | null }) 
         const headers: Record<string, string> = {};
         if (token) headers.Authorization = `Bearer ${token}`;
         if (tenantId) headers['X-Tenant-ID'] = tenantId;
-        const res = await fetch(`${API_URL}/reports/analysis/${reportId}/export/${format}?${qs.toString()}`, {
-          headers,
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.message || `Export failed (${res.status})`);
-        }
-        const blob = await res.blob();
-        const filename = res.headers.get('X-Report-Filename') || `${reportId}.${format}`;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      } catch (err) {
-        if (mountedRef.current) {
-          setError(err instanceof Error ? err.message : 'Export failed');
-        }
-      } finally {
-        if (mountedRef.current) setExporting(null);
+      const res = await fetch(`${API_URL}/reports/analysis/${reportId}/export/${format}?${qs.toString()}`, {
+        headers,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || `Export failed (${res.status})`);
       }
+      const blob = await res.blob();
+      const filename = res.headers.get('X-Report-Filename') || `${reportId}.${format}`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      if (mountedRef.current && reportIdRef.current === target) {
+        setError(err instanceof Error ? err.message : 'Export failed');
+      }
+    } finally {
+      if (mountedRef.current) setExporting(null);
+    }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [reportId, generated, filters],
@@ -428,26 +456,30 @@ export default function ReportViewer({ reportId }: { reportId: string | null }) 
   }
 
   return (
-    <div className="report-viewer">
-      {error && <div className="banner-danger">{error}</div>}
+    <div className="report-viewer" aria-busy={loadingGenerate || !!exporting}>
+      {error && (
+        <div className="banner-danger" role="alert">
+          {error}
+        </div>
+      )}
 
       <div className="report-toolbar no-print">
-        <button className="btn btn-primary" onClick={generate} disabled={loadingGenerate}>
+        <button className="btn btn-primary" onClick={generate} disabled={loadingGenerate || !!exporting}>
           {loadingGenerate ? 'Generating…' : 'Generate'}
         </button>
         {generated && (
           <>
-            <button className="btn btn-secondary btn-sm" onClick={() => window.print()} disabled={!!exporting}>
+            <button className="btn btn-secondary btn-sm" onClick={() => window.print()} disabled={loadingGenerate || !!exporting}>
               Print
             </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => exportTo('pdf')} disabled={!!exporting}>
-              {exporting === 'pdf' ? '…' : 'PDF'}
+            <button className="btn btn-secondary btn-sm" onClick={() => exportTo('pdf')} disabled={loadingGenerate || !!exporting}>
+              {exporting === 'pdf' ? 'PDF…' : 'PDF'}
             </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => exportTo('xls')} disabled={!!exporting}>
-              {exporting === 'xls' ? '…' : 'Excel'}
+            <button className="btn btn-secondary btn-sm" onClick={() => exportTo('xls')} disabled={loadingGenerate || !!exporting}>
+              {exporting === 'xls' ? 'Excel…' : 'Excel'}
             </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => exportTo('csv')} disabled={!!exporting}>
-              {exporting === 'csv' ? '…' : 'CSV'}
+            <button className="btn btn-secondary btn-sm" onClick={() => exportTo('csv')} disabled={loadingGenerate || !!exporting}>
+              {exporting === 'csv' ? 'CSV…' : 'CSV'}
             </button>
           </>
         )}
@@ -473,7 +505,15 @@ export default function ReportViewer({ reportId }: { reportId: string | null }) 
                   <label className="label" htmlFor={`report-filter-${kind}`}>
                     {FilterLabel(kind)}
                   </label>
-                  <FilterControl kind={kind} value={filters[kind] || ''} options={options[kind] || []} onChange={(v) => setFilter(kind, v)} inputId={`report-filter-${kind}`} />
+                  <FilterControl
+                    kind={kind}
+                    value={filters[kind] || ''}
+                    options={options[kind] || []}
+                    onChange={(v) => setFilter(kind, v)}
+                    inputId={`report-filter-${kind}`}
+                    min={kind === 'toDate' ? filters.fromDate || MIN_DATE : MIN_DATE}
+                    max={kind === 'fromDate' ? filters.toDate || MAX_DATE : MAX_DATE}
+                  />
                 </div>
               ))}
             </div>
@@ -484,14 +524,22 @@ export default function ReportViewer({ reportId }: { reportId: string | null }) 
                   const cleared: Record<string, string> = {};
                   for (const k of def.filters) cleared[k] = '';
                   setFilters(cleared);
+                  setGenerated(null);
+                  setError(null);
                 }}
               >
                 Reset
               </button>
-              <button className="btn btn-ghost btn-sm" onClick={generate} disabled={loadingGenerate}>
+              <button className="btn btn-ghost btn-sm" onClick={generate} disabled={loadingGenerate || !!exporting}>
                 Refresh
               </button>
             </div>
+          </div>
+        )}
+
+        {!generated && !loadingGenerate && (
+          <div className="card report-empty">
+            <p>Set filters and click Generate to run this report.</p>
           </div>
         )}
 
@@ -529,6 +577,7 @@ export default function ReportViewer({ reportId }: { reportId: string | null }) 
         {generated && rows.length === 0 && !loadingGenerate ? (
           <div className="card report-empty">
             <p>No records found for the selected filters and period.</p>
+            <p className="muted">Try widening the date range or clearing filters.</p>
           </div>
         ) : null}
 
@@ -574,7 +623,7 @@ export default function ReportViewer({ reportId }: { reportId: string | null }) 
         )}
 
         {generated && (
-          <div className="report-count muted">
+          <div className="report-count muted" role="status">
             {generated.count} record{generated.count === 1 ? '' : 's'}
           </div>
         )}

@@ -260,6 +260,39 @@ describe("ReportsService", () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it("rejects an out-of-range from date on generate", async () => {
+    await expect(
+      service.generateAnalysis("t1", undefined, "credit-sales", { from: "0000-01-01" }),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      service.generateAnalysis("t1", undefined, "credit-sales", { from: "9999-12-31" }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("rejects an out-of-range to date on generate", async () => {
+    await expect(
+      service.generateAnalysis("t1", undefined, "credit-sales", { to: "9999-01-01" }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("rejects a to date before the from date", async () => {
+    await expect(
+      service.generateAnalysis("t1", undefined, "credit-sales", { from: "2026-08-01", to: "2025-01-01" }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("rejects an invalid month on generate", async () => {
+    await expect(
+      service.generateAnalysis("t1", undefined, "credit-sales", { month: "13", year: "2026" }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("rejects an invalid year on generate", async () => {
+    await expect(
+      service.generateAnalysis("t1", undefined, "credit-sales", { month: "3", year: "9999" }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
   it("scopes the generated query to the selected department", async () => {
     prisma.invoice.findMany.mockResolvedValue([]);
     await service.generateAnalysis("t1", undefined, "credit-sales", { department: "dept1" });

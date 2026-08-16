@@ -12,6 +12,9 @@ import type {
   ResolvedFilters,
 } from "./analysis/report.types";
 
+const MIN_REPORT_YEAR = 1900;
+const MAX_REPORT_YEAR = 2100;
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -19,18 +22,30 @@ export class ReportsService {
     private readonly audit?: AuditService,
   ) {}
 
+  private assertDateInRange(d: Date, label: string) {
+    const y = d.getFullYear();
+    if (y < MIN_REPORT_YEAR || y > MAX_REPORT_YEAR) {
+      throw new BadRequestException(`${label} is out of range (${MIN_REPORT_YEAR}-${MAX_REPORT_YEAR})`);
+    }
+  }
+
   private parseRange(from?: string, to?: string) {
     const range: { from?: Date; to?: Date } = {};
     if (from) {
       const d = new Date(from);
       if (isNaN(d.getTime())) throw new BadRequestException("Invalid from date");
+      this.assertDateInRange(d, "From date");
       range.from = d;
     }
     if (to) {
       const d = new Date(to);
       if (isNaN(d.getTime())) throw new BadRequestException("Invalid to date");
+      this.assertDateInRange(d, "To date");
       d.setHours(23, 59, 59, 999);
       range.to = d;
+    }
+    if (range.from && range.to && range.from > range.to) {
+      throw new BadRequestException("To date must be on or after from date");
     }
     return range;
   }
@@ -405,17 +420,28 @@ export class ReportsService {
       if (raw.from !== undefined && raw.from !== null && raw.from !== "") {
         const from = new Date(raw.from);
         if (isNaN(from.getTime())) throw new BadRequestException("Invalid from date");
+        this.assertDateInRange(from, "From date");
         filters.from = from;
       }
       if (raw.to !== undefined && raw.to !== null && raw.to !== "") {
         const to = new Date(raw.to);
         if (isNaN(to.getTime())) throw new BadRequestException("Invalid to date");
+        this.assertDateInRange(to, "To date");
         to.setHours(23, 59, 59, 999);
         filters.to = to;
+      }
+      if (filters.from && filters.to && filters.from > filters.to) {
+        throw new BadRequestException("To date must be on or after from date");
       }
     }
     const month = raw.month !== undefined ? Number(raw.month) : undefined;
     const year = raw.year !== undefined ? Number(raw.year) : undefined;
+    if (month !== undefined && (Number.isNaN(month) || month < 1 || month > 12)) {
+      throw new BadRequestException("Invalid month");
+    }
+    if (year !== undefined && (Number.isNaN(year) || year < MIN_REPORT_YEAR || year > MAX_REPORT_YEAR)) {
+      throw new BadRequestException(`Invalid year (${MIN_REPORT_YEAR}-${MAX_REPORT_YEAR})`);
+    }
     if (def.filters.includes("month") && def.filters.includes("year") && month && year && !filters.from && !filters.to) {
       filters.from = new Date(Date.UTC(year, month - 1, 1));
       filters.to = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));

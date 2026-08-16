@@ -32,6 +32,19 @@ describe("ReportsService", () => {
     department: {
       findMany: jest.fn().mockResolvedValue([]),
     },
+    tenant: {
+      findUnique: jest.fn().mockResolvedValue({
+        name: "Test Hospital",
+        city: "Kathmandu",
+        addressLine1: "Test St",
+      }),
+    },
+    user: {
+      findUnique: jest.fn().mockResolvedValue({
+        firstName: "Ada",
+        lastName: "Lovelace",
+      }),
+    },
   };
   const service = new ReportsService(prisma as any);
 
@@ -159,5 +172,98 @@ describe("ReportsService", () => {
     expect(res).toEqual([
       { departmentId: "dept1", name: "Cardiology", count: 4 },
     ]);
+  });
+
+  it("lists analysis report definitions grouped by category", () => {
+    const tree = service.getAnalysisTree();
+    const ids = tree.flatMap((c) => c.reports.map((r) => r.id));
+    expect(ids).toContain("credit-sales");
+    expect(ids).toContain("geographical-stats");
+    expect(tree.find((c) => c.id === "REVENUE")?.reports.length).toBeGreaterThan(20);
+    expect(tree.find((c) => c.id === "STATISTICS")?.reports.length).toBeGreaterThan(20);
+  });
+
+  it("returns definitions for every report id in the tree", () => {
+    const tree = service.getAnalysisTree();
+    const ids = tree.flatMap((c) => c.reports.map((r) => r.id));
+    for (const id of ids) {
+      const def = service.getAnalysisDefinition(id);
+      expect(def.id).toBe(id);
+      expect(def.columns.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("throws for an unknown report id", () => {
+    expect(() => service.getAnalysisDefinition("nope")).toThrow();
+  });
+
+  it("resolves department filter options scoped to the tenant", async () => {
+    prisma.department.findMany.mockResolvedValue([
+      { id: "d1", name: "Cardiology" },
+      { id: "d2", name: "Ortho" },
+    ]);
+    const res = await service.getAnalysisOptions("t1", "department");
+    expect(res).toEqual([
+      { value: "d1", label: "Cardiology" },
+      { value: "d2", label: "Ortho" },
+    ]);
+    const arg = prisma.department.findMany.mock.calls[0][0];
+    expect(arg.where.tenantId).toBe("t1");
+    expect(arg.where.isActive).toBe(true);
+  });
+
+  it("generates credit-sales from live invoice data with totals", async () => {
+    prisma.invoice.findMany.mockResolvedValue([
+      {
+        issuedDate: new Date("2026-08-01"),
+        invoiceNumber: "INV-1",
+        subtotal: 100,
+        discountAmount: 10,
+        taxAmount: 5,
+        totalAmount: 95,
+        paidAmount: 50,
+        dueAmount: 45,
+        isCredit: true,
+        patient: { firstName: "A", lastName: "B" },
+        items: [],
+      },
+      {
+        issuedDate: new Date("2026-08-02"),
+        invoiceNumber: "INV-2",
+        subtotal: 200,
+        discountAmount: 0,
+        taxAmount: 20,
+        totalAmount: 220,
+        paidAmount: 220,
+        dueAmount: 0,
+        isCredit: false,
+        patient: { firstName: "C", lastName: "D" },
+        items: [],
+      },
+    ]);
+    const res = await service.generateAnalysis("t1", undefined, "credit-sales", {
+      from: "2026-08-01",
+      to: "2026-08-31",
+    });
+    expect(res.report.id).toBe("credit-sales");
+    expect(res.count).toBe(2);
+    expect(res.rows[0]).toMatchObject({ invoiceNumber: "INV-1", gross: 100, net: 95 });
+    expect(res.totals.gross).toBe(300);
+    expect(res.meta.hospital.name).toBe("Test Hospital");
+    const invoiceArg = prisma.invoice.findMany.mock.calls[0][0];
+    expect(invoiceArg.where.tenantId).toBe("t1");
+  });
+
+  it("rejects an invalid from date on generate", async () => {
+    await expect(
+      service.generateAnalysis("t1", undefined, "credit-sales", { from: "not-a-date" }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("scopes the generated query to the selected department", async () => {
+    prisma.invoice.findMany.mockResolvedValue([]);
+    await service.generateAnalysis("t1", undefined, "credit-sales", { department: "dept1" });
+    const arg = prisma.invoice.findMany.mock.calls[0][0];
+    expect(arg.where.items.some.departmentId).toBe("dept1");
   });
 });

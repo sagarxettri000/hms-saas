@@ -1,5 +1,16 @@
-import { Controller, Get, Query, Req, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Request, Response } from "express";
 import { ReportsService } from "./reports.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
@@ -65,5 +76,74 @@ export class ReportsController {
   @ApiOperation({ summary: "Encounters grouped by department" })
   departments(@Req() req: any) {
     return this.reportsService.departmentStats(req.user.tenantId);
+  }
+
+  @Get("analysis")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Analysis report tree" })
+  analysisTree(@Req() req: any) {
+    return { success: true, data: this.reportsService.getAnalysisTree() };
+  }
+
+  @Get("analysis/definitions")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "All analysis report definitions" })
+  analysisDefinitions(@Req() req: any) {
+    return { success: true, data: this.reportsService.getAnalysisDefinitions() };
+  }
+
+  @Get("analysis/options")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Filter option values for the universal filter engine" })
+  async analysisOptions(@Req() req: any, @Query("name") name: string, @Query("search") search?: string) {
+    const options = await this.reportsService.getAnalysisOptions(req.user.tenantId, name, search);
+    return { success: true, data: options };
+  }
+
+  @Get("analysis/:reportId")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Single report definition" })
+  analysisDefinition(@Param("reportId") reportId: string, @Req() req: any) {
+    return { success: true, data: this.reportsService.getAnalysisDefinition(reportId) };
+  }
+
+  @Post("analysis/:reportId/generate")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Generate an analysis report from live data" })
+  async generate(
+    @Param("reportId") reportId: string,
+    @Body() body: Record<string, any>,
+    @Req() req: any,
+  ) {
+    const data = await this.reportsService.generateAnalysis(
+      req.user.tenantId,
+      req.user.id,
+      reportId,
+      body || {},
+    );
+    return { success: true, data };
+  }
+
+  @Get("analysis/:reportId/export/:format")
+  @Permissions(PermissionAction.EXPORT)
+  @ApiOperation({ summary: "Export a generated report as CSV, PDF or Excel" })
+  async export(
+    @Param("reportId") reportId: string,
+    @Param("format") format: string,
+    @Query() query: any,
+    @Req() req: any,
+    @Res() res: Response,
+  ) {
+    const out = await this.reportsService.exportAnalysis(
+      req.user.tenantId,
+      req.user.id,
+      reportId,
+      query,
+      format.toLowerCase(),
+    );
+    res.setHeader("Content-Type", out.contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${out.filename}"`);
+    res.setHeader("X-Report-Filename", out.filename);
+    return res.send(out.data);
   }
 }

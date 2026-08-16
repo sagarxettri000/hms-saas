@@ -85,6 +85,10 @@ describe('ReportViewer', () => {
     });
     await user.click(screen.getByRole('button', { name: /generate/i }));
     await waitFor(() => {
+      expect(api).toHaveBeenCalledWith(
+        '/reports/analysis/credit-sales/generate',
+        expect.objectContaining({ method: 'POST', body: expect.stringContaining('fromDate') }),
+      );
       expect(screen.getByText('INV-1')).toBeInTheDocument();
       expect(screen.getAllByText('Rs. 100.00').length).toBeGreaterThan(0);
       expect(screen.getByText(/Test Hospital, Kathmandu/i)).toBeInTheDocument();

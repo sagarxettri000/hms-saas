@@ -58,7 +58,7 @@ export default function ReportTree({
 
   const isOpen = (id: string) => (open[id] === undefined ? id === categories[0]?.id : open[id]);
 
-  const star = (id: string) => {
+  function star(id: string) {
     const r = byId[id];
     if (!r) return null;
     const isFav = favorites.includes(id);
@@ -66,6 +66,7 @@ export default function ReportTree({
       <button
         className={`report-star ${isFav ? 'on' : ''}`}
         title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+        aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
         onClick={(e) => {
           e.stopPropagation();
           onToggleFavorite(id);
@@ -74,7 +75,30 @@ export default function ReportTree({
         {isFav ? '★' : '☆'}
       </button>
     );
-  };
+  }
+
+  function ReportRow({ r, withStar }: { r: TreeReport; withStar?: boolean }) {
+    const active = selectedId === r.id;
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        className={`report-item ${active ? 'active' : ''}`}
+        title={r.description || ''}
+        onClick={() => onSelect(r.id)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelect(r.id);
+          }
+        }}
+      >
+        <span className="report-item-num">{r.number}</span>
+        <span className="report-item-name">{r.name}</span>
+        {withStar && star(r.id)}
+      </div>
+    );
+  }
 
   return (
     <div className="report-tree">
@@ -90,14 +114,7 @@ export default function ReportTree({
         <div className="report-tree-group">
           <div className="report-tree-section">Recent</div>
           {recentItems.slice(0, 8).map((r) => (
-            <button
-              key={r.id}
-              className={`report-item ${selectedId === r.id ? 'active' : ''}`}
-              onClick={() => onSelect(r.id)}
-            >
-              <span className="report-item-num">{r.number}</span>
-              <span className="report-item-name">{r.name}</span>
-            </button>
+            <ReportRow key={r.id} r={r} />
           ))}
         </div>
       )}
@@ -106,15 +123,7 @@ export default function ReportTree({
         <div className="report-tree-group">
           <div className="report-tree-section">Favorites</div>
           {favItems.map((r) => (
-            <button
-              key={r.id}
-              className={`report-item ${selectedId === r.id ? 'active' : ''}`}
-              onClick={() => onSelect(r.id)}
-            >
-              <span className="report-item-num">{r.number}</span>
-              <span className="report-item-name">{r.name}</span>
-              {star(r.id)}
-            </button>
+            <ReportRow key={r.id} r={r} withStar />
           ))}
         </div>
       )}
@@ -127,16 +136,7 @@ export default function ReportTree({
           </button>
           {isOpen(cat.id) &&
             cat.reports.map((r) => (
-              <button
-                key={r.id}
-                className={`report-item ${selectedId === r.id ? 'active' : ''}`}
-                onClick={() => onSelect(r.id)}
-                title={r.description || ''}
-              >
-                <span className="report-item-num">{r.number}</span>
-                <span className="report-item-name">{r.name}</span>
-                {star(r.id)}
-              </button>
+              <ReportRow key={r.id} r={r} withStar />
             ))}
         </div>
       ))}

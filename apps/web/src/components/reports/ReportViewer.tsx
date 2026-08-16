@@ -350,7 +350,11 @@ export default function ReportViewer({ reportId }: { reportId: string | null }) 
       for (const [k, v] of Object.entries(filters)) {
         if (v !== undefined && v !== null && v !== '') body[k] = v;
       }
-      const g = await getJson(`/reports/analysis/${reportId}/generate`);
+      const r = await api(`/reports/analysis/${reportId}/generate`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      const g = r?.data?.data ?? r?.data ?? r;
       if (mountedRef.current) {
         setGenerated(g as GeneratedReport);
       }

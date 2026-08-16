@@ -179,7 +179,7 @@ export async function freeAndConcession(ctx: ExecContext): Promise<ExecResult> {
   const docIds = [...new Set(rows.map((r) => r.doctor).filter((x) => x !== "-"))] as string[];
   const [deptMap, docMap] = await Promise.all([
     deptNames(ctx.prisma, ctx.tenantId, deptIds),
-    doctorNames(ctx.prisma, docIds),
+    doctorNames(ctx.prisma, ctx.tenantId, docIds),
   ]);
   for (const r of rows) {
     r.department = deptMap.get(r.department) || "-";
@@ -449,7 +449,7 @@ export async function doctorWiseIncome(ctx: ExecContext): Promise<ExecResult> {
     }
   }
 
-  const docMap = await doctorNames(ctx.prisma, [...docIds]);
+  const docMap = await doctorNames(ctx.prisma, ctx.tenantId, [...docIds]);
   const docDept = new Map<string, string>();
   const docs = await ctx.prisma.doctorProfile.findMany({
     where: { tenantId: ctx.tenantId, id: { in: [...docIds] } },
@@ -560,7 +560,7 @@ export async function doctorVsDept(ctx: ExecContext): Promise<ExecResult> {
   }
 
   const [docMap, deptMap] = await Promise.all([
-    doctorNames(ctx.prisma, [...docIds]),
+    doctorNames(ctx.prisma, ctx.tenantId, [...docIds]),
     deptNames(ctx.prisma, ctx.tenantId, [...deptIds]),
   ]);
 
@@ -762,7 +762,7 @@ export async function indoorTreatmentSummary(ctx: ExecContext): Promise<ExecResu
   });
 
   const docIds = [...new Set(admissions.map((a) => a.admittingDoctorId).filter(Boolean))] as string[];
-  const docMap = await doctorNames(ctx.prisma, docIds);
+  const docMap = await doctorNames(ctx.prisma, ctx.tenantId, docIds);
 
   const rows = admissions.map((a) => {
     const charges = a.invoices.reduce((s: number, i: any) => s + money(i.totalAmount), 0);
@@ -825,7 +825,7 @@ export async function patientWiseRevenue(ctx: ExecContext): Promise<ExecResult> 
 
   const [deptMap, docMap] = await Promise.all([
     deptNames(ctx.prisma, ctx.tenantId, [...deptIds]),
-    doctorNames(ctx.prisma, [...docIds]),
+    doctorNames(ctx.prisma, ctx.tenantId, [...docIds]),
   ]);
   for (const r of rows) {
     r.department = deptMap.get(r.department) || "-";
@@ -960,7 +960,7 @@ export async function indoorIncome(ctx: ExecContext): Promise<ExecResult> {
 
   const [deptMap, docMap] = await Promise.all([
     deptNames(ctx.prisma, ctx.tenantId, [...deptIds]),
-    doctorNames(ctx.prisma, [...docIds]),
+    doctorNames(ctx.prisma, ctx.tenantId, [...docIds]),
   ]);
   for (const r of rows) {
     r.department = deptMap.get(r.department) || "-";
@@ -1001,7 +1001,7 @@ export async function outdoorIncome(ctx: ExecContext): Promise<ExecResult> {
 
   const [deptMap, docMap] = await Promise.all([
     deptNames(ctx.prisma, ctx.tenantId, [...deptIds]),
-    doctorNames(ctx.prisma, [...docIds]),
+    doctorNames(ctx.prisma, ctx.tenantId, [...docIds]),
   ]);
   for (const r of rows) {
     r.department = deptMap.get(r.department) || "-";
@@ -1176,7 +1176,7 @@ export async function revenueStatement(ctx: ExecContext): Promise<ExecResult> {
 
   const [deptMap, docMap] = await Promise.all([
     deptNames(ctx.prisma, ctx.tenantId, [...deptIds]),
-    doctorNames(ctx.prisma, [...docIds]),
+    doctorNames(ctx.prisma, ctx.tenantId, [...docIds]),
   ]);
 
   rows.sort((a, b) => {
@@ -1349,7 +1349,7 @@ export async function operationReport(ctx: ExecContext): Promise<ExecResult> {
   });
 
   const docIds = [...new Set(cases.flatMap((c) => [c.surgeonId, c.assistantId, c.anesthetistId]).filter(Boolean))] as string[];
-  const docMap = await doctorNames(ctx.prisma, docIds);
+  const docMap = await doctorNames(ctx.prisma, ctx.tenantId, docIds);
 
   const otIds = cases.map((c) => c.id);
   const invItems = otIds.length

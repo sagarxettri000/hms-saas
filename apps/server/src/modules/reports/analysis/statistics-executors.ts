@@ -695,7 +695,7 @@ export async function patientAnalysisDoctor(ctx: ExecContext): Promise<ExecResul
     seen.add(e.patientId);
   }
 
-  const docMap = await doctorNames(ctx.prisma, [...docIds]);
+  const docMap = await doctorNames(ctx.prisma, ctx.tenantId, [...docIds]);
   const docs = await ctx.prisma.doctorProfile.findMany({
     where: { tenantId: ctx.tenantId, id: { in: [...docIds] } },
     select: { id: true, departmentId: true },
@@ -750,7 +750,7 @@ export async function dischargeRecordSheet(ctx: ExecContext): Promise<ExecResult
   });
 
   const docIds = [...new Set(admissions.map((a) => a.admittingDoctorId).filter(Boolean))] as string[];
-  const docMap = await doctorNames(ctx.prisma, docIds);
+  const docMap = await doctorNames(ctx.prisma, ctx.tenantId, docIds);
 
   const rows = admissions.map((a) => {
     const outstanding = a.invoices.reduce((s: number, i: any) => s + money(i.dueAmount), 0);
@@ -808,7 +808,7 @@ export async function patientDetailOpd(ctx: ExecContext): Promise<ExecResult> {
   }
 
   const docIds = [...new Set(encounters.map((e) => e.doctorId).filter(Boolean))] as string[];
-  const docMap = await doctorNames(ctx.prisma, docIds);
+  const docMap = await doctorNames(ctx.prisma, ctx.tenantId, docIds);
 
   const rows = encounters.map((e) => {
     const inv = invByEnc.get(e.id) || { billing: 0, services: 0 };
@@ -858,7 +858,7 @@ export async function patientDetailIpd(ctx: ExecContext): Promise<ExecResult> {
   });
 
   const docIds = [...new Set(admissions.map((a) => a.admittingDoctorId).filter(Boolean))] as string[];
-  const docMap = await doctorNames(ctx.prisma, docIds);
+  const docMap = await doctorNames(ctx.prisma, ctx.tenantId, docIds);
 
   const rows = admissions.map((a) => {
     const charges = a.invoices.reduce((s: number, i: any) => s + money(i.totalAmount), 0);
@@ -1071,7 +1071,7 @@ export async function monthlyDoctorWise(ctx: ExecContext): Promise<ExecResult> {
     }
   }
 
-  const docMap = await doctorNames(ctx.prisma, [...docIds]);
+  const docMap = await doctorNames(ctx.prisma, ctx.tenantId, [...docIds]);
   const docs = await ctx.prisma.doctorProfile.findMany({
     where: { tenantId: ctx.tenantId, id: { in: [...docIds] } },
     select: { id: true, departmentId: true },
@@ -1122,7 +1122,7 @@ export async function docWisePatientTotal(ctx: ExecContext): Promise<ExecResult>
     seen.add(e.patientId);
   }
 
-  const docMap = await doctorNames(ctx.prisma, [...docIds]);
+  const docMap = await doctorNames(ctx.prisma, ctx.tenantId, [...docIds]);
   const docs = await ctx.prisma.doctorProfile.findMany({
     where: { tenantId: ctx.tenantId, id: { in: [...docIds] } },
     select: { id: true, departmentId: true },
@@ -1184,7 +1184,7 @@ export async function ageWiseOpd(ctx: ExecContext): Promise<ExecResult> {
 
   const [deptMap, docMap] = await Promise.all([
     deptNames(ctx.prisma, ctx.tenantId, [...deptIds]),
-    doctorNames(ctx.prisma, [...docIds]),
+    doctorNames(ctx.prisma, ctx.tenantId, [...docIds]),
   ]);
 
   const rows = [...byKey.values()].map((v) => ({
@@ -1216,7 +1216,7 @@ export async function doctorWiseReferral(ctx: ExecContext): Promise<ExecResult> 
   });
 
   const docIds = [...new Set(admissions.map((a) => a.admittingDoctorId).filter(Boolean))] as string[];
-  const docMap = await doctorNames(ctx.prisma, docIds);
+  const docMap = await doctorNames(ctx.prisma, ctx.tenantId, docIds);
   const deptIds = [...new Set(admissions.map((a) => a.departmentId).filter(Boolean))] as string[];
   const deptMap = await deptNames(ctx.prisma, ctx.tenantId, deptIds);
 

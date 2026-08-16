@@ -168,12 +168,16 @@ export async function deptNames(
   return m;
 }
 
-export async function doctorNames(prisma: any, ids: string[]): Promise<Map<string, string>> {
+export async function doctorNames(
+  prisma: PrismaLike,
+  tenantId: string,
+  ids: string[],
+): Promise<Map<string, string>> {
   const m = new Map<string, string>();
   const uniq = [...new Set(ids.filter(Boolean))];
   if (!uniq.length) return m;
   const docs = await prisma.doctorProfile.findMany({
-    where: { id: { in: uniq } },
+    where: { tenantId, id: { in: uniq } },
     select: {
       id: true,
       user: { select: { firstName: true, middleName: true, lastName: true } },

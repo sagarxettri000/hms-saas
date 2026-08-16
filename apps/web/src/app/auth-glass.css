@@ -1,0 +1,315 @@
+/* ---------- Swasthya Glassmorphism Auth Shell ---------- */
+
+.auth-root {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  background: #020a1a;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.auth-bg-gradient {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 120% 100% at 50% 45%, rgba(6, 58, 112, 0.9) 0%, rgba(6, 75, 135, 0.6) 35%, rgba(2, 10, 26, 1) 75%),
+    radial-gradient(900px 600px at 30% 20%, rgba(8, 117, 209, 0.18), transparent 60%),
+    radial-gradient(800px 500px at 75% 70%, rgba(0, 188, 235, 0.1), transparent 55%);
+  z-index: 0;
+}
+
+.auth-bg-glow {
+  position: absolute;
+  width: 700px;
+  height: 700px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(8, 117, 209, 0.22) 0%, rgba(0, 188, 235, 0.06) 45%, transparent 70%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* --- Decorative 3D tubes --- */
+.auth-deco {
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.auth-deco-tube-1 {
+  width: 260px;
+  height: 48px;
+  top: 12%;
+  left: 8%;
+  background: linear-gradient(135deg, rgba(0, 188, 235, 0.18), rgba(8, 117, 209, 0.08));
+  border: 1px solid rgba(85, 217, 255, 0.12);
+  transform: rotate(-18deg);
+  filter: blur(0.5px);
+  animation: auth-float-1 8s ease-in-out infinite;
+}
+
+.auth-deco-tube-2 {
+  width: 180px;
+  height: 36px;
+  top: 60%;
+  left: 4%;
+  background: linear-gradient(160deg, rgba(21, 151, 242, 0.15), rgba(0, 188, 235, 0.06));
+  border: 1px solid rgba(85, 217, 255, 0.1);
+  transform: rotate(12deg);
+  filter: blur(0.8px);
+  animation: auth-float-2 10s ease-in-out infinite;
+}
+
+.auth-deco-tube-3 {
+  width: 320px;
+  height: 52px;
+  bottom: 14%;
+  right: 6%;
+  background: linear-gradient(140deg, rgba(8, 117, 209, 0.14), rgba(0, 188, 235, 0.05));
+  border: 1px solid rgba(85, 217, 255, 0.1);
+  transform: rotate(-8deg);
+  filter: blur(0.6px);
+  animation: auth-float-3 9s ease-in-out infinite;
+}
+
+.auth-deco-tube-4 {
+  width: 140px;
+  height: 30px;
+  top: 22%;
+  right: 10%;
+  background: linear-gradient(120deg, rgba(0, 188, 235, 0.16), rgba(8, 117, 209, 0.06));
+  border: 1px solid rgba(85, 217, 255, 0.11);
+  transform: rotate(25deg);
+  filter: blur(0.4px);
+  animation: auth-float-4 7s ease-in-out infinite;
+}
+
+.auth-deco-tube-5 {
+  width: 200px;
+  height: 40px;
+  bottom: 25%;
+  left: 12%;
+  background: linear-gradient(150deg, rgba(85, 217, 255, 0.12), rgba(21, 151, 242, 0.05));
+  border: 1px solid rgba(85, 217, 255, 0.09);
+  transform: rotate(-30deg);
+  filter: blur(1px);
+  animation: auth-float-5 11s ease-in-out infinite;
+}
+
+.auth-deco-sphere-1 {
+  width: 80px;
+  height: 80px;
+  top: 18%;
+  right: 18%;
+  background: radial-gradient(circle at 35% 35%, rgba(85, 217, 255, 0.14), rgba(8, 117, 209, 0.06), transparent);
+  border: 1px solid rgba(85, 217, 255, 0.08);
+  border-radius: 50%;
+  filter: blur(0.5px);
+  animation: auth-float-6 12s ease-in-out infinite;
+}
+
+.auth-deco-sphere-2 {
+  width: 55px;
+  height: 55px;
+  bottom: 20%;
+  left: 20%;
+  background: radial-gradient(circle at 40% 30%, rgba(0, 188, 235, 0.12), rgba(6, 58, 112, 0.04), transparent);
+  border: 1px solid rgba(85, 217, 255, 0.07);
+  border-radius: 50%;
+  filter: blur(0.8px);
+  animation: auth-float-7 9s ease-in-out infinite;
+}
+
+@keyframes auth-float-1 {
+  0%, 100% { transform: rotate(-18deg) translateY(0); }
+  50% { transform: rotate(-15deg) translateY(-12px); }
+}
+@keyframes auth-float-2 {
+  0%, 100% { transform: rotate(12deg) translateX(0); }
+  50% { transform: rotate(15deg) translateX(10px); }
+}
+@keyframes auth-float-3 {
+  0%, 100% { transform: rotate(-8deg) translateY(0); }
+  50% { transform: rotate(-5deg) translateY(-14px); }
+}
+@keyframes auth-float-4 {
+  0%, 100% { transform: rotate(25deg) translateX(0); }
+  50% { transform: rotate(22deg) translateX(-8px); }
+}
+@keyframes auth-float-5 {
+  0%, 100% { transform: rotate(-30deg) translateY(0); }
+  50% { transform: rotate(-27deg) translateY(10px); }
+}
+@keyframes auth-float-6 {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-16px) scale(1.04); }
+}
+@keyframes auth-float-7 {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(12px) scale(1.06); }
+}
+
+/* --- Main glass card --- */
+.auth-card {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 400px;
+  min-height: 480px;
+  border-radius: 22px;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(20px) scale(0.97);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.auth-card-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.auth-card-glass {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 30, 60, 0.55);
+  backdrop-filter: blur(28px) saturate(1.4);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+  border: 1px solid rgba(85, 217, 255, 0.13);
+  border-radius: 22px;
+  box-shadow:
+    0 0 0 1px rgba(85, 217, 255, 0.06),
+    0 8px 40px rgba(0, 0, 0, 0.45),
+    0 2px 12px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.auth-card-highlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    rgba(85, 217, 255, 0.03) 30%,
+    transparent 60%
+  );
+  border-radius: 22px 22px 0 0;
+  pointer-events: none;
+}
+
+.auth-card-wide {
+  max-width: 560px;
+  min-height: auto;
+}
+
+.auth-card-content {
+  position: relative;
+  z-index: 2;
+  padding: 44px 36px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* --- Brand --- */
+.auth-brand {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.auth-brand-name {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: #ffffff;
+  text-shadow: 0 0 28px rgba(85, 217, 255, 0.3), 0 0 60px rgba(8, 117, 209, 0.15);
+}
+
+.auth-heading {
+  margin: 0 0 28px;
+  font-size: 20px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  text-align: left;
+}
+
+/* --- Footer --- */
+.auth-footer-glass {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  background: rgba(2, 10, 26, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(85, 217, 255, 0.06);
+}
+
+.auth-footer-dot { color: rgba(255, 255, 255, 0.2); }
+
+.auth-footer-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 6px;
+}
+
+.auth-footer-glass a {
+  color: rgba(255, 255, 255, 0.45);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.auth-footer-glass a:hover {
+  color: rgba(85, 217, 255, 0.8);
+}
+
+.auth-register-text {
+  margin-top: 28px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.auth-register-link {
+  color: rgba(85, 217, 255, 0.85);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.15s ease;
+}
+
+.auth-register-link:hover {
+  color: #55d9ff;
+  text-decoration: underline;
+}
+
+@media (max-width: 480px) {
+  .auth-card {
+    max-width: calc(100% - 32px);
+    margin: 0 16px;
+  }
+  .auth-card-content {
+    padding: 36px 28px 28px;
+  }
+  .auth-brand-name {
+    font-size: 24px;
+  }
+}

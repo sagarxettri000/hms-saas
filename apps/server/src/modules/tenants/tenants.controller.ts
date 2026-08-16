@@ -1,0 +1,112 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
+import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ThrottlerGuard } from "@nestjs/throttler";
+import {
+  TenantsService,
+  CreateTenantDto,
+  CreateBranchDto,
+} from "./tenants.service";
+import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { PermissionsGuard } from "../../common/guards/permissions.guard";
+import { SuperAdminGuard } from "../../common/guards/super-admin.guard";
+import { TenantGuard } from "../../common/guards/tenant.guard";
+import {
+  Permissions,
+  Public,
+} from "../../common/decorators/permissions.decorator";
+import { PermissionAction } from "@hms/shared";
+
+@ApiTags("Tenants")
+@Controller("tenants")
+@UseGuards(JwtAuthGuard, PermissionsGuard, SuperAdminGuard, TenantGuard)
+export class TenantsController {
+  constructor(private readonly tenantsService: TenantsService) {}
+
+  @Post()
+  @Public()
+  @UseGuards(ThrottlerGuard)
+  @ApiOperation({ summary: "Create a new tenant (hospital onboarding)" })
+  create(@Body() dto: CreateTenantDto) {
+    return this.tenantsService.create(dto);
+  }
+
+  @Get()
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List all tenants" })
+  findAll(
+    @Query()
+    query: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      status?: string;
+    },
+  ) {
+    return this.tenantsService.findAll(query);
+  }
+
+  @Get("usage/:id")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Get tenant usage metrics" })
+  getUsage(@Param("id") id: string) {
+    return this.tenantsService.getUsage(id);
+  }
+
+  @Get(":id")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Get tenant details" })
+  findById(@Param("id") id: string) {
+    return this.tenantsService.findById(id);
+  }
+
+  @Patch(":id")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Update tenant details" })
+  update(@Param("id") id: string, @Body() dto: Partial<CreateTenantDto>) {
+    return this.tenantsService.update(id, dto);
+  }
+
+  @Patch(":id/status")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Update tenant status (active/suspended/archived)" })
+  updateStatus(@Param("id") id: string, @Body() body: { status: string }) {
+    return this.tenantsService.updateStatus(id, body.status);
+  }
+
+  @Patch(":id/archive")
+  @Permissions(PermissionAction.DELETE)
+  @ApiOperation({ summary: "Archive a tenant" })
+  archive(@Param("id") id: string) {
+    return this.tenantsService.archive(id);
+  }
+
+  @Post(":id/branches")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Create a branch for a tenant" })
+  createBranch(@Param("id") id: string, @Body() dto: CreateBranchDto) {
+    return this.tenantsService.createBranch(id, dto);
+  }
+
+  @Get(":id/branches")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Get tenant branches" })
+  getBranches(@Param("id") id: string) {
+    return this.tenantsService.getBranches(id);
+  }
+
+  @Get(":id/departments")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Get tenant departments" })
+  getDepartments(@Param("id") id: string) {
+    return this.tenantsService.getDepartments(id);
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "name": "hms-saas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Enterprise SaaS Hospital Management System",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:server dev:web",
+    "dev:server": "npm run dev -w @hms/server",
+    "dev:web": "npm run dev -w @hms/web",
+    "build": "npm run build -w @hms/shared && npm run build -w @hms/server && npm run build -w @hms/web",
+    "typecheck": "npm run typecheck -w @hms/shared && npm run typecheck -w @hms/server && npm run typecheck -w @hms/web",
+    "db:generate": "npm run db:generate -w @hms/server",
+    "db:migrate": "npm run db:migrate -w @hms/server",
+    "db:push": "npm run db:push -w @hms/server",
+    "db:seed": "npm run db:seed -w @hms/server",
+    "backup": "powershell -ExecutionPolicy Bypass -File ./scripts/backup.ps1 backup",
+    "backup:list": "powershell -ExecutionPolicy Bypass -File ./scripts/backup.ps1 list",
+    "test": "npm run test -w @hms/server"
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.6.3"
+  },
+  "allowScripts": {
+    "@nestjs/core@10.4.22": true,
+    "@prisma/client@5.22.0": true,
+    "@prisma/engines@5.22.0": true,
+    "prisma@5.22.0": true
+  }
+}

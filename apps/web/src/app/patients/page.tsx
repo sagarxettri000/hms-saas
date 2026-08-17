@@ -40,16 +40,17 @@ function CsvImportModal({ open, onClose, onDone }: { open: boolean; onClose: () 
   };
 
   function parseCsv(text: string): { headers: string[]; rows: Record<string, string>[] } {
+    const clean = text.replace(/^\uFEFF/, '');
     const lines: string[] = [];
     let current = '';
     let inQuotes = false;
-    for (let i = 0; i < text.length; i++) {
-      const ch = text[i];
+    for (let i = 0; i < clean.length; i++) {
+      const ch = clean[i];
       if (ch === '"') {
-        if (inQuotes && text[i + 1] === '"') { current += '"'; i++; }
+        if (inQuotes && clean[i + 1] === '"') { current += '"'; i++; }
         else { inQuotes = !inQuotes; }
       } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
-        if (ch === '\r' && text[i + 1] === '\n') i++;
+        if (ch === '\r' && clean[i + 1] === '\n') i++;
         lines.push(current);
         current = '';
       } else {
@@ -136,7 +137,7 @@ function CsvImportModal({ open, onClose, onDone }: { open: boolean; onClose: () 
   if (!open) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 720, maxHeight: '85vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ margin: 0 }}>Import Patients from CSV</h2>
@@ -186,7 +187,7 @@ function CsvImportModal({ open, onClose, onDone }: { open: boolean; onClose: () 
             )}
 
             {rows.length === 0 && file && (
-              <div className="banner" style={{ marginTop: 16 }}>
+              <div style={{ marginTop: 16, padding: '12px 16px', borderRadius: 8, background: 'var(--amber-bg, #fffbeb)', border: '1px solid var(--amber, #f59e0b)', fontSize: 13, color: '#92400e' }}>
                 No valid rows found. Make sure your CSV has a header row and comma-separated values.
               </div>
             )}

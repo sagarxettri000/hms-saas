@@ -3,13 +3,14 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PortalService } from "./portal.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
-import { TenantScoped } from "../../common/decorators/permissions.decorator";
+import { Public, TenantScoped } from "../../common/decorators/permissions.decorator";
 
 @ApiTags("Patient Portal")
 @Controller("portal")
 export class PortalController {
   constructor(private readonly portalService: PortalService) {}
 
+  @Public()
   @Get("lookup")
   @ApiOperation({ summary: "Lookup patient by MRN (public)" })
   async lookup(@Query("mrn") mrn: string, @Query("tenantId") tenantId?: string) {

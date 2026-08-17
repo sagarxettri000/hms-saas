@@ -41,6 +41,17 @@ export class PatientsController {
     return this.patientsService.create(req.user.tenantId, dto, req.user.id);
   }
 
+  @Post("import")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Import patients from CSV rows" })
+  importPatients(@Body() body: { rows: CreatePatientDto[] }, @Req() req: any) {
+    return this.patientsService.importPatients(
+      req.user.tenantId,
+      body.rows,
+      req.user.id,
+    );
+  }
+
   @Get()
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Search and list patients" })

@@ -571,6 +571,88 @@ export class PatientsService {
     return timeline;
   }
 
+  async importPatients(
+    tenantId: string,
+    rows: CreatePatientDto[],
+    userId: string,
+  ): Promise<{ imported: number; errors: { row: number; error: string }[] }> {
+    if (!rows || rows.length === 0) {
+      throw new BadRequestException("No rows to import");
+    }
+    const errors: { row: number; error: string }[] = [];
+    let imported = 0;
+
+    for (let i = 0; i < rows.length; i++) {
+      const dto = rows[i];
+      try {
+        if (!dto.firstName || !dto.lastName) {
+          errors.push({ row: i + 1, error: "firstName and lastName are required" });
+          continue;
+        }
+
+        const dateOfBirth = dto.dateOfBirth
+          ? this.normalizeDate(dto.dateOfBirth)
+          : undefined;
+
+        const mrn = await this.generateMrn(tenantId);
+        const uid = this.generateUid();
+
+        await this.prisma.patient.create({
+          data: {
+            tenantId,
+            mrn,
+            uid,
+            firstName: dto.firstName,
+            middleName: dto.middleName,
+            lastName: dto.lastName,
+            dateOfBirth,
+            age: dto.age,
+            gender: dto.gender as any,
+            bloodGroup: dto.bloodGroup as any,
+            nationality: dto.nationality || "Nepali",
+            religion: dto.religion,
+            phone: dto.phone,
+            mobile: dto.mobile,
+            email: dto.email?.toLowerCase(),
+            addressLine1: dto.addressLine1,
+            addressLine2: dto.addressLine2,
+            city: dto.city,
+            district: dto.district,
+            province: dto.province,
+            country: dto.country || "Nepal",
+            postalCode: dto.postalCode,
+            emergencyContactName: dto.emergencyContactName,
+            emergencyContactRelationship: dto.emergencyContactRelationship,
+            emergencyContactPhone: dto.emergencyContactPhone,
+            emergencyContactMobile: dto.emergencyContactMobile,
+            guardianName: dto.guardianName,
+            guardianRelationship: dto.guardianRelationship,
+            guardianPhone: dto.guardianPhone,
+            guardianEmail: dto.guardianEmail,
+            guardianIdType: dto.guardianIdType,
+            guardianIdNumber: dto.guardianIdNumber,
+            occupation: dto.occupation,
+            education: dto.education,
+            maritalStatus: dto.maritalStatus as any,
+            nationalId: dto.nationalId,
+            passportNumber: dto.passportNumber,
+            patientType: (dto.patientType as any) || "GENERAL",
+            isForeign: dto.isForeign || false,
+            isStaff: dto.isStaff || false,
+            consentGiven: dto.consentGiven || false,
+            status: "ACTIVE",
+            createdBy: userId,
+          },
+        });
+        imported++;
+      } catch (e: any) {
+        errors.push({ row: i + 1, error: e.message || "Unknown error" });
+      }
+    }
+
+    return { imported, errors };
+  }
+
   private async generateMrn(tenantId: string): Promise<string> {
     const today = new Date();
     const year = today.getFullYear();

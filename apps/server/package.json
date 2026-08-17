@@ -66,5 +66,8 @@
     "prisma": "^5.22.0",
     "ts-jest": "^29.4.12",
     "ts-node": "^10.9.2"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   }
 }

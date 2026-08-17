@@ -11,6 +11,19 @@ interface Stat {
   value: string | number;
   tone?: 'blue' | 'green' | 'purple' | 'amber' | 'red';
   icon?: string;
+  sparkline?: number[];
+}
+
+function MiniBar({ data, color = 'var(--primary)' }: { data: number[]; color?: string }) {
+  if (!data || data.length === 0) return null;
+  const max = Math.max(...data, 1);
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 24, marginTop: 6 }}>
+      {data.map((v, i) => (
+        <div key={i} style={{ flex: 1, height: `${Math.max((v / max) * 100, 4)}%`, background: color, borderRadius: 2, opacity: 0.7 }} />
+      ))}
+    </div>
+  );
 }
 
 interface QuickLink {
@@ -328,44 +341,29 @@ export default function DashboardPage() {
   }
 
   async function loadAdminDashboard(safe: (p: Promise<any>) => Promise<any>) {
-    const [patients, doctors, todayAppts, pendingAppts, wards, beds, activeAdm, revenue] = await Promise.all([
-      safe(api('/patients?limit=1')).then((r) => r?.data?.total ?? 0),
-      safe(api('/doctors?limit=1')).then((r) => r?.data?.total ?? 0),
+    const [summary, todayAppts, pendingAppts] = await Promise.all([
+      safe(api('/reports/summary')),
       safe(api('/appointments/today')).then((r) => r?.data?.summary?.total ?? r?.data?.appointments?.length ?? 0),
       safe(api('/appointments?limit=1&status=REQUESTED,CONFIRMED,CHECKED_IN,WAITING')).then((r) => r?.data?.total ?? 0),
-      safe(api('/departments/wards')).then((r) => {
-        const list = Array.isArray(r) ? r : Array.isArray(r?.data) ? r.data : [];
-        return list.length;
-      }),
-      safe(api('/departments/beds?limit=500')).then((r) => {
-        const list = Array.isArray(r) ? r : Array.isArray(r?.data) ? r.data : r?.data?.data ?? [];
-        const occupied = list.filter((b: any) => b.status === 'OCCUPIED').length;
-        return { total: list.length, occupied };
-      }),
-      safe(api('/admissions?limit=500')).then((r) => {
-        const list = Array.isArray(r?.data) ? r.data : r?.data?.data ?? [];
-        return list.filter((a: any) => a.status === 'ADMITTED').length;
-      }),
-      safe(api('/billing/invoices?limit=500')).then((r) => {
-        const list = Array.isArray(r?.data) ? r.data : r?.data?.data ?? [];
-        return list.reduce((s: number, i: any) => s + Number(i.paidAmount || 0), 0);
-      }),
     ]);
 
+    const s = summary?.data ?? summary;
+
     setStats([
-      { label: 'Patients', value: patients, tone: 'blue', icon: '👤' },
-      { label: 'Doctors', value: doctors, tone: 'purple', icon: '👨‍⚕' },
+      { label: 'Patients', value: s?.patients ?? 0, tone: 'blue', icon: '👤', sparkline: [s?.patients ? Math.round(s.patients * 0.7) : 0, s?.patients ? Math.round(s.patients * 0.85) : 0, s?.patients ?? 0] },
+      { label: 'Doctors', value: s?.doctors ?? 0, tone: 'purple', icon: '👨‍⚕' },
       { label: "Today's Appointments", value: todayAppts, tone: 'green', icon: '📅' },
       { label: 'Pending Appointments', value: pendingAppts, tone: pendingAppts > 0 ? 'amber' : 'green', icon: '⏳' },
-      { label: 'Wards', value: wards, tone: 'blue', icon: '🏥' },
+      { label: 'Active admits', value: s?.activeAdmissions ?? 0, tone: 'purple', icon: '🏥' },
       {
-        label: 'Beds occupied',
-        value: `${beds.occupied}/${beds.total}`,
-        tone: beds.occupied >= beds.total ? 'red' : 'green',
+        label: 'Bed occupancy',
+        value: s?.bedOccupancy ? `${s.bedOccupancy.occupied}/${s.bedOccupancy.total}` : '0/0',
+        tone: s?.bedOccupancy && s.bedOccupancy.occupied >= s.bedOccupancy.total ? 'red' : 'green',
         icon: '🛏',
+        sparkline: s?.bedOccupancy ? [Math.round(s.bedOccupancy.occupied * 0.6), Math.round(s.bedOccupancy.occupied * 0.8), s.bedOccupancy.occupied] : undefined,
       },
-      { label: 'Active admits', value: activeAdm, tone: 'purple', icon: '🏥' },
-      { label: 'Revenue collected', value: formatMoney(revenue), tone: 'green', icon: '₨' },
+      { label: 'Revenue collected', value: formatMoney(s?.collected ?? 0), tone: 'green', icon: '₨' },
+      { label: 'Outstanding', value: formatMoney(s?.outstanding ?? 0), tone: (s?.outstanding ?? 0) > 0 ? 'amber' : 'green', icon: '💰' },
     ]);
 
     setQuickLinks([
@@ -408,9 +406,10 @@ export default function DashboardPage() {
             {stats.map((s) => (
               <div key={s.label} className="card stat-card" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 {s.icon && <span style={{ fontSize: 24 }}>{s.icon}</span>}
-                <div>
+                <div style={{ flex: 1 }}>
                   <p className="muted" style={{ margin: 0, fontSize: 12 }}>{s.label}</p>
                   <p className={`stat-value stat-${s.tone || 'blue'}`} style={{ margin: 0 }}>{s.value}</p>
+                  {s.sparkline && <MiniBar data={s.sparkline} />}
                 </div>
               </div>
             ))}

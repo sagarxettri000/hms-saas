@@ -7,6 +7,7 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -195,5 +196,47 @@ export class LaboratoryController {
       "REPORTED",
       req.user.id,
     );
+  }
+
+  @Get("orders/:id/pdf")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Download lab report PDF" })
+  async downloadReportPdf(@Param("id") id: string, @Req() req: any, @Res() res: any) {
+    const buffer = await this.laboratoryService.generateReportPdf(
+      req.user.tenantId,
+      id,
+      req.user.id,
+    );
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="lab-report-${id.slice(0, 8)}.pdf"`,
+    });
+    res.send(buffer);
+  }
+
+  @Patch("orders/:id/samples/:sampleId/reject")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Reject a sample" })
+  rejectSample(
+    @Param("id") id: string,
+    @Param("sampleId") sampleId: string,
+    @Body() body: { reason: string; note?: string },
+    @Req() req: any,
+  ) {
+    return this.laboratoryService.rejectSample(
+      req.user.tenantId,
+      id,
+      sampleId,
+      body.reason,
+      body.note,
+      req.user.id,
+    );
+  }
+
+  @Get("summary")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Lab module summary stats" })
+  getSummary(@Req() req: any) {
+    return this.laboratoryService.getLabSummary(req.user.tenantId);
   }
 }

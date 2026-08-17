@@ -210,8 +210,9 @@ export class InsuranceService {
     if (!claim) throw new NotFoundException("Claim not found");
 
     const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-      SUBMITTED: ["UNDER_REVIEW", "APPROVED", "REJECTED"],
-      UNDER_REVIEW: ["APPROVED", "REJECTED"],
+      DRAFT: ["SUBMITTED"],
+      SUBMITTED: ["PROCESSING", "APPROVED", "REJECTED"],
+      PROCESSING: ["APPROVED", "REJECTED"],
       APPROVED: ["SETTLED"],
       SETTLED: [],
       REJECTED: [],

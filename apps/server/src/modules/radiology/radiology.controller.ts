@@ -7,6 +7,7 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -113,5 +114,28 @@ export class RadiologyController {
       dto,
       req.user.id,
     );
+  }
+
+  @Get("orders/:id/pdf")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Download radiology report PDF" })
+  async downloadReportPdf(@Param("id") id: string, @Req() req: any, @Res() res: any) {
+    const buffer = await this.radiologyService.generateReportPdf(
+      req.user.tenantId,
+      id,
+      req.user.id,
+    );
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="radiology-report-${id.slice(0, 8)}.pdf"`,
+    });
+    res.send(buffer);
+  }
+
+  @Get("summary")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Radiology department summary" })
+  getSummary(@Req() req: any) {
+    return this.radiologyService.getSummary(req.user.tenantId);
   }
 }

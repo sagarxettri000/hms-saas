@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
+import { buildRadiologyReportPdf } from "./radiology-report-pdf";
 
 export interface CreateRadiologyOrderDto {
   patientId: string;
@@ -285,6 +286,77 @@ export class RadiologyService {
         images: true,
       },
       orderBy: { orderedAt: "desc" },
+    });
+  }
+
+  async getSummary(tenantId: string) {
+    const [totalOrders, newOrders, inProgress, reported, completedToday] = await Promise.all([
+      this.prisma.radiologyOrder.count({ where: { tenantId } }),
+      this.prisma.radiologyOrder.count({ where: { tenantId, status: { in: ["ORDERED", "SCHEDULED"] } } }),
+      this.prisma.radiologyOrder.count({ where: { tenantId, status: { in: ["IN_PROGRESS", "IMAGES_UPLOADED"] } } }),
+      this.prisma.radiologyOrder.count({ where: { tenantId, status: { in: ["REPORTED", "VERIFIED", "APPROVED"] } } }),
+      this.prisma.radiologyOrder.count({
+        where: { tenantId, status: { in: ["REPORTED", "VERIFIED", "APPROVED", "DELIVERED"] }, updatedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } },
+      }),
+    ]);
+    const totalImages = await this.prisma.radiologyImage.count({ where: { radiologyOrder: { tenantId } } });
+    return { totalOrders, newOrders, inProgress, reported, completedToday, totalImages };
+  }
+
+  async generateReportPdf(tenantId: string, orderId: string, userId?: string): Promise<Buffer> {
+    const order = await this.prisma.radiologyOrder.findFirst({
+      where: { id: orderId, tenantId },
+      include: {
+        patient: { select: { id: true, firstName: true, middleName: true, lastName: true, mrn: true, gender: true, dateOfBirth: true } },
+        images: true,
+      },
+    });
+    if (!order) throw new NotFoundException("Radiology order not found");
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException("Tenant not found");
+
+    let doctorName = "";
+    if (order.doctorId) {
+      const doc = await this.prisma.doctorProfile.findFirst({ where: { id: order.doctorId, tenantId }, include: { user: { select: { firstName: true, lastName: true } } } });
+      if (doc?.user) doctorName = [doc.user.firstName, doc.user.lastName].filter(Boolean).join(" ");
+    }
+
+    let generatedBy = "";
+    if (userId) {
+      const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true } });
+      if (user) generatedBy = [user.firstName, user.lastName].filter(Boolean).join(" ");
+    }
+
+    const patientName = [order.patient.firstName, order.patient.middleName, order.patient.lastName].filter(Boolean).join(" ");
+    const addr = [(tenant as any).addressLine1, (tenant as any).addressLine2, (tenant as any).city, (tenant as any).province].filter(Boolean).join(", ");
+
+    return buildRadiologyReportPdf({
+      hospitalName: tenant.name || "Hospital",
+      hospitalAddr: addr,
+      hospitalContact: [tenant.phone, tenant.email].filter(Boolean).join(" | "),
+      orderNumber: order.orderNumber,
+      status: order.status.replace(/_/g, " "),
+      modality: order.modality,
+      bodyPart: order.bodyPart || "",
+      isEmergency: order.isEmergency,
+      orderedAt: order.orderedAt,
+      scheduledAt: order.scheduledAt,
+      performedAt: order.performedAt,
+      reportedAt: order.reportedAt,
+      verifiedAt: order.verifiedAt,
+      approvedAt: order.approvedAt,
+      patientName,
+      patientMrn: order.patient.mrn || "",
+      patientGender: order.patient.gender || "",
+      patientDob: order.patient.dateOfBirth,
+      doctorName,
+      clinicalHistory: order.clinicalHistory || "",
+      findings: order.findings || "",
+      impression: order.impression || "",
+      report: order.report || "",
+      imageCount: order.images.length,
+      generatedBy,
     });
   }
 

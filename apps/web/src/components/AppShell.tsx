@@ -40,6 +40,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { label: 'Doctors', href: '/doctors', icon: '✚', roles: [...CLINICAL_WIDE] },
       { label: 'Encounters', href: '/encounters', icon: '✎', roles: [...CLINICAL, ...ADMIN, ...SUPER] },
       { label: 'Emergency', href: '/emergency', icon: '⚠', roles: [...CLINICAL_WIDE] },
+      { label: 'Nursing', href: '/nursing', icon: '♡', roles: ['NURSE', 'OT_NURSE', 'WARD_INCHARGE', 'ICU_STAFF', ...ADMIN, ...SUPER] },
       {
         label: 'Adverse Events',
         href: '/adverse-events',

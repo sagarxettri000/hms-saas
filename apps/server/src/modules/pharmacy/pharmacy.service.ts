@@ -607,4 +607,76 @@ export class PharmacyService {
       },
     };
   }
+
+  async getDispensingHistory(
+    tenantId: string,
+    params: { patientId?: string; from?: string; to?: string; page?: number; limit?: number },
+  ) {
+    const page = Number(params.page) || 1;
+    const limit = Math.min(Number(params.limit) || 20, 100);
+
+    const where: any = { tenantId, status: "DISPENSED" };
+    if (params.patientId) where.patientId = params.patientId;
+    if (params.from || params.to) {
+      where.updatedAt = {};
+      if (params.from) where.updatedAt.gte = new Date(params.from);
+      if (params.to) { const d = new Date(params.to); d.setHours(23, 59, 59, 999); where.updatedAt.lte = d; }
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.prescription.findMany({
+        where,
+        include: {
+          patient: { select: { id: true, firstName: true, lastName: true, mrn: true, phone: true } },
+          doctor: { select: { id: true, user: { select: { firstName: true, lastName: true } } } },
+          items: true,
+        },
+        orderBy: { updatedAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.prescription.count({ where }),
+    ]);
+
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async getPharmacySummary(tenantId: string) {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const [totalMedicines, pendingPrescriptions, dispensedToday, lowStockCount, totalStockValue] =
+      await Promise.all([
+        this.prisma.medicine.count({ where: { tenantId, isActive: true } }),
+        this.prisma.prescription.count({ where: { tenantId, status: { in: ["DRAFT", "APPROVED"] } } }),
+        this.prisma.prescription.count({ where: { tenantId, status: "DISPENSED", updatedAt: { gte: todayStart } } }),
+        this.prisma.inventoryItem.count({
+          where: { tenantId, currentStock: { gt: 0 }, reorderLevel: { not: null, gt: 0 } },
+        }).then(async (c) => {
+          const items = await this.prisma.inventoryItem.findMany({
+            where: { tenantId, currentStock: { gt: 0 }, reorderLevel: { not: null, gt: 0 } },
+            select: { currentStock: true, reorderLevel: true },
+          });
+          return items.filter((i) => Number(i.currentStock) <= Number(i.reorderLevel)).length;
+        }),
+        this.prisma.inventoryItem.aggregate({
+          where: { tenantId },
+          _sum: { currentStock: true },
+        }).then(async (r) => {
+          const items = await this.prisma.inventoryItem.findMany({
+            where: { tenantId },
+            select: { currentStock: true, salesRate: true },
+          });
+          return items.reduce((s, i) => s + Number(i.currentStock) * Number(i.salesRate), 0);
+        }),
+      ]);
+
+    return {
+      totalMedicines,
+      pendingPrescriptions,
+      dispensedToday,
+      lowStockCount,
+      totalStockValue,
+    };
+  }
 }

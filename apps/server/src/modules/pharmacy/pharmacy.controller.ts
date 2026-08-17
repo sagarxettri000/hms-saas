@@ -180,4 +180,18 @@ export class PharmacyController {
   getStockAlerts(@Req() req: any) {
     return this.pharmacyService.getStockAlerts(req.user.tenantId);
   }
+
+  @Get("dispensing-history")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List dispensed prescriptions" })
+  getDispensingHistory(@Query() query: any, @Req() req: any) {
+    return this.pharmacyService.getDispensingHistory(req.user.tenantId, query);
+  }
+
+  @Get("summary")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Pharmacy summary statistics" })
+  getPharmacySummary(@Req() req: any) {
+    return this.pharmacyService.getPharmacySummary(req.user.tenantId);
+  }
 }

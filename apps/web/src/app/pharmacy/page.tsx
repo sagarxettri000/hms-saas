@@ -45,7 +45,7 @@ function StockAlertBadge({ type, count }: { type: string; count: number }) {
   );
 }
 
-const VALID_TABS = ['medicines', 'dispensing', 'sales', 'stores', 'alerts'];
+const VALID_TABS = ['medicines', 'dispensing', 'sales', 'stores', 'alerts', 'history'];
 
 function getTab(params: URLSearchParams): string {
   const tab = params.get('tab');
@@ -63,6 +63,9 @@ export default function PharmacyPage() {
 
   const [alerts, setAlerts] = useState<any>(null);
   const [loadingAlerts, setLoadingAlerts] = useState(false);
+
+  const [history, setHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const [salesItems, setSalesItems] = useState<any[]>([]);
   const [salesSearch, setSalesSearch] = useState('');
@@ -91,6 +94,7 @@ export default function PharmacyPage() {
     if (activeTab === 'dispensing') loadPrescriptions();
     if (activeTab === 'alerts') loadAlerts();
     if (activeTab === 'sales') loadSalesStores();
+    if (activeTab === 'history') loadHistory();
   }, [activeTab]);
 
   function switchTab(tab: string) {
@@ -130,6 +134,16 @@ export default function PharmacyPage() {
       setAlerts(res?.data ?? res);
     } catch { }
     setLoadingAlerts(false);
+  }
+
+  async function loadHistory() {
+    setLoadingHistory(true);
+    try {
+      const res = await api('/pharmacy/dispensing-history?limit=50');
+      const d = res?.data ?? res;
+      setHistory(d?.items ?? d?.data?.items ?? []);
+    } catch { }
+    setLoadingHistory(false);
   }
 
   async function searchMedicines(q: string) {
@@ -245,6 +259,7 @@ export default function PharmacyPage() {
             <button className="btn btn-sm btn-ghost" onClick={() => switchTab('sales')}>Sales</button>
             <button className="btn btn-sm btn-ghost" onClick={() => switchTab('stores')}>Stores</button>
             <button className="btn btn-sm btn-ghost" onClick={() => switchTab('alerts')}>Stock Alerts</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('history')}>History</button>
           </div>
         </div>
 
@@ -319,6 +334,7 @@ export default function PharmacyPage() {
             <button className="btn btn-sm" style={{ background: 'var(--primary)', color: '#fff' }}>Sales</button>
             <button className="btn btn-sm btn-ghost" onClick={() => switchTab('stores')}>Stores</button>
             <button className="btn btn-sm btn-ghost" onClick={() => switchTab('alerts')}>Stock Alerts</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('history')}>History</button>
           </div>
         </div>
 
@@ -635,6 +651,69 @@ export default function PharmacyPage() {
             {!alerts.lowStock?.length && !alerts.nearExpiry?.length && !alerts.outOfStock?.length && (
               <div className="empty" style={{ padding: 40 }}>No stock alerts. Everything looks good!</div>
             )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (activeTab === 'history') {
+    return (
+      <div style={{ padding: '0 0 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Dispensing History</h1>
+            <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 13 }}>Previously dispensed prescriptions</p>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('medicines')}>Medicines</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('dispensing')}>Dispensing</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('sales')}>Sales</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('stores')}>Stores</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('alerts')}>Stock Alerts</button>
+            <button className="btn btn-sm" style={{ background: 'var(--primary)', color: '#fff' }}>History</button>
+          </div>
+        </div>
+
+        {loadingHistory && <div className="loading">Loading history...</div>}
+
+        {!loadingHistory && history.length === 0 && (
+          <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>
+            No dispensing records found.
+          </div>
+        )}
+
+        {history.length > 0 && (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Prescription</th>
+                  <th>Patient</th>
+                  <th>Doctor</th>
+                  <th>Medicines</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((rx: any) => (
+                  <tr key={rx.id}>
+                    <td className="mono" style={{ fontSize: 12 }}>{rx.id.slice(0, 8)}</td>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{[rx.patient?.firstName, rx.patient?.lastName].filter(Boolean).join(' ')}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>{rx.patient?.mrn}</div>
+                    </td>
+                    <td>{rx.doctor?.user ? [rx.doctor.user.firstName, rx.doctor.user.lastName].filter(Boolean).join(' ') : '—'}</td>
+                    <td>
+                      {(rx.items || []).map((it: any, i: number) => (
+                        <div key={i} style={{ fontSize: 12 }}>{it.medicineName} {it.dosage} × {it.quantity}</div>
+                      ))}
+                    </td>
+                    <td style={{ fontSize: 12 }}>{formatDate(rx.updatedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

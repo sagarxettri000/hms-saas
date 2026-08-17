@@ -1,0 +1,76 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: hms_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @hms/shared
+      - run: npm run typecheck -w @hms/server
+      - run: npm run typecheck -w @hms/web
+      - run: npm run test -w @hms/server
+      - run: npm run test -w @hms/web
+      - name: Prisma migrate
+        run: npm run db:migrate
+        working-directory: apps/server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hms_test
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker images
+        run: |
+          docker compose build server web
+      - name: Log in to GitHub Container Registry
+        if: vars.DOCKER_REGISTRY != ''
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Tag and push images
+        if: vars.DOCKER_REGISTRY != ''
+        run: |
+          docker tag hms-saas-server ghcr.io/${{ github.repository }}/server:latest
+          docker tag hms-saas-web ghcr.io/${{ github.repository }}/web:latest
+          docker push ghcr.io/${{ github.repository }}/server:latest
+          docker push ghcr.io/${{ github.repository }}/web:latest
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to production
+        if: vars.DEPLOY_HOST != ''
+        run: |
+          echo "Deploy command goes here — configure per your infrastructure"
+          echo "Example: ssh ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }} 'cd /opt/hms && docker compose pull && docker compose up -d'"

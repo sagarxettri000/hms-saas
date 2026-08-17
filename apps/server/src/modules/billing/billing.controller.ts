@@ -8,6 +8,7 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -125,6 +126,43 @@ export class BillingController {
   @ApiOperation({ summary: "Log receipt reprint" })
   reprintInvoice(@Param("id") id: string, @Req() req: any) {
     return this.billingService.reprintInvoice(req.user.tenantId, id, req.user.id);
+  }
+
+  @Get("invoices/:id/pdf")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Download invoice PDF" })
+  async downloadInvoicePdf(
+    @Param("id") id: string,
+    @Req() req: any,
+    @Res() res: any,
+  ) {
+    const { buffer, filename } = await this.billingService.generateInvoicePdf(
+      req.user.tenantId, id, req.user.id,
+    );
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+    });
+    res.send(buffer);
+  }
+
+  @Get("invoices/:id/receipt")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Download payment receipt PDF" })
+  async downloadReceiptPdf(
+    @Param("id") id: string,
+    @Query("paymentId") paymentId: string | undefined,
+    @Req() req: any,
+    @Res() res: any,
+  ) {
+    const { buffer, filename } = await this.billingService.generateReceiptPdf(
+      req.user.tenantId, id, paymentId, req.user.id,
+    );
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+    });
+    res.send(buffer);
   }
 
   // ---------- Payments ----------

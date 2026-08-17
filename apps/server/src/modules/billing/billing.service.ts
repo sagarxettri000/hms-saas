@@ -7,6 +7,7 @@ import {
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { buildInvoicePdf, buildReceiptPdf } from "./invoice-pdf";
 
 export interface InvoiceItemDto {
   serviceName: string;
@@ -479,10 +480,13 @@ export class BillingService {
           select: {
             id: true,
             firstName: true,
+            middleName: true,
             lastName: true,
             mrn: true,
             phone: true,
             email: true,
+            gender: true,
+            dateOfBirth: true,
           },
         },
         admission: true,
@@ -1774,6 +1778,80 @@ export class BillingService {
       invoiceNumber: invoice.invoiceNumber,
       printCount: updated.printCount,
     };
+  }
+
+  async generateInvoicePdf(tenantId: string, id: string, userId?: string) {
+    const invoice = await this.findInvoiceById(tenantId, id);
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        name: true, addressLine1: true, addressLine2: true,
+        city: true, district: true, province: true, country: true,
+        phone: true, email: true,
+      },
+    });
+    const user = userId
+      ? await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { firstName: true, middleName: true, lastName: true },
+        })
+      : null;
+    const generatedBy = user
+      ? [user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ")
+      : undefined;
+
+    await this.prisma.invoice.update({
+      where: { id },
+      data: { printCount: { increment: 1 } },
+    });
+    await this.logAudit(tenantId, userId, "PRINT", "Invoice", id, {
+      action: "PDF",
+      format: "invoice",
+    });
+
+    const buffer = buildInvoicePdf(invoice as any, tenant as any, generatedBy);
+    const filename = `${invoice.invoiceNumber}.pdf`;
+    return { buffer, filename };
+  }
+
+  async generateReceiptPdf(
+    tenantId: string,
+    invoiceId: string,
+    paymentId?: string,
+    userId?: string,
+  ) {
+    const invoice = await this.findInvoiceById(tenantId, invoiceId);
+    const payment = paymentId
+      ? invoice.payments.find((p: any) => p.id === paymentId)
+      : invoice.payments[0];
+    if (!payment) throw new NotFoundException("No payment found for this invoice");
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        name: true, addressLine1: true, addressLine2: true,
+        city: true, district: true, province: true, country: true,
+        phone: true, email: true,
+      },
+    });
+    const user = userId
+      ? await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { firstName: true, middleName: true, lastName: true },
+        })
+      : null;
+    const generatedBy = user
+      ? [user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ")
+      : undefined;
+
+    await this.logAudit(tenantId, userId, "PRINT", "Payment", payment.id, {
+      action: "RECEIPT",
+      format: "receipt",
+    });
+
+    const buffer = buildReceiptPdf(invoice as any, payment as any, tenant as any, generatedBy);
+    const filename = `${payment.paymentNumber}.pdf`;
+    return { buffer, filename };
   }
 
   // ---------- Financial Transactions ----------

@@ -25,6 +25,10 @@ COPY --from=builder /app/packages/shared ./packages/shared
 COPY --from=builder /app/apps/server/prisma ./apps/server/prisma
 COPY --from=builder /app/apps/server/package.json ./apps/server/
 RUN cd apps/server && npx prisma generate
+RUN npm install -g ts-node typescript
+
+COPY apps/server/start.sh ./apps/server/start.sh
+RUN chmod +x apps/server/start.sh
 
 EXPOSE 4000
-CMD ["node", "apps/server/dist/main.js"]
+CMD ["sh", "apps/server/start.sh"]

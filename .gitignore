@@ -18,8 +18,8 @@ coverage/
 .env.production
 !.env.example
 
-# Runtime / storage
-storage/
+# Runtime / storage (only the top-level storage dir, not modules/storage)
+/storage/
 backups/
 logs/
 *.log
@@ -36,3 +36,5 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+.vercel

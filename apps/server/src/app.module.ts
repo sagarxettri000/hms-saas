@@ -42,6 +42,7 @@ import { ExportsModule } from "./modules/exports/exports.module";
 import { CatalogModule } from "./modules/catalog/catalog.module";
 import { StorageModule } from "./modules/storage/storage.module";
 import { PortalModule } from "./modules/portal/portal.module";
+import { BedManagementModule } from "./modules/bed-management/bed-management.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "./common/guards/permissions.guard";
 import { TenantGuard } from "./common/guards/tenant.guard";
@@ -105,6 +106,7 @@ import { AppController } from "./app.controller";
     CatalogModule,
     StorageModule,
     PortalModule,
+    BedManagementModule,
   ],
   providers: [
     {

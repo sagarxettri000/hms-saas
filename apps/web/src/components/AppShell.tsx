@@ -36,6 +36,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { label: 'Patients', href: '/patients', icon: '☺', roles: [...CLINICAL_WIDE] },
       { label: 'Billing', href: '/billing', icon: '₨', roles: [...FINANCE, ...ADMIN, ...SUPER, 'INSURANCE_OFFICER'] },
       { label: 'Admit', href: '/admissions', icon: '▣', roles: [...CLINICAL_WIDE] },
+      { label: 'Beds', href: '/bed-management', icon: '⊞', roles: [...CLINICAL_WIDE] },
       { label: 'Appointments', href: '/appointments', icon: '◷', roles: [...CLINICAL_WIDE] },
       { label: 'Doctors', href: '/doctors', icon: '✚', roles: [...CLINICAL_WIDE] },
       { label: 'Encounters', href: '/encounters', icon: '✎', roles: [...CLINICAL, ...ADMIN, ...SUPER] },

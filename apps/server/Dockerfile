@@ -25,4 +25,4 @@ COPY --from=builder /app/apps/server/prisma ./apps/server/prisma
 COPY --from=builder /app/apps/server/package.json ./apps/server/
 
 EXPOSE 4000
-CMD ["sh", "-c", "cd apps/server && npx prisma migrate deploy && node dist/main.js"]
+CMD ["sh", "-c", "cd apps/server && npx prisma db push --skip-generate && node dist/main.js"]

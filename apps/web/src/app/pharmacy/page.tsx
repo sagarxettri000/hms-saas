@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { Suspense, useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ModulePage from '@/components/ModulePage';
 import { api } from '@/lib/api';
@@ -53,7 +53,7 @@ function getTab(params: URLSearchParams): string {
   return 'medicines';
 }
 
-export default function PharmacyPage() {
+function PharmacyPageInner() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => getTab(searchParams));
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
@@ -966,5 +966,13 @@ function DispenseModal({ prescription, onClose, onDone }: { prescription: any; o
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PharmacyPage() {
+  return (
+    <Suspense fallback={<p className="muted">Loading...</p>}>
+      <PharmacyPageInner />
+    </Suspense>
   );
 }

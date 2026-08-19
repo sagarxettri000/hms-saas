@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ModulePage from '@/components/ModulePage';
 import PaymentModal from '@/components/PaymentModal';
@@ -248,7 +248,7 @@ function DepositRefundModal({ deposit, onClose, onDone }: { deposit: Row; onClos
   );
 }
 
-export default function BillingPage() {
+function BillingPageInner() {
   const searchParams = useSearchParams();
   const patientId = searchParams.get('patientId');
   const [payTarget, setPayTarget] = useState<Row | null>(null);
@@ -548,5 +548,13 @@ export default function BillingPage() {
         );
       }}
     />
+  );
+}
+
+export default function BillingPage() {
+  return (
+    <Suspense fallback={<p className="muted">Loading...</p>}>
+      <BillingPageInner />
+    </Suspense>
   );
 }

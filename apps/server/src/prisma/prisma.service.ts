@@ -25,8 +25,17 @@ export class PrismaService
   }
 
   async onModuleInit() {
-    await this.$connect();
-    this.logger.log("Database connected successfully");
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        await this.$connect();
+        this.logger.log("Database connected successfully");
+        return;
+      } catch (err) {
+        this.logger.warn(`Database connection attempt ${attempt}/5 failed: ${err instanceof Error ? err.message : err}`);
+        if (attempt < 5) await new Promise(r => setTimeout(r, 5000 * attempt));
+      }
+    }
+    this.logger.error("Could not connect to database after 5 attempts, starting without DB");
   }
 
   async onModuleDestroy() {

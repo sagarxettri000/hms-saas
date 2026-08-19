@@ -9,8 +9,6 @@ RUN npm install --ignore-scripts 2>/dev/null || npm install --workspaces --ignor
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/server/node_modules ./apps/server/node_modules
-COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY . .
 RUN npm run build -w @hms/shared
 RUN npm run build -w @hms/server
@@ -20,12 +18,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/server/node_modules ./apps/server/node_modules
-COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY --from=builder /app/apps/server/dist ./apps/server/dist
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/apps/server/prisma ./apps/server/prisma
-COPY --from=builder /app/package.json ./
 COPY --from=builder /app/apps/server/package.json ./apps/server/
 
 EXPOSE 4000

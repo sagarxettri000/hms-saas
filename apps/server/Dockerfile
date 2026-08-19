@@ -22,9 +22,13 @@ RUN apk add --no-cache openssl
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/apps/server/dist ./apps/server/dist
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
+COPY --from=builder /app/packages/shared/package.json ./packages/shared/package.json
 COPY --from=builder /app/apps/server/prisma ./apps/server/prisma
 COPY --from=builder /app/apps/server/package.json ./apps/server/
-RUN cd apps/server && npx prisma generate
+RUN mkdir -p node_modules/@hms/shared/dist && \
+    cp packages/shared/package.json node_modules/@hms/shared/ && \
+    cp -r packages/shared/dist/* node_modules/@hms/shared/dist/ && \
+    cd apps/server && npx prisma generate
 
 EXPOSE 4000
 CMD ["node", "apps/server/dist/main.js"]

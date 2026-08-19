@@ -24,6 +24,7 @@ COPY --from=builder /app/apps/server/dist ./apps/server/dist
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/apps/server/prisma ./apps/server/prisma
 COPY --from=builder /app/apps/server/package.json ./apps/server/
+RUN cd apps/server && npx prisma generate
 
 EXPOSE 4000
-CMD ["sh", "-c", "cd apps/server && npx prisma db push --skip-generate && node dist/main.js"]
+CMD ["node", "apps/server/dist/main.js"]

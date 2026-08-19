@@ -1,5 +1,5 @@
 import { NestFactory } from "@nestjs/core";
-import { ValidationPipe, Logger } from "@nestjs/common";
+import { ValidationPipe } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
@@ -11,7 +11,9 @@ import { ZodValidationPipe } from "./common/pipes/zod-validation.pipe";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    logger: process.env.NODE_ENV === "production" ? ["error", "warn", "log"] : undefined,
+    logger: process.env.NODE_ENV === "production"
+      ? ({ log: () => {}, warn: () => {}, error: () => {}, debug: () => {}, verbose: () => {} } as any)
+      : undefined,
   });
 
   app.enableCors({

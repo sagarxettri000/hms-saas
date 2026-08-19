@@ -5,12 +5,13 @@ FROM base AS deps
 COPY package.json package-lock.json* ./
 COPY apps/server/package.json ./apps/server/
 COPY packages/shared/package.json ./packages/shared/
-RUN npm install --ignore-scripts 2>/dev/null || npm install --workspaces --ignore-scripts --include-workspace-root 2>/dev/null || npm install
+RUN npm install
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build -w @hms/shared
+RUN npx prisma generate --schema=apps/server/prisma/schema.prisma
 RUN npm run build -w @hms/server
 
 FROM node:20-alpine AS runner

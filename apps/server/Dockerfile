@@ -17,6 +17,7 @@ RUN npm run build -w @hms/server
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apk add --no-cache openssl
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/apps/server/dist ./apps/server/dist

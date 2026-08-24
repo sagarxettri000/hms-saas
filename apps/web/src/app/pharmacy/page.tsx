@@ -1,51 +1,122 @@
 'use client';
 
-import { Suspense, useEffect, useState, useCallback } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import ModulePage from '@/components/ModulePage';
 import { api } from '@/lib/api';
-import { formatMoney, formatDate } from '@/lib/hooks';
-import { STORE_REF, STORE_TYPES } from '@/lib/options';
+import { formatMoney, formatDate, formatDateTime } from '@/lib/hooks';
+import AppShell from '@/components/AppShell';
 import ReceiptModal from '@/components/ReceiptModal';
 import PatientPrescriptions from '@/components/PatientPrescriptions';
 
-function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    DRAFT: '#6b7280',
-    APPROVED: '#2563eb',
-    DISPENSED: '#16a34a',
-    CANCELLED: '#dc2626',
-    PENDING: '#f59e0b',
-    ACTIVE: '#16a34a',
-  };
-  return (
-    <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 600, background: colors[status] || '#6b7280', color: '#fff' }}>
-      {status}
-    </span>
-  );
+const REMOVED_KEY = 'pharmacy_expiry_removed';
+const CONTROLLED_LOG_KEY = 'controlled_substance_log';
+
+const VALID_TABS = ['medicines', 'dispensing', 'sales', 'stores', 'alerts', 'expiry'];
+
+const TAB_LABELS: Record<string, string> = {
+  medicines: 'Medicines',
+  dispensing: 'Dispensing',
+  sales: 'Sales',
+  stores: 'Stores',
+  alerts: 'Alerts',
+  expiry: 'Expiry',
+};
+
+const CATEGORIES = [
+  'Antibiotics',
+  'Analgesics',
+  'Cardiovascular',
+  'Antidiabetics',
+  'Gastrointestinal',
+  'Respiratory',
+  'Antiallergics',
+  'Vitamins & Supplements',
+  'Dermatological',
+  'Neurological',
+  'Psychiatric',
+  'Hormones',
+  'Oncology',
+  'Fluids & Electrolytes',
+  'Others',
+];
+
+const DRUG_INTERACTIONS = [
+  { drugs: 'Warfarin + Aspirin', severity: 'MAJOR', effect: 'Increased bleeding risk', action: 'Avoid combination; monitor INR closely' },
+  { drugs: 'Opioids + Benzodiazepines', severity: 'MAJOR', effect: 'Respiratory depression, sedation', action: 'Avoid co-prescription; reduce doses if unavoidable' },
+  { drugs: 'Digoxin + Amiodarone', severity: 'MAJOR', effect: 'Digoxin toxicity', action: 'Reduce digoxin dose by half; monitor levels' },
+  { drugs: 'Metformin + Iodinated Contrast', severity: 'MAJOR', effect: 'Lactic acidosis risk', action: 'Withhold metformin 48 hours around contrast imaging' },
+  { drugs: 'ACE Inhibitors + Potassium Supplements', severity: 'MAJOR', effect: 'Hyperkalemia', action: 'Monitor serum potassium regularly' },
+  { drugs: 'SSRIs + Tramadol', severity: 'MODERATE', effect: 'Serotonin syndrome risk', action: 'Watch for agitation, tremor, hyperthermia' },
+  { drugs: 'NSAIDs + ACE/ARB Antihypertensives', severity: 'MODERATE', effect: 'Reduced BP control, renal impairment', action: 'Use lowest NSAID dose for shortest duration' },
+  { drugs: 'Fluoroquinolones + Corticosteroids', severity: 'MODERATE', effect: 'Increased tendon rupture risk', action: 'Avoid in elderly; counsel patient' },
+  { drugs: 'Levothyroxine + Calcium/Iron', severity: 'MINOR', effect: 'Reduced thyroxine absorption', action: 'Separate doses by at least 4 hours' },
+  { drugs: 'Ciprofloxacin + Antacids/Iron', severity: 'MINOR', effect: 'Reduced antibiotic absorption', action: 'Separate administration by 2 hours' },
+];
+
+const CONTROLLED_SUBSTANCES = [
+  { name: 'Morphine', form: 'Injection / Tablet', schedule: 'Schedule X' },
+  { name: 'Fentanyl', form: 'Injection / Patch', schedule: 'Schedule X' },
+  { name: 'Pethidine (Meperidine)', form: 'Injection', schedule: 'Schedule X' },
+  { name: 'Oxycodone', form: 'Tablet', schedule: 'Schedule X' },
+  { name: 'Tramadol', form: 'Injection / Capsule', schedule: 'Schedule H1' },
+  { name: 'Ketamine', form: 'Injection', schedule: 'Schedule H1' },
+  { name: 'Diazepam', form: 'Injection / Tablet', schedule: 'Schedule H1' },
+  { name: 'Alprazolam', form: 'Tablet', schedule: 'Schedule H1' },
+  { name: 'Lorazepam', form: 'Injection / Tablet', schedule: 'Schedule H1' },
+  { name: 'Phenobarbital', form: 'Injection / Tablet', schedule: 'Schedule H1' },
+];
+
+function toList(res: any): any[] {
+  const d = res?.data?.data ?? res?.data ?? res;
+  if (Array.isArray(d)) return d;
+  return d?.data ?? [];
 }
 
-function StockAlertBadge({ type, count }: { type: string; count: number }) {
-  const colors: Record<string, string> = {
-    lowStock: '#f59e0b',
-    nearExpiry: '#ef4444',
-    outOfStock: '#dc2626',
-  };
-  const labels: Record<string, string> = {
-    lowStock: 'Low Stock',
-    nearExpiry: 'Near Expiry',
-    outOfStock: 'Out of Stock',
-  };
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', background: `${colors[type]}15`, border: `1px solid ${colors[type]}40`, borderRadius: 8 }}>
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: colors[type] }} />
-      <span style={{ fontWeight: 600, fontSize: 14 }}>{labels[type]}</span>
-      <span style={{ marginLeft: 'auto', fontWeight: 700, fontSize: 18, color: colors[type] }}>{count}</span>
-    </div>
-  );
+function toObj(res: any): any {
+  const d = res?.data?.data ?? res?.data ?? res;
+  return d ?? null;
 }
 
-const VALID_TABS = ['medicines', 'dispensing', 'sales', 'stores', 'alerts', 'history'];
+function daysUntil(value: any): number | null {
+  if (!value) return null;
+  return Math.ceil((new Date(value).getTime() - Date.now()) / 86400000);
+}
+
+function expiryStatus(days: number | null): string {
+  if (days === null) return 'UNKNOWN';
+  if (days < 0) return 'EXPIRED';
+  if (days <= 30) return 'EXPIRING_30_DAYS';
+  if (days <= 60) return 'EXPIRING_60_DAYS';
+  return 'SAFE';
+}
+
+function ExpiryBadge({ status }: { status: string }) {
+  if (status === 'EXPIRED') return <span className="badge badge-red">EXPIRED</span>;
+  if (status === 'EXPIRING_30_DAYS')
+    return <span className="badge" style={{ background: '#ea580c', color: '#fff' }}>EXPIRING IN 30 DAYS</span>;
+  if (status === 'EXPIRING_60_DAYS') return <span className="badge badge-yellow">EXPIRING IN 60 DAYS</span>;
+  if (status === 'SAFE') return <span className="badge badge-green">SAFE</span>;
+  return <span className="badge badge-gray">NO EXPIRY DATA</span>;
+}
+
+function RxStatusBadge({ status }: { status: string }) {
+  const tone =
+    status === 'DISPENSED' || status === 'ACTIVE' ? 'badge-green' :
+    status === 'APPROVED' ? 'badge-blue' :
+    status === 'CANCELLED' ? 'badge-red' :
+    status === 'PENDING' ? 'badge-yellow' :
+    'badge-gray';
+  return <span className={`badge ${tone}`}>{status}</span>;
+}
+
+function readRemoved(): string[] {
+  try {
+    const raw = localStorage.getItem(REMOVED_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
 
 function getTab(params: URLSearchParams): string {
   const tab = params.get('tab');
@@ -53,252 +124,456 @@ function getTab(params: URLSearchParams): string {
   return 'medicines';
 }
 
-function PharmacyPageInner() {
-  const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState(() => getTab(searchParams));
-  const [prescriptions, setPrescriptions] = useState<any[]>([]);
-  const [loadingPrescriptions, setLoadingPrescriptions] = useState(false);
-  const [dispenseTarget, setDispenseTarget] = useState<any>(null);
-  const [dispensing, setDispensing] = useState(false);
+function AddMedicineModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [values, setValues] = useState({
+    name: '', genericName: '', brandName: '', category: 'Antibiotics', sku: '',
+    form: '', strength: '', unit: '', purchaseRate: 0, salesRate: 0,
+    reorderLevel: 0, requiresPrescription: false,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
-  const [alerts, setAlerts] = useState<any>(null);
-  const [loadingAlerts, setLoadingAlerts] = useState(false);
-
-  const [history, setHistory] = useState<any[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-
-  const [salesItems, setSalesItems] = useState<any[]>([]);
-  const [salesSearch, setSalesSearch] = useState('');
-  const [salesPatientId, setSalesPatientId] = useState('');
-  const [salesStoreId, setSalesStoreId] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [submittingSale, setSubmittingSale] = useState(false);
-  const [saleReceipt, setSaleReceipt] = useState<any>(null);
-  const [salesStores, setSalesStores] = useState<any[]>([]);
-  const [patientList, setPatientList] = useState<any[]>([]);
-  const [showAddPatient, setShowAddPatient] = useState(false);
-  const [newPatient, setNewPatient] = useState({ firstName: '', lastName: '', mobile: '', gender: 'MALE' });
-  const [savingPatient, setSavingPatient] = useState(false);
-  const [patientError, setPatientError] = useState<string | null>(null);
-  const [salesDiscount, setSalesDiscount] = useState(0);
-  const [salesTax, setSalesTax] = useState(0);
-  const [salesPaymentMethod, setSalesPaymentMethod] = useState('CASH');
-  const [salesPaymentRef, setSalesPaymentRef] = useState('');
-  const [salesIsCredit, setSalesIsCredit] = useState(false);
-
-  useEffect(() => {
-    setActiveTab(getTab(searchParams));
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (activeTab === 'dispensing') loadPrescriptions();
-    if (activeTab === 'alerts') loadAlerts();
-    if (activeTab === 'sales') loadSalesStores();
-    if (activeTab === 'history') loadHistory();
-  }, [activeTab]);
-
-  function switchTab(tab: string) {
-    setActiveTab(tab);
-    window.history.replaceState(null, '', `/pharmacy?tab=${tab}`);
-  }
-
-  async function loadSalesStores() {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!values.name.trim()) return;
+    setSaving(true);
+    setError('');
     try {
-      const [storeRes, patientRes] = await Promise.all([
-        api('/pharmacy/stores'),
-        api('/patients?limit=500'),
-      ]);
-      const allStores = Array.isArray(storeRes?.data) ? storeRes.data : storeRes?.data?.data ?? [];
-      const filtered = allStores.filter((s: any) => s.location?.toLowerCase().includes('ground floor'));
-      setSalesStores(filtered);
-      if (filtered.length === 1 && !salesStoreId) setSalesStoreId(filtered[0].id);
-      const pList = Array.isArray(patientRes?.data) ? patientRes.data : patientRes?.data?.data ?? [];
-      setPatientList(pList);
-    } catch { }
-  }
-
-  async function loadPrescriptions() {
-    setLoadingPrescriptions(true);
-    try {
-      const res = await api('/pharmacy/prescriptions?limit=100');
-      const list = Array.isArray(res?.data) ? res.data : res?.data?.data ?? [];
-      setPrescriptions(list.filter((p: any) => p.status !== 'DISPENSED' && p.status !== 'CANCELLED'));
-    } catch { }
-    setLoadingPrescriptions(false);
-  }
-
-  async function loadAlerts() {
-    setLoadingAlerts(true);
-    try {
-      const res = await api('/pharmacy/alerts');
-      setAlerts(res?.data ?? res);
-    } catch { }
-    setLoadingAlerts(false);
-  }
-
-  async function loadHistory() {
-    setLoadingHistory(true);
-    try {
-      const res = await api('/pharmacy/dispensing-history?limit=50');
-      const d = res?.data ?? res;
-      setHistory(d?.items ?? d?.data?.items ?? []);
-    } catch { }
-    setLoadingHistory(false);
-  }
-
-  async function searchMedicines(q: string) {
-    setSalesSearch(q);
-    if (q.length < 2) { setSearchResults([]); return; }
-    try {
-      const res = await api(`/pharmacy/medicines?query=${encodeURIComponent(q)}&limit=10`);
-      setSearchResults(Array.isArray(res?.data) ? res.data : res?.data?.data ?? []);
-    } catch { setSearchResults([]); }
-  }
-
-  function addToSale(med: any) {
-    if (salesItems.find((s) => s.medicineId === med.id)) return;
-    setSalesItems((prev) => [...prev, {
-      medicineId: med.id,
-      medicineName: med.name,
-      quantity: 1,
-      unitPrice: Number(med.salesRate) || 0,
-    }]);
-    setSalesSearch('');
-    setSearchResults([]);
-  }
-
-  function updateSaleItem(medicineId: string, field: string, value: any) {
-    setSalesItems((prev) => prev.map((item) =>
-      item.medicineId === medicineId ? { ...item, [field]: field === 'quantity' || field === 'unitPrice' ? Number(value) || 0 : value } : item
-    ));
-  }
-
-  function removeSaleItem(medicineId: string) {
-    setSalesItems((prev) => prev.filter((item) => item.medicineId !== medicineId));
-  }
-
-  async function submitSale() {
-    if (salesItems.length === 0 || !salesPatientId || !salesStoreId) return;
-    setSubmittingSale(true);
-    try {
-      const invRes = await api('/billing/invoices', {
+      await api('/pharmacy/medicines', {
         method: 'POST',
-        body: JSON.stringify({
-          patientId: salesPatientId,
-          type: 'PHARMACY',
-          items: salesItems.map((it) => ({
-            serviceId: it.medicineId,
-            serviceName: it.medicineName,
-            quantity: it.quantity,
-            rate: it.unitPrice,
-          })),
-          discountAmount: salesDiscount || 0,
-          taxPercent: salesTax || 0,
-          isCredit: salesIsCredit,
-          notes: 'Pharmacy walk-in sale',
-        }),
+        body: JSON.stringify(values),
       });
-      const inv = invRes?.data ?? invRes;
-      if (!salesIsCredit && inv.id) {
-        await api('/billing/payments', {
-          method: 'POST',
-          body: JSON.stringify({
-            patientId: salesPatientId,
-            invoiceId: inv.id,
-            amount: Number(inv.totalAmount || 0),
-            method: salesPaymentMethod,
-            referenceNumber: salesPaymentRef,
-            notes: 'Pharmacy sale payment',
-          }),
-        });
-      }
-      const receiptRes = await api(`/billing/invoices/${inv.id}`);
-      setSaleReceipt(receiptRes?.data ?? receiptRes);
-    } catch { }
-    setSubmittingSale(false);
-  }
-
-  function handlePrint() { window.print(); }
-
-  async function handleAddPatient() {
-    if (!newPatient.firstName.trim()) { setPatientError('First name is required'); return; }
-    setSavingPatient(true);
-    setPatientError(null);
-    try {
-      const res = await api('/patients', {
-        method: 'POST',
-        body: JSON.stringify({
-          firstName: newPatient.firstName.trim(),
-          lastName: newPatient.lastName.trim(),
-          mobile: newPatient.mobile.trim(),
-          gender: newPatient.gender,
-        }),
-      });
-      const pat = res?.data ?? res;
-      setPatientList((prev) => [...prev, pat]);
-      setSalesPatientId(pat.id);
-      setShowAddPatient(false);
-      setNewPatient({ firstName: '', lastName: '', mobile: '', gender: 'MALE' });
-    } catch (err) {
-      setPatientError(err instanceof Error ? err.message : 'Failed to add patient');
+      onDone();
+    } catch (err: any) {
+      setError(err.message || 'Failed to create medicine');
+    } finally {
+      setSaving(false);
     }
-    setSavingPatient(false);
   }
 
-  if (activeTab === 'dispensing') {
-    return (
-      <div style={{ padding: '0 0 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Pharmacy Dispensing</h1>
-            <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 13 }}>View prescriptions and dispense medicines</p>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('medicines')}>Medicines</button>
-            <button className="btn btn-sm" style={{ background: 'var(--primary)', color: '#fff' }}>Dispensing</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('sales')}>Sales</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('stores')}>Stores</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('alerts')}>Stock Alerts</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('history')}>History</button>
-          </div>
+  function set(field: string, value: any) {
+    setValues((v) => ({ ...v, [field]: value }));
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 className="modal-title">Add Medicine</h3>
+          <button className="modal-close" onClick={onClose}>x</button>
         </div>
+        <form onSubmit={handleSubmit}>
+          <div className="form-grid">
+            <div className="field">
+              <label className="label">Name *</label>
+              <input className="input" value={values.name} onChange={(e) => set('name', e.target.value)} required />
+            </div>
+            <div className="field">
+              <label className="label">Generic Name</label>
+              <input className="input" value={values.genericName} onChange={(e) => set('genericName', e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="label">Brand Name</label>
+              <input className="input" value={values.brandName} onChange={(e) => set('brandName', e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="label">Category</label>
+              <select className="input" value={values.category} onChange={(e) => set('category', e.target.value)}>
+                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label className="label">SKU</label>
+              <input className="input" value={values.sku} onChange={(e) => set('sku', e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="label">Dosage Form</label>
+              <input className="input" value={values.form} onChange={(e) => set('form', e.target.value)} placeholder="Tablet, Injection..." />
+            </div>
+            <div className="field">
+              <label className="label">Strength</label>
+              <input className="input" value={values.strength} onChange={(e) => set('strength', e.target.value)} placeholder="500mg" />
+            </div>
+            <div className="field">
+              <label className="label">Unit</label>
+              <input className="input" value={values.unit} onChange={(e) => set('unit', e.target.value)} placeholder="Strip, Bottle..." />
+            </div>
+            <div className="field">
+              <label className="label">Purchase Rate</label>
+              <input className="input" type="number" min="0" step="0.01" value={values.purchaseRate} onChange={(e) => set('purchaseRate', Number(e.target.value))} />
+            </div>
+            <div className="field">
+              <label className="label">Sales Rate</label>
+              <input className="input" type="number" min="0" step="0.01" value={values.salesRate} onChange={(e) => set('salesRate', Number(e.target.value))} />
+            </div>
+            <div className="field">
+              <label className="label">Reorder Level</label>
+              <input className="input" type="number" min="0" value={values.reorderLevel} onChange={(e) => set('reorderLevel', Number(e.target.value))} />
+            </div>
+            <div className="field">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 22 }}>
+                <input type="checkbox" checked={values.requiresPrescription} onChange={(e) => set('requiresPrescription', e.target.checked)} />
+                Prescription required
+              </label>
+            </div>
+          </div>
+          {error && <div className="alert alert-error">{error}</div>}
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Saving...' : 'Create Medicine'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
-        {loadingPrescriptions && <div className="loading">Loading prescriptions...</div>}
+function MedicinesTab() {
+  const [medicines, setMedicines] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('');
+  const [sort, setSort] = useState('name-asc');
+  const [showAdd, setShowAdd] = useState(false);
 
-        {!loadingPrescriptions && prescriptions.length === 0 && (
-          <div className="empty" style={{ padding: 40 }}>No pending prescriptions found.</div>
-        )}
+  const load = useCallback(() => {
+    setLoading(true);
+    api('/pharmacy/medicines?limit=200')
+      .then((res: any) => setMedicines(toList(res)))
+      .catch(() => setMedicines([]))
+      .finally(() => setLoading(false));
+  }, []);
 
+  useEffect(() => { load(); }, [load]);
+
+  const categoriesPresent = Array.from(
+    new Set(medicines.map((m) => m.category).filter(Boolean))
+  ).sort();
+
+  const filtered = medicines
+    .filter((m) => {
+      if (category && m.category !== category) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        return (
+          m.name?.toLowerCase().includes(q) ||
+          m.genericName?.toLowerCase().includes(q) ||
+          m.brandName?.toLowerCase().includes(q) ||
+          m.sku?.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      switch (sort) {
+        case 'name-desc': return (b.name || '').localeCompare(a.name || '');
+        case 'stock-asc': return (Number(a.stock ?? a.currentStock ?? 0)) - (Number(b.stock ?? b.currentStock ?? 0));
+        case 'stock-desc': return (Number(b.stock ?? b.currentStock ?? 0)) - (Number(a.stock ?? a.currentStock ?? 0));
+        case 'price-asc': return (Number(a.salesRate) || 0) - (Number(b.salesRate) || 0);
+        case 'price-desc': return (Number(b.salesRate) || 0) - (Number(a.salesRate) || 0);
+        default: return (a.name || '').localeCompare(b.name || '');
+      }
+    });
+
+  return (
+    <>
+      <div className="toolbar" style={{ marginBottom: 16 }}>
+        <input
+          className="input search-input"
+          placeholder="Search by name, generic, brand or SKU..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select className="input" style={{ width: 200 }} value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option value="">All Categories</option>
+          {Array.from(new Set([...categoriesPresent, ...CATEGORIES])).map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        <select className="input" style={{ width: 190 }} value={sort} onChange={(e) => setSort(e.target.value)}>
+          <option value="name-asc">Name (A-Z)</option>
+          <option value="name-desc">Name (Z-A)</option>
+          <option value="stock-asc">Stock (Low first)</option>
+          <option value="stock-desc">Stock (High first)</option>
+          <option value="price-asc">Price (Low first)</option>
+          <option value="price-desc">Price (High first)</option>
+        </select>
+        <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add Medicine</button>
+        <button className="btn btn-secondary" onClick={load}>Refresh</button>
+      </div>
+
+      {loading ? (
+        <div className="loading">Loading medicines...</div>
+      ) : filtered.length === 0 ? (
+        <div className="empty">No medicines match the current filters.</div>
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Generic</th>
+                <th>Category</th>
+                <th>Form / Strength</th>
+                <th>Stock</th>
+                <th>Sales Price</th>
+                <th>Reorder Level</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((m) => {
+                const stock = Number(m.stock ?? m.currentStock ?? 0);
+                const reorder = Number(m.reorderLevel) || 0;
+                const low = stock <= reorder;
+                return (
+                  <tr key={m.id}>
+                    <td style={{ fontWeight: 600 }}>
+                      {m.name}
+                      {m.requiresPrescription && <span className="badge badge-purple" style={{ marginLeft: 6 }}>Rx</span>}
+                    </td>
+                    <td>{m.genericName || '—'}</td>
+                    <td>{m.category ? <span className="badge badge-blue">{m.category}</span> : '—'}</td>
+                    <td>{[m.form, m.strength].filter(Boolean).join(' ') || '—'}</td>
+                    <td style={{ color: low ? '#dc2626' : undefined, fontWeight: low ? 700 : 400 }}>{stock}</td>
+                    <td>{formatMoney(m.salesRate)}</td>
+                    <td>{reorder}</td>
+                    <td>
+                      <span className={`badge ${m.isActive ? 'badge-green' : 'badge-gray'}`}>
+                        {m.isActive ? 'ACTIVE' : 'INACTIVE'}
+                      </span>
+                      {low && <span className="badge badge-yellow" style={{ marginLeft: 4 }}>LOW</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showAdd && <AddMedicineModal onClose={() => setShowAdd(false)} onDone={() => { setShowAdd(false); load(); }} />}
+    </>
+  );
+}
+
+interface ExpiryRow {
+  key: string;
+  medicineId?: string;
+  name: string;
+  batch: string;
+  expiryDate: string;
+  stock: number;
+}
+
+function buildExpiryRows(medicines: any[], inventory: any[]): ExpiryRow[] {
+  const invRows: ExpiryRow[] = inventory
+    .filter((i) => i.expiryDate)
+    .map((i) => ({
+      key: i.id,
+      medicineId: i.medicineId,
+      name: i.medicine?.name || i.name || 'Unknown item',
+      batch: i.batchNumber || '—',
+      expiryDate: i.expiryDate,
+      stock: Number(i.currentStock) || 0,
+    }));
+
+  if (invRows.length > 0) return invRows;
+
+  return medicines
+    .filter((m) => m.expiryDate)
+    .map((m) => ({
+      key: m.id,
+      medicineId: m.id,
+      name: m.name,
+      batch: m.batchNumber || '—',
+      expiryDate: m.expiryDate,
+      stock: Number(m.stock ?? m.currentStock ?? 0),
+    }));
+}
+
+function ExpiryTab() {
+  const [rows, setRows] = useState<ExpiryRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('');
+  const [removed, setRemoved] = useState<string[]>([]);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      api('/pharmacy/medicines?limit=200'),
+      api('/pharmacy/inventory?limit=200'),
+    ])
+      .then(([medRes, invRes]: any[]) => {
+        setRows(buildExpiryRows(toList(medRes), toList(invRes)));
+      })
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load();
+    setRemoved(readRemoved());
+  }, [load]);
+
+  function markRemoved(key: string) {
+    const next = removed.includes(key) ? removed.filter((k) => k !== key) : [...removed, key];
+    setRemoved(next);
+    try {
+      localStorage.setItem(REMOVED_KEY, JSON.stringify(next));
+    } catch {}
+  }
+
+  const withStatus = rows.map((r) => {
+    const days = daysUntil(r.expiryDate);
+    return { ...r, days, status: expiryStatus(days), isRemoved: removed.includes(r.key) };
+  });
+
+  const counts = {
+    total: withStatus.length,
+    expired: withStatus.filter((r) => r.status === 'EXPIRED').length,
+    exp30: withStatus.filter((r) => r.status === 'EXPIRING_30_DAYS').length,
+    exp60: withStatus.filter((r) => r.status === 'EXPIRING_60_DAYS').length,
+  };
+
+  const filtered = filter ? withStatus.filter((r) => r.status === filter) : withStatus;
+
+  return (
+    <>
+      <div className="stat-grid" style={{ marginBottom: 20 }}>
+        <div className="stat-card">
+          <div className="stat-label">Total Medicines</div>
+          <div className="stat-value stat-blue">{counts.total}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Expired</div>
+          <div className="stat-value stat-red">{counts.expired}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Expiring within 30 days</div>
+          <div className="stat-value" style={{ color: '#ea580c' }}>{counts.exp30}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Expiring within 60 days</div>
+          <div className="stat-value stat-amber">{counts.exp60}</div>
+        </div>
+      </div>
+
+      <div className="toolbar" style={{ marginBottom: 16 }}>
+        <select className="input" style={{ width: 240 }} value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <option value="">All Statuses</option>
+          <option value="SAFE">Safe</option>
+          <option value="EXPIRING_60_DAYS">Expiring in 60 Days</option>
+          <option value="EXPIRING_30_DAYS">Expiring in 30 Days</option>
+          <option value="EXPIRED">Expired</option>
+        </select>
+        <button className="btn btn-secondary" onClick={load}>Refresh</button>
+      </div>
+
+      {loading ? (
+        <div className="loading">Loading expiry data...</div>
+      ) : filtered.length === 0 ? (
+        <div className="empty">No batch records found.</div>
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Medicine Name</th>
+                <th>Batch</th>
+                <th>Expiry Date</th>
+                <th>Stock</th>
+                <th>Days Until Expiry</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r) => (
+                <tr key={r.key} style={r.isRemoved ? { opacity: 0.5 } : r.status === 'EXPIRED' ? { background: '#fef2f2' } : undefined}>
+                  <td style={{ fontWeight: 600, textDecoration: r.isRemoved ? 'line-through' : undefined }}>{r.name}</td>
+                  <td className="mono">{r.batch}</td>
+                  <td>{formatDate(r.expiryDate)}</td>
+                  <td>{r.stock}</td>
+                  <td>{r.days === null ? '—' : r.days < 0 ? `${Math.abs(r.days)}d ago` : `${r.days}d`}</td>
+                  <td>
+                    <ExpiryBadge status={r.status} />
+                    {r.isRemoved && <span className="badge badge-gray" style={{ marginLeft: 4 }}>REMOVED</span>}
+                  </td>
+                  <td>
+                    {r.status === 'EXPIRED' && !r.isRemoved && (
+                      <button className="btn btn-sm btn-danger" onClick={() => markRemoved(r.key)}>
+                        Mark as Removed
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
+function DispensingTab() {
+  const [prescriptions, setPrescriptions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [dispenseTarget, setDispenseTarget] = useState<any>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api('/pharmacy/prescriptions?limit=100')
+      .then((res: any) => {
+        const list = toList(res);
+        setPrescriptions(list.filter((p: any) => p.status !== 'DISPENSED' && p.status !== 'CANCELLED'));
+      })
+      .catch(() => setPrescriptions([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <>
+      <div className="toolbar" style={{ marginBottom: 16 }}>
+        <span className="note">{prescriptions.length} pending prescription(s)</span>
+        <button className="btn btn-secondary" onClick={load}>Refresh</button>
+      </div>
+
+      {loading ? (
+        <div className="loading">Loading prescriptions...</div>
+      ) : prescriptions.length === 0 ? (
+        <div className="empty">No pending prescriptions found.</div>
+      ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {prescriptions.map((rx) => (
-            <div key={rx.id} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div key={rx.id} className="card">
+              <div className="row-between">
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 15 }}>
                     {rx.patient?.firstName} {rx.patient?.lastName}
-                    <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>{rx.patient?.mrn}</span>
+                    <span className="mono" style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>{rx.patient?.mrn}</span>
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-                    Dr. {rx.doctor?.user?.firstName} {rx.doctor?.user?.lastName} · {formatDate(rx.createdAt)}
+                  <div className="note" style={{ marginTop: 2 }}>
+                    Dr. {rx.doctor?.user?.firstName} {rx.doctor?.user?.lastName} · {formatDateTime(rx.createdAt)}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <StatusBadge status={rx.status} />
-                  {rx.status !== 'DISPENSED' && (
-                    <button className="btn btn-sm" onClick={() => setDispenseTarget(rx)} style={{ fontSize: 12 }}>
-                      Dispense
-                    </button>
-                  )}
+                  <RxStatusBadge status={rx.status} />
+                  <button className="btn btn-sm btn-primary" onClick={() => setDispenseTarget(rx)}>Dispense</button>
                 </div>
               </div>
-              {rx.items && rx.items.length > 0 && (
+              {rx.items?.length > 0 && (
                 <div style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
                   {rx.items.map((it: any) => (
                     <div key={it.id} style={{ display: 'flex', gap: 12, fontSize: 13, padding: '4px 0' }}>
                       <span style={{ fontWeight: 500 }}>{it.medicineName}</span>
                       <span style={{ color: 'var(--text-muted)' }}>{it.dosage} · {it.frequency} · {it.duration}</span>
                       <span style={{ marginLeft: 'auto', fontWeight: 600 }}>Qty: {it.quantity || '—'}</span>
-                      {it.status === 'DISPENSED' && <StatusBadge status="DISPENSED" />}
                     </div>
                   ))}
                 </div>
@@ -306,590 +581,40 @@ function PharmacyPageInner() {
             </div>
           ))}
         </div>
+      )}
 
-        {dispenseTarget && (
-          <DispenseModal
-            prescription={dispenseTarget}
-            onClose={() => setDispenseTarget(null)}
-            onDone={() => { setDispenseTarget(null); loadPrescriptions(); }}
-          />
-        )}
-      </div>
-    );
-  }
-
-  if (activeTab === 'sales') {
-    const saleTotal = salesItems.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
-    return (
-    <>
-      <div style={{ padding: '0 0 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Pharmacy Sales</h1>
-            <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 13 }}>Walk-in medicine sales with billing</p>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('medicines')}>Medicines</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('dispensing')}>Dispensing</button>
-            <button className="btn btn-sm" style={{ background: 'var(--primary)', color: '#fff' }}>Sales</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('stores')}>Stores</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('alerts')}>Stock Alerts</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('history')}>History</button>
-          </div>
-        </div>
-
-        {saleReceipt && (
-          <ReceiptModal invoice={saleReceipt} onClose={() => { setSaleReceipt(null); setSalesItems([]); setSalesPatientId(''); }} />
-        )}
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: 20 }}>
-            <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
-              <div className="field" style={{ marginBottom: 12 }}>
-                <label className="label">Patient</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <select className="input" style={{ flex: 1 }} value={salesPatientId} onChange={(e) => setSalesPatientId(e.target.value)}>
-                    <option value="">Select patient</option>
-                    {patientList.map((p, idx) => (
-                      <option key={p.id || idx} value={p.id}>
-                        {p.firstName} {p.lastName} {p.mrn ? `(${p.mrn})` : ''} {p.mobile ? `- ${p.mobile}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <button className="btn btn-sm" onClick={() => setShowAddPatient(true)} title="Add new patient">+ Add</button>
-                </div>
-              </div>
-
-              {salesPatientId && (
-                <PatientPrescriptions patientId={salesPatientId} />
-              )}
-
-              <div className="field" style={{ marginBottom: 12 }}>
-                <label className="label">Store</label>
-                <select className="input" value={salesStoreId} onChange={(e) => setSalesStoreId(e.target.value)}>
-                  <option value="">Select store</option>
-                  {salesStores.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.location})</option>)}
-                </select>
-              </div>
-              <div className="field" style={{ marginBottom: 12 }}>
-                <label className="label">Medicine</label>
-                <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: 14 }}>💊</span>
-                  <input
-                    className="input"
-                    style={{ paddingLeft: 36 }}
-                    value={salesSearch}
-                    onChange={(e) => searchMedicines(e.target.value)}
-                    placeholder="Search medicine by name or generic name..."
-                  />
-                  {searchResults.length > 0 && (
-                    <div style={{
-                      position: 'absolute',
-                      top: 'calc(100% + 4px)',
-                      left: 0,
-                      right: 0,
-                      zIndex: 50,
-                      border: '1px solid var(--border)',
-                      borderRadius: 8,
-                      maxHeight: 240,
-                      overflowY: 'auto',
-                      background: 'var(--card)',
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                    }}>
-                      {searchResults.map((med, i) => (
-                        <div
-                          key={med.id}
-                          onMouseDown={() => addToSale(med)}
-                          style={{
-                            padding: '10px 14px',
-                            cursor: 'pointer',
-                            borderBottom: i < searchResults.length - 1 ? '1px solid var(--border)' : 'none',
-                            fontSize: 13,
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                          }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--primary-light)')}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 600 }}>{med.name}</div>
-                            {med.genericName && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{med.genericName}</div>}
-                          </div>
-                          <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: 14 }}>{formatMoney(med.salesRate)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
-              <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 600 }}>Sale Items</h3>
-              {salesItems.length === 0 && <div className="empty" style={{ padding: 20, fontSize: 13 }}>No items added yet.</div>}
-              {salesItems.map((it) => (
-                <div key={it.medicineId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{it.medicineName}</div>
-                  <input type="number" min={1} value={it.quantity} onChange={(e) => updateSaleItem(it.medicineId, 'quantity', e.target.value)} style={{ width: 50, padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }} />
-                  <input type="number" min={0} value={it.unitPrice} onChange={(e) => updateSaleItem(it.medicineId, 'unitPrice', e.target.value)} style={{ width: 80, padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }} />
-                  <span style={{ fontWeight: 600, fontSize: 13, minWidth: 70, textAlign: 'right' }}>{formatMoney(it.quantity * it.unitPrice)}</span>
-                  <button onClick={() => removeSaleItem(it.medicineId)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 16 }}>×</button>
-                </div>
-              ))}
-              {salesItems.length > 0 && (
-                <>
-                  <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-muted)' }}>
-                    <span>Subtotal</span>
-                    <span>{formatMoney(saleTotal)}</span>
-                  </div>
-                  <div className="field" style={{ marginTop: 8, marginBottom: 4 }}>
-                    <label className="label" style={{ fontSize: 12 }}>Discount (NPR)</label>
-                    <input className="input" type="number" min={0} step="0.01" value={salesDiscount || ''} onChange={(e) => setSalesDiscount(Number(e.target.value) || 0)} placeholder="0" style={{ fontSize: 13, padding: '6px 10px' }} />
-                  </div>
-                  <div className="field" style={{ marginBottom: 4 }}>
-                    <label className="label" style={{ fontSize: 12 }}>Tax %</label>
-                    <input className="input" type="number" min={0} max={100} step="0.01" value={salesTax || ''} onChange={(e) => setSalesTax(Number(e.target.value) || 0)} placeholder="0" style={{ fontSize: 13, padding: '6px 10px' }} />
-                  </div>
-                  {salesDiscount > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#dc2626' }}>
-                      <span>Discount</span>
-                      <span>-{formatMoney(salesDiscount)}</span>
-                    </div>
-                  )}
-                  <div style={{ marginTop: 4, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 16 }}>
-                    <span>Total</span>
-                    <span>{formatMoney(Math.max(0, saleTotal - salesDiscount))}</span>
-                  </div>
-
-                  <div style={{ borderTop: '1px solid var(--border)', marginTop: 12, paddingTop: 12 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 8 }}>
-                      <input type="checkbox" checked={salesIsCredit} onChange={(e) => setSalesIsCredit(e.target.checked)} />
-                      Credit invoice (pay later)
-                    </label>
-                    {!salesIsCredit && (
-                      <>
-                        <div className="field" style={{ marginBottom: 4 }}>
-                          <label className="label" style={{ fontSize: 12 }}>Payment method</label>
-                          <select className="input" value={salesPaymentMethod} onChange={(e) => setSalesPaymentMethod(e.target.value)} style={{ fontSize: 13, padding: '6px 10px' }}>
-                            <option value="CASH">Cash</option>
-                            <option value="CARD">Card</option>
-                            <option value="BANK_TRANSFER">Bank Transfer</option>
-                            <option value="QR">QR / eSewa / Khalti</option>
-                            <option value="INSURANCE">Insurance</option>
-                          </select>
-                        </div>
-                        {(salesPaymentMethod === 'CARD' || salesPaymentMethod === 'BANK_TRANSFER' || salesPaymentMethod === 'QR') && (
-                          <div className="field" style={{ marginBottom: 4 }}>
-                            <label className="label" style={{ fontSize: 12 }}>Reference number</label>
-                            <input className="input" value={salesPaymentRef} onChange={(e) => setSalesPaymentRef(e.target.value)} placeholder="Transaction ref" style={{ fontSize: 13, padding: '6px 10px' }} />
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </>
-              )}
-              <button className="btn" style={{ width: '100%', marginTop: 12 }} disabled={submittingSale || salesItems.length === 0 || !salesPatientId || !salesStoreId} onClick={submitSale}>
-                {submittingSale ? 'Processing...' : 'Create invoice & receipt'}
-              </button>
-            </div>
-          </div>
-      </div>
-
-      {showAddPatient && (
-        <div className="modal-overlay" onClick={() => setShowAddPatient(false)}>
-          <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 style={{ margin: 0 }}>Add New Patient</h3>
-              <button className="modal-close" onClick={() => setShowAddPatient(false)}>×</button>
-            </div>
-            <div className="field" style={{ marginTop: 16 }}>
-              <label className="label">First name *</label>
-              <input className="input" value={newPatient.firstName} onChange={(e) => setNewPatient({ ...newPatient, firstName: e.target.value })} placeholder="First name" />
-            </div>
-            <div className="field">
-              <label className="label">Last name</label>
-              <input className="input" value={newPatient.lastName} onChange={(e) => setNewPatient({ ...newPatient, lastName: e.target.value })} placeholder="Last name" />
-            </div>
-            <div className="field">
-              <label className="label">Mobile</label>
-              <input className="input" value={newPatient.mobile} onChange={(e) => setNewPatient({ ...newPatient, mobile: e.target.value })} placeholder="Mobile number" />
-            </div>
-            <div className="field">
-              <label className="label">Gender</label>
-              <select className="input" value={newPatient.gender} onChange={(e) => setNewPatient({ ...newPatient, gender: e.target.value })}>
-                <option value="MALE">Male</option>
-                <option value="FEMALE">Female</option>
-                <option value="OTHER">Other</option>
-              </select>
-            </div>
-            {patientError && <div className="alert alert-error" style={{ marginTop: 8 }}>{patientError}</div>}
-            <div className="form-actions" style={{ marginTop: 16 }}>
-              <button className="btn btn-secondary" onClick={() => setShowAddPatient(false)}>Cancel</button>
-              <button className="btn" onClick={handleAddPatient} disabled={savingPatient}>
-                {savingPatient ? 'Saving...' : 'Add Patient'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {dispenseTarget && (
+        <DispenseModal
+          prescription={dispenseTarget}
+          onClose={() => setDispenseTarget(null)}
+          onDone={() => { setDispenseTarget(null); load(); }}
+        />
       )}
     </>
-    );
-  }
-
-  if (activeTab === 'alerts') {
-    return (
-      <div style={{ padding: '0 0 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Stock Alerts</h1>
-            <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 13 }}>Low stock, near expiry, and out of stock warnings</p>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('medicines')}>Medicines</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('dispensing')}>Dispensing</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('sales')}>Sales</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('stores')}>Stores</button>
-            <button className="btn btn-sm" style={{ background: 'var(--primary)', color: '#fff' }}>Stock Alerts</button>
-          </div>
-        </div>
-
-        {loadingAlerts && <div className="loading">Loading alerts...</div>}
-
-        {alerts && (
-          <div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
-              <StockAlertBadge type="lowStock" count={alerts.summary?.lowStockCount || 0} />
-              <StockAlertBadge type="nearExpiry" count={alerts.summary?.nearExpiryCount || 0} />
-              <StockAlertBadge type="outOfStock" count={alerts.summary?.outOfStockCount || 0} />
-            </div>
-
-            {alerts.lowStock && alerts.lowStock.length > 0 && (
-              <div style={{ marginBottom: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#f59e0b' }}>Low Stock Items</h3>
-                <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--background)' }}>
-                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 12, color: 'var(--text-muted)' }}>Medicine</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 12, color: 'var(--text-muted)' }}>Store</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, color: 'var(--text-muted)' }}>Current</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, color: 'var(--text-muted)' }}>Reorder Level</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {alerts.lowStock.map((item: any) => (
-                        <tr key={item.id} style={{ borderTop: '1px solid var(--border)' }}>
-                          <td style={{ padding: '10px 12px', fontSize: 13 }}>{item.medicine?.name || item.name}</td>
-                          <td style={{ padding: '10px 12px', fontSize: 13 }}>{item.store?.name}</td>
-                          <td style={{ padding: '10px 12px', fontSize: 13, textAlign: 'right', fontWeight: 600, color: '#f59e0b' }}>{item.currentStock}</td>
-                          <td style={{ padding: '10px 12px', fontSize: 13, textAlign: 'right' }}>{item.reorderLevel || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {alerts.nearExpiry && alerts.nearExpiry.length > 0 && (
-              <div style={{ marginBottom: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#ef4444' }}>Near Expiry Items</h3>
-                <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--background)' }}>
-                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 12, color: 'var(--text-muted)' }}>Medicine</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 12, color: 'var(--text-muted)' }}>Store</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, color: 'var(--text-muted)' }}>Stock</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, color: 'var(--text-muted)' }}>Expiry Date</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, color: 'var(--text-muted)' }}>Batch</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {alerts.nearExpiry.map((item: any) => (
-                        <tr key={item.id} style={{ borderTop: '1px solid var(--border)' }}>
-                          <td style={{ padding: '10px 12px', fontSize: 13 }}>{item.medicine?.name || item.name}</td>
-                          <td style={{ padding: '10px 12px', fontSize: 13 }}>{item.store?.name}</td>
-                          <td style={{ padding: '10px 12px', fontSize: 13, textAlign: 'right' }}>{item.currentStock}</td>
-                          <td style={{ padding: '10px 12px', fontSize: 13, textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>{item.expiryDate?.slice(0, 10) || '—'}</td>
-                          <td style={{ padding: '10px 12px', fontSize: 13, textAlign: 'right' }}>{item.batchNumber || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {alerts.outOfStock && alerts.outOfStock.length > 0 && (
-              <div>
-                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#dc2626' }}>Out of Stock Items</h3>
-                <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--background)' }}>
-                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 12, color: 'var(--text-muted)' }}>Medicine</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 12, color: 'var(--text-muted)' }}>Store</th>
-                        <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, color: 'var(--text-muted)' }}>Batch</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {alerts.outOfStock.map((item: any) => (
-                        <tr key={item.id} style={{ borderTop: '1px solid var(--border)' }}>
-                          <td style={{ padding: '10px 12px', fontSize: 13 }}>{item.medicine?.name || item.name}</td>
-                          <td style={{ padding: '10px 12px', fontSize: 13 }}>{item.store?.name}</td>
-                          <td style={{ padding: '10px 12px', fontSize: 13, textAlign: 'right' }}>{item.batchNumber || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {!alerts.lowStock?.length && !alerts.nearExpiry?.length && !alerts.outOfStock?.length && (
-              <div className="empty" style={{ padding: 40 }}>No stock alerts. Everything looks good!</div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (activeTab === 'history') {
-    return (
-      <div style={{ padding: '0 0 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Dispensing History</h1>
-            <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 13 }}>Previously dispensed prescriptions</p>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('medicines')}>Medicines</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('dispensing')}>Dispensing</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('sales')}>Sales</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('stores')}>Stores</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => switchTab('alerts')}>Stock Alerts</button>
-            <button className="btn btn-sm" style={{ background: 'var(--primary)', color: '#fff' }}>History</button>
-          </div>
-        </div>
-
-        {loadingHistory && <div className="loading">Loading history...</div>}
-
-        {!loadingHistory && history.length === 0 && (
-          <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>
-            No dispensing records found.
-          </div>
-        )}
-
-        {history.length > 0 && (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Prescription</th>
-                  <th>Patient</th>
-                  <th>Doctor</th>
-                  <th>Medicines</th>
-                  <th>Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((rx: any) => (
-                  <tr key={rx.id}>
-                    <td className="mono" style={{ fontSize: 12 }}>{rx.id.slice(0, 8)}</td>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{[rx.patient?.firstName, rx.patient?.lastName].filter(Boolean).join(' ')}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>{rx.patient?.mrn}</div>
-                    </td>
-                    <td>{rx.doctor?.user ? [rx.doctor.user.firstName, rx.doctor.user.lastName].filter(Boolean).join(' ') : '—'}</td>
-                    <td>
-                      {(rx.items || []).map((it: any, i: number) => (
-                        <div key={i} style={{ fontSize: 12 }}>{it.medicineName} {it.dosage} × {it.quantity}</div>
-                      ))}
-                    </td>
-                    <td style={{ fontSize: 12 }}>{formatDate(rx.updatedAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <>
-    <div style={{ padding: '0 0 24px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Pharmacy</h1>
-          <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 13 }}>Medicines, dispensing, sales & stock alerts</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-sm" style={{ background: 'var(--primary)', color: '#fff' }}>Medicines</button>
-          <button className="btn btn-sm btn-ghost" onClick={() => switchTab('dispensing')}>Dispensing</button>
-          <button className="btn btn-sm btn-ghost" onClick={() => switchTab('sales')}>Sales</button>
-          <button className="btn btn-sm btn-ghost" onClick={() => switchTab('stores')}>Stores</button>
-          <button className="btn btn-sm btn-ghost" onClick={() => switchTab('alerts')}>Stock Alerts</button>
-        </div>
-      </div>
-
-      <ModulePage
-        title=""
-        subtitle=""
-        tabs={[
-          {
-            key: 'medicines',
-            label: 'Medicines',
-            endpoint: '/pharmacy/medicines',
-            createLabel: 'Add medicine',
-            columns: [
-              { key: 'name', label: 'Name' },
-              { key: 'genericName', label: 'Generic name', render: (r) => r.genericName || '—' },
-              { key: 'category', label: 'Category', badge: true },
-              { key: 'unit', label: 'Unit' },
-              { key: 'salesRate', label: 'Sales price' },
-              { key: 'reorderLevel', label: 'Reorder level' },
-              { key: 'isActive', label: 'Status', badge: true, render: (r) => (r.isActive ? 'ACTIVE' : 'INACTIVE') },
-            ],
-            fields: [
-              { name: 'name', label: 'Name', required: true },
-              { name: 'genericName', label: 'Generic name' },
-              { name: 'brandName', label: 'Brand name' },
-              { name: 'category', label: 'Category' },
-              { name: 'sku', label: 'SKU' },
-              { name: 'form', label: 'Dosage form' },
-              { name: 'strength', label: 'Strength' },
-              { name: 'unit', label: 'Unit' },
-              { name: 'purchaseRate', label: 'Purchase rate', type: 'number' },
-              { name: 'salesRate', label: 'Sales rate', type: 'number' },
-              { name: 'margin', label: 'Margin %', type: 'number' },
-              { name: 'reorderLevel', label: 'Reorder level', type: 'number' },
-              { name: 'requiresPrescription', label: 'Prescription required', type: 'checkbox' },
-            ],
-          },
-          {
-            key: 'stores',
-            label: 'Stores',
-            endpoint: '/pharmacy/stores',
-            createLabel: 'Add store',
-            columns: [
-              { key: 'name', label: 'Name' },
-              { key: 'code', label: 'Code' },
-              { key: 'type', label: 'Type', badge: true },
-              { key: 'location', label: 'Location', render: (r) => r.location || '—' },
-              { key: 'isActive', label: 'Status', badge: true, render: (r) => (r.isActive ? 'ACTIVE' : 'INACTIVE') },
-            ],
-            fields: [
-              { name: 'name', label: 'Name', required: true },
-              { name: 'code', label: 'Code' },
-              { name: 'type', label: 'Type', type: 'select', options: STORE_TYPES, defaultValue: 'MAIN' },
-              { name: 'location', label: 'Location' },
-            ],
-          },
-          {
-            key: 'inventory',
-            label: 'Inventory',
-            endpoint: '/pharmacy/inventory',
-            createLabel: 'Stock item',
-            columns: [
-              { key: 'medicine', label: 'Medicine', render: (r) => r.medicine?.name || r.medicineId || r.name },
-              { key: 'store', label: 'Store', render: (r) => r.store?.name || r.storeId },
-              { key: 'currentStock', label: 'Stock' },
-              { key: 'batchNumber', label: 'Batch' },
-              { key: 'expiryDate', label: 'Expiry', render: (r) => r.expiryDate?.slice(0, 10) || '—' },
-            ],
-            fields: [
-              { name: 'storeId', label: 'Store', required: true, type: 'select', optionsFrom: STORE_REF },
-              { name: 'medicineId', label: 'Medicine', type: 'select', optionsFrom: { valueKey: 'id', labelKeys: ['name'], endpoint: '/pharmacy/medicines' } },
-              { name: 'name', label: 'Item name', required: true },
-              { name: 'itemType', label: 'Item type', type: 'select', options: [
-                { value: 'MEDICINE', label: 'Medicine' },
-                { value: 'SUPPLIES', label: 'Supplies' },
-                { value: 'EQUIPMENT', label: 'Equipment' },
-                { value: 'CONSUMABLE', label: 'Consumable' },
-                { value: 'OTHER', label: 'Other' },
-              ], defaultValue: 'MEDICINE' },
-              { name: 'sku', label: 'SKU' },
-              { name: 'unit', label: 'Unit' },
-              { name: 'currentStock', label: 'Initial stock', type: 'number' },
-              { name: 'minStock', label: 'Min stock', type: 'number' },
-              { name: 'maxStock', label: 'Max stock', type: 'number' },
-              { name: 'reorderLevel', label: 'Reorder level', type: 'number' },
-              { name: 'location', label: 'Location' },
-              { name: 'batchNumber', label: 'Batch number' },
-              { name: 'expiryDate', label: 'Expiry date', type: 'date' },
-              { name: 'purchaseRate', label: 'Purchase rate', type: 'number' },
-              { name: 'salesRate', label: 'Sales rate', type: 'number' },
-            ],
-          },
-        ]}
-      />
-    </div>
-
-    {showAddPatient && (
-        <div className="modal-overlay" onClick={() => setShowAddPatient(false)}>
-          <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 style={{ margin: 0 }}>Add New Patient</h3>
-              <button className="modal-close" onClick={() => setShowAddPatient(false)}>×</button>
-            </div>
-            <div className="field" style={{ marginTop: 16 }}>
-              <label className="label">First name *</label>
-              <input className="input" value={newPatient.firstName} onChange={(e) => setNewPatient({ ...newPatient, firstName: e.target.value })} placeholder="First name" />
-            </div>
-            <div className="field">
-              <label className="label">Last name</label>
-              <input className="input" value={newPatient.lastName} onChange={(e) => setNewPatient({ ...newPatient, lastName: e.target.value })} placeholder="Last name" />
-            </div>
-            <div className="field">
-              <label className="label">Mobile</label>
-              <input className="input" value={newPatient.mobile} onChange={(e) => setNewPatient({ ...newPatient, mobile: e.target.value })} placeholder="Mobile number" />
-            </div>
-            <div className="field">
-              <label className="label">Gender</label>
-              <select className="input" value={newPatient.gender} onChange={(e) => setNewPatient({ ...newPatient, gender: e.target.value })}>
-                <option value="MALE">Male</option>
-                <option value="FEMALE">Female</option>
-                <option value="OTHER">Other</option>
-              </select>
-            </div>
-            {patientError && <div className="alert alert-error" style={{ marginTop: 8 }}>{patientError}</div>}
-            <div className="form-actions" style={{ marginTop: 16 }}>
-              <button className="btn btn-secondary" onClick={() => setShowAddPatient(false)}>Cancel</button>
-              <button className="btn" onClick={handleAddPatient} disabled={savingPatient}>
-                {savingPatient ? 'Saving...' : 'Add Patient'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-    );
-  }
+  );
+}
 
 function DispenseModal({ prescription, onClose, onDone }: { prescription: any; onClose: () => void; onDone: () => void }) {
   const [storeId, setStoreId] = useState('');
   const [stores, setStores] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    api('/pharmacy/stores').then((res: any) => {
-      const all = Array.isArray(res?.data) ? res.data : res?.data?.data ?? [];
-      const filtered = all.filter((s: any) => s.location?.toLowerCase().includes('ground floor'));
-      setStores(filtered);
-      if (filtered.length === 1) setStoreId(filtered[0].id);
-    }).catch(() => {});
+    api('/pharmacy/stores')
+      .then((res: any) => {
+        const all = toList(res);
+        const filtered = all.filter((s: any) => s.location?.toLowerCase().includes('ground floor'));
+        setStores(filtered.length > 0 ? filtered : all);
+        if (filtered.length === 1) setStoreId(filtered[0].id);
+      })
+      .catch(() => {});
   }, []);
 
   async function handleDispense() {
     if (!storeId) { setError('Select a store'); return; }
     setSaving(true);
-    setError(null);
+    setError('');
     try {
       const items = await Promise.all(
         (prescription.items || []).map(async (it: any) => {
@@ -897,9 +622,8 @@ function DispenseModal({ prescription, onClose, onDone }: { prescription: any; o
           if (it.medicineId) {
             try {
               const medRes = await api(`/pharmacy/medicines/${it.medicineId}`);
-              const med = medRes?.data ?? medRes;
-              unitPrice = Number(med?.salesRate) || 0;
-            } catch { }
+              unitPrice = Number(toObj(medRes)?.salesRate) || 0;
+            } catch {}
           }
           return {
             prescriptionItemId: it.id,
@@ -920,34 +644,33 @@ function DispenseModal({ prescription, onClose, onDone }: { prescription: any; o
         }),
       });
       onDone();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Dispensing failed');
+    } catch (err: any) {
+      setError(err.message || 'Dispensing failed');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3 className="modal-title">Dispense medicines</h3>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <h3 className="modal-title">Dispense Medicines</h3>
+          <button className="modal-close" onClick={onClose}>x</button>
         </div>
-        <p className="note" style={{ marginTop: 4 }}>
+        <p className="note">
           {prescription.patient?.firstName} {prescription.patient?.lastName}
           {prescription.patient?.mrn ? ` · ${prescription.patient.mrn}` : ''}
         </p>
-
         <div className="field" style={{ marginTop: 12 }}>
-          <label className="label">Dispense from store</label>
+          <label className="label">Dispense From Store</label>
           <select className="input" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
             <option value="">Select store</option>
             {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
-
         <div style={{ marginTop: 12 }}>
-          <label className="label">Items to dispense</label>
+          <label className="label">Items To Dispense</label>
           {(prescription.items || []).map((it: any) => (
             <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
               <span>{it.medicineName}</span>
@@ -955,13 +678,11 @@ function DispenseModal({ prescription, onClose, onDone }: { prescription: any; o
             </div>
           ))}
         </div>
-
         {error && <div className="alert alert-error" style={{ marginTop: 12 }}>{error}</div>}
-
         <div className="form-actions">
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn" onClick={handleDispense} disabled={saving || !storeId}>
-            {saving ? 'Dispensing...' : 'Confirm dispense'}
+          <button className="btn btn-primary" onClick={handleDispense} disabled={saving || !storeId}>
+            {saving ? 'Dispensing...' : 'Confirm Dispense'}
           </button>
         </div>
       </div>
@@ -969,9 +690,787 @@ function DispenseModal({ prescription, onClose, onDone }: { prescription: any; o
   );
 }
 
+function SalesTab() {
+  const [salesItems, setSalesItems] = useState<any[]>([]);
+  const [salesSearch, setSalesSearch] = useState('');
+  const [salesPatientId, setSalesPatientId] = useState('');
+  const [salesStoreId, setSalesStoreId] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [submittingSale, setSubmittingSale] = useState(false);
+  const [saleReceipt, setSaleReceipt] = useState<any>(null);
+  const [salesStores, setSalesStores] = useState<any[]>([]);
+  const [patientList, setPatientList] = useState<any[]>([]);
+  const [showAddPatient, setShowAddPatient] = useState(false);
+  const [newPatient, setNewPatient] = useState({ firstName: '', lastName: '', mobile: '', gender: 'MALE' });
+  const [savingPatient, setSavingPatient] = useState(false);
+  const [patientError, setPatientError] = useState('');
+  const [saleError, setSaleError] = useState('');
+  const [salesDiscount, setSalesDiscount] = useState(0);
+  const [salesTax, setSalesTax] = useState(0);
+  const [salesPaymentMethod, setSalesPaymentMethod] = useState('CASH');
+  const [salesPaymentRef, setSalesPaymentRef] = useState('');
+  const [salesIsCredit, setSalesIsCredit] = useState(false);
+
+  useEffect(() => {
+    Promise.all([api('/pharmacy/stores'), api('/patients?limit=500')])
+      .then(([storeRes, patientRes]: any[]) => {
+        const allStores = toList(storeRes);
+        const filtered = allStores.filter((s: any) => s.location?.toLowerCase().includes('ground floor'));
+        setSalesStores(filtered.length > 0 ? filtered : allStores);
+        if ((filtered.length > 0 ? filtered : allStores).length === 1) {
+          setSalesStoreId((filtered.length > 0 ? filtered : allStores)[0].id);
+        }
+        setPatientList(toList(patientRes));
+      })
+      .catch(() => {});
+  }, []);
+
+  async function searchMedicines(q: string) {
+    setSalesSearch(q);
+    if (q.length < 2) { setSearchResults([]); return; }
+    try {
+      const res = await api(`/pharmacy/medicines?query=${encodeURIComponent(q)}&limit=10`);
+      setSearchResults(toList(res));
+    } catch {
+      setSearchResults([]);
+    }
+  }
+
+  function addToSale(med: any) {
+    if (salesItems.find((s) => s.medicineId === med.id)) return;
+    setSalesItems((prev) => [...prev, {
+      medicineId: med.id,
+      medicineName: med.name,
+      quantity: 1,
+      unitPrice: Number(med.salesRate) || 0,
+    }]);
+    setSalesSearch('');
+    setSearchResults([]);
+  }
+
+  function updateSaleItem(medicineId: string, field: string, value: string) {
+    setSalesItems((prev) => prev.map((item) =>
+      item.medicineId === medicineId
+        ? { ...item, [field]: field === 'quantity' || field === 'unitPrice' ? Number(value) || 0 : value }
+        : item
+    ));
+  }
+
+  function removeSaleItem(medicineId: string) {
+    setSalesItems((prev) => prev.filter((item) => item.medicineId !== medicineId));
+  }
+
+  const saleSubtotal = salesItems.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
+  const saleTaxAmount = (saleSubtotal * salesTax) / 100;
+  const saleGrandTotal = Math.max(0, saleSubtotal + saleTaxAmount - salesDiscount);
+
+  async function submitSale() {
+    if (salesItems.length === 0 || !salesPatientId || !salesStoreId) return;
+    setSubmittingSale(true);
+    setSaleError('');
+    try {
+      const invRes = await api('/billing/invoices', {
+        method: 'POST',
+        body: JSON.stringify({
+          patientId: salesPatientId,
+          type: 'PHARMACY',
+          items: salesItems.map((it) => ({
+            serviceId: it.medicineId,
+            serviceName: it.medicineName,
+            quantity: it.quantity,
+            rate: it.unitPrice,
+          })),
+          discountAmount: salesDiscount || 0,
+          taxPercent: salesTax || 0,
+          isCredit: salesIsCredit,
+          notes: 'Pharmacy walk-in sale',
+        }),
+      });
+      const inv = toObj(invRes);
+      if (!salesIsCredit && inv.id) {
+        await api('/billing/payments', {
+          method: 'POST',
+          body: JSON.stringify({
+            patientId: salesPatientId,
+            invoiceId: inv.id,
+            amount: Number(inv.totalAmount || 0),
+            method: salesPaymentMethod,
+            referenceNumber: salesPaymentRef,
+            notes: 'Pharmacy sale payment',
+          }),
+        });
+      }
+      const receiptRes = await api(`/billing/invoices/${inv.id}`);
+      setSaleReceipt(toObj(receiptRes));
+      setSalesItems([]);
+      setSalesPatientId('');
+      setSalesDiscount(0);
+      setSalesTax(0);
+    } catch (err: any) {
+      setSaleError(err.message || 'Sale failed');
+    } finally {
+      setSubmittingSale(false);
+    }
+  }
+
+  async function handleAddPatient() {
+    if (!newPatient.firstName.trim()) { setPatientError('First name is required'); return; }
+    setSavingPatient(true);
+    setPatientError('');
+    try {
+      const res = await api('/patients', {
+        method: 'POST',
+        body: JSON.stringify(newPatient),
+      });
+      const pat = toObj(res);
+      setPatientList((prev) => [...prev, pat]);
+      setSalesPatientId(pat.id);
+      setShowAddPatient(false);
+      setNewPatient({ firstName: '', lastName: '', mobile: '', gender: 'MALE' });
+    } catch (err: any) {
+      setPatientError(err.message || 'Failed to add patient');
+    } finally {
+      setSavingPatient(false);
+    }
+  }
+
+  return (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, alignItems: 'start' }}>
+        <div className="card">
+          <div className="card-title">New Sale</div>
+          <div className="form-grid">
+            <div className="field">
+              <label className="label">Patient *</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select className="input" style={{ flex: 1 }} value={salesPatientId} onChange={(e) => setSalesPatientId(e.target.value)}>
+                  <option value="">Select patient</option>
+                  {patientList.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.firstName} {p.lastName}{p.mrn ? ` (${p.mrn})` : ''}{p.mobile ? ` - ${p.mobile}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <button className="btn btn-sm" onClick={() => setShowAddPatient(true)}>+ Add</button>
+              </div>
+            </div>
+            <div className="field">
+              <label className="label">Store *</label>
+              <select className="input" value={salesStoreId} onChange={(e) => setSalesStoreId(e.target.value)}>
+                <option value="">Select store</option>
+                {salesStores.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.location})</option>)}
+              </select>
+            </div>
+            <div className="field field-full">
+              {salesPatientId && <PatientPrescriptions patientId={salesPatientId} />}
+            </div>
+            <div className="field field-full">
+              <label className="label">Medicine</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  className="input search-input"
+                  value={salesSearch}
+                  onChange={(e) => searchMedicines(e.target.value)}
+                  placeholder="Search medicine by name or generic name..."
+                />
+                {searchResults.length > 0 && (
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
+                    border: '1px solid var(--border)', borderRadius: 8, maxHeight: 240, overflowY: 'auto',
+                    background: 'var(--surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                  }}>
+                    {searchResults.map((med) => (
+                      <div
+                        key={med.id}
+                        onMouseDown={() => addToSale(med)}
+                        style={{
+                          padding: '10px 14px', cursor: 'pointer', fontSize: 13,
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          borderBottom: '1px solid var(--border)',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 600 }}>{med.name}</div>
+                          {med.genericName && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{med.genericName}</div>}
+                        </div>
+                        <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatMoney(med.salesRate)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-title">Sale Items</div>
+          {salesItems.length === 0 && <div className="empty">No items added yet.</div>}
+          {salesItems.map((it) => (
+            <div key={it.medicineId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{it.medicineName}</div>
+              <input className="input" type="number" min={1} value={it.quantity} onChange={(e) => updateSaleItem(it.medicineId, 'quantity', e.target.value)} style={{ width: 56, padding: '4px 6px' }} />
+              <input className="input" type="number" min={0} value={it.unitPrice} onChange={(e) => updateSaleItem(it.medicineId, 'unitPrice', e.target.value)} style={{ width: 80, padding: '4px 6px' }} />
+              <span style={{ fontWeight: 600, fontSize: 13, minWidth: 70, textAlign: 'right' }}>{formatMoney(it.quantity * it.unitPrice)}</span>
+              <button className="btn btn-sm btn-danger" onClick={() => removeSaleItem(it.medicineId)}>x</button>
+            </div>
+          ))}
+          {salesItems.length > 0 && (
+            <>
+              <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-muted)' }}>
+                <span>Subtotal</span><span>{formatMoney(saleSubtotal)}</span>
+              </div>
+              <div className="form-grid" style={{ marginTop: 8 }}>
+                <div className="field">
+                  <label className="label">Discount</label>
+                  <input className="input" type="number" min={0} step="0.01" value={salesDiscount || ''} onChange={(e) => setSalesDiscount(Number(e.target.value) || 0)} placeholder="0" />
+                </div>
+                <div className="field">
+                  <label className="label">Tax %</label>
+                  <input className="input" type="number" min={0} max={100} step="0.01" value={salesTax || ''} onChange={(e) => setSalesTax(Number(e.target.value) || 0)} placeholder="0" />
+                </div>
+              </div>
+              <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 16 }}>
+                <span>Total</span><span>{formatMoney(saleGrandTotal)}</span>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', margin: '12px 0 8px' }}>
+                <input type="checkbox" checked={salesIsCredit} onChange={(e) => setSalesIsCredit(e.target.checked)} />
+                Credit invoice (pay later)
+              </label>
+              {!salesIsCredit && (
+                <>
+                  <div className="field">
+                    <label className="label">Payment Method</label>
+                    <select className="input" value={salesPaymentMethod} onChange={(e) => setSalesPaymentMethod(e.target.value)}>
+                      <option value="CASH">Cash</option>
+                      <option value="CARD">Card</option>
+                      <option value="BANK_TRANSFER">Bank Transfer</option>
+                      <option value="QR">QR / eSewa / Khalti</option>
+                      <option value="INSURANCE">Insurance</option>
+                    </select>
+                  </div>
+                  {(salesPaymentMethod === 'CARD' || salesPaymentMethod === 'BANK_TRANSFER' || salesPaymentMethod === 'QR') && (
+                    <div className="field">
+                      <label className="label">Reference Number</label>
+                      <input className="input" value={salesPaymentRef} onChange={(e) => setSalesPaymentRef(e.target.value)} placeholder="Transaction ref" />
+                    </div>
+                  )}
+                </>
+              )}
+              <button
+                className="btn btn-primary"
+                style={{ width: '100%', marginTop: 8 }}
+                disabled={submittingSale || salesItems.length === 0 || !salesPatientId || !salesStoreId}
+                onClick={submitSale}
+              >
+                {submittingSale ? 'Processing...' : 'Create Invoice & Receipt'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {saleError && <div className="alert alert-error" style={{ marginTop: 12 }}>{saleError}</div>}
+
+      {showAddPatient && (
+        <div className="modal-backdrop" onClick={() => setShowAddPatient(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">Add New Patient</h3>
+              <button className="modal-close" onClick={() => setShowAddPatient(false)}>x</button>
+            </div>
+            <div className="field">
+              <label className="label">First Name *</label>
+              <input className="input" value={newPatient.firstName} onChange={(e) => setNewPatient({ ...newPatient, firstName: e.target.value })} />
+            </div>
+            <div className="field">
+              <label className="label">Last Name</label>
+              <input className="input" value={newPatient.lastName} onChange={(e) => setNewPatient({ ...newPatient, lastName: e.target.value })} />
+            </div>
+            <div className="field">
+              <label className="label">Mobile</label>
+              <input className="input" value={newPatient.mobile} onChange={(e) => setNewPatient({ ...newPatient, mobile: e.target.value })} />
+            </div>
+            <div className="field">
+              <label className="label">Gender</label>
+              <select className="input" value={newPatient.gender} onChange={(e) => setNewPatient({ ...newPatient, gender: e.target.value })}>
+                <option value="MALE">Male</option>
+                <option value="FEMALE">Female</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+            {patientError && <div className="alert alert-error">{patientError}</div>}
+            <div className="form-actions">
+              <button className="btn btn-secondary" onClick={() => setShowAddPatient(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleAddPatient} disabled={savingPatient}>
+                {savingPatient ? 'Saving...' : 'Add Patient'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {saleReceipt && (
+        <ReceiptModal invoice={saleReceipt} onClose={() => setSaleReceipt(null)} />
+      )}
+    </>
+  );
+}
+
+function StoresTab() {
+  const [stores, setStores] = useState<any[]>([]);
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([api('/pharmacy/stores'), api('/pharmacy/inventory?limit=200')])
+      .then(([storeRes, invRes]: any[]) => {
+        setStores(toList(storeRes));
+        setInventory(toList(invRes));
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <>
+      <div className="toolbar" style={{ marginBottom: 16 }}>
+        <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add Store</button>
+        <button className="btn btn-secondary" onClick={load}>Refresh</button>
+      </div>
+
+      {loading ? (
+        <div className="loading">Loading stores...</div>
+      ) : stores.length === 0 ? (
+        <div className="empty">No pharmacy stores found.</div>
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Code</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th>Stock Items</th>
+                <th>Total Units</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stores.map((s) => {
+                const items = inventory.filter((i) => i.storeId === s.id || i.store?.id === s.id);
+                const units = items.reduce((sum, i) => sum + (Number(i.currentStock) || 0), 0);
+                return (
+                  <tr key={s.id}>
+                    <td style={{ fontWeight: 600 }}>{s.name}</td>
+                    <td className="mono">{s.code || '—'}</td>
+                    <td><span className="badge badge-blue">{s.type}</span></td>
+                    <td>{s.location || '—'}</td>
+                    <td>{items.length}</td>
+                    <td>{units.toLocaleString()}</td>
+                    <td>
+                      <span className={`badge ${s.isActive ? 'badge-green' : 'badge-gray'}`}>
+                        {s.isActive ? 'ACTIVE' : 'INACTIVE'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showAdd && <AddStoreModal onClose={() => setShowAdd(false)} onDone={() => { setShowAdd(false); load(); }} />}
+    </>
+  );
+}
+
+function AddStoreModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [values, setValues] = useState({ name: '', code: '', type: 'MAIN', location: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!values.name.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      await api('/pharmacy/stores', { method: 'POST', body: JSON.stringify(values) });
+      onDone();
+    } catch (err: any) {
+      setError(err.message || 'Failed to create store');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 className="modal-title">Add Pharmacy Store</h3>
+          <button className="modal-close" onClick={onClose}>x</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="field">
+            <label className="label">Name *</label>
+            <input className="input" value={values.name} onChange={(e) => setValues({ ...values, name: e.target.value })} required />
+          </div>
+          <div className="field">
+            <label className="label">Code</label>
+            <input className="input" value={values.code} onChange={(e) => setValues({ ...values, code: e.target.value })} />
+          </div>
+          <div className="field">
+            <label className="label">Type</label>
+            <select className="input" value={values.type} onChange={(e) => setValues({ ...values, type: e.target.value })}>
+              <option value="MAIN">Main</option>
+              <option value="SUB">Sub</option>
+              <option value="OT">OT</option>
+              <option value="WARD">Ward</option>
+              <option value="EMERGENCY">Emergency</option>
+            </select>
+          </div>
+          <div className="field">
+            <label className="label">Location</label>
+            <input className="input" value={values.location} onChange={(e) => setValues({ ...values, location: e.target.value })} />
+          </div>
+          {error && <div className="alert alert-error">{error}</div>}
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Saving...' : 'Create Store'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function AlertsTab() {
+  const [alerts, setAlerts] = useState<any>(null);
+  const [expiryAlerts, setExpiryAlerts] = useState<any[]>([]);
+  const [log, setLog] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [drug, setDrug] = useState(CONTROLLED_SUBSTANCES[0].name);
+  const [qty, setQty] = useState(1);
+  const [patient, setPatient] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      api('/pharmacy/alerts').catch(() => null),
+      api('/pharmacy/inventory?limit=200').catch(() => null),
+    ])
+      .then(([alertRes, invRes]: any[]) => {
+        if (alertRes) setAlerts(alertRes?.data ?? alertRes);
+        if (invRes) {
+          const items = toList(invRes)
+            .filter((i: any) => {
+              const days = daysUntil(i.expiryDate);
+              return i.expiryDate && days !== null && days <= 60;
+            })
+            .sort((a: any, b: any) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+          setExpiryAlerts(items);
+        }
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load();
+    try {
+      const raw = localStorage.getItem(CONTROLLED_LOG_KEY);
+      if (raw) setLog(JSON.parse(raw));
+    } catch {
+      setLog([]);
+    }
+  }, [load]);
+
+  function saveLog(next: any[]) {
+    setLog(next);
+    try {
+      localStorage.setItem(CONTROLLED_LOG_KEY, JSON.stringify(next));
+    } catch {}
+  }
+
+  function addUsage() {
+    if (qty <= 0) return;
+    saveLog([
+      { id: `${Date.now()}`, drug, quantity: qty, patient: patient.trim(), notes: notes.trim(), at: new Date().toISOString(), by: localStorage.getItem('userName') || '' },
+      ...log,
+    ]);
+    setQty(1);
+    setPatient('');
+    setNotes('');
+  }
+
+  function deleteEntry(id: string) {
+    saveLog(log.filter((l) => l.id !== id));
+  }
+
+  const lowStockCount = alerts?.summary?.lowStockCount || alerts?.lowStock?.length || 0;
+  const nearExpiryCount = alerts?.summary?.nearExpiryCount || expiryAlerts.length || 0;
+  const outOfStockCount = alerts?.summary?.outOfStockCount || alerts?.outOfStock?.length || 0;
+
+  return (
+    <>
+      {loading ? (
+        <div className="loading">Loading alerts...</div>
+      ) : (
+        <>
+          <div className="stat-grid" style={{ marginBottom: 20 }}>
+            <div className="stat-card">
+              <div className="stat-label">Low Stock</div>
+              <div className="stat-value stat-red">{lowStockCount}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Near Expiry</div>
+              <div className="stat-value stat-red">{nearExpiryCount}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Out of Stock</div>
+              <div className="stat-value stat-red">{outOfStockCount}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Interaction Rules Loaded</div>
+              <div className="stat-value stat-blue">{DRUG_INTERACTIONS.length}</div>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginBottom: 20 }}>
+            <div className="row-between" style={{ marginBottom: 10 }}>
+              <span className="card-title">Low Stock Alerts</span>
+              <button className="btn btn-sm btn-secondary" onClick={load}>Refresh</button>
+            </div>
+            {!alerts?.lowStock || alerts.lowStock.length === 0 ? (
+              <div className="empty">No low stock items.</div>
+            ) : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr><th>Medicine</th><th>Store</th><th>Current Stock</th><th>Reorder Level</th></tr>
+                  </thead>
+                  <tbody>
+                    {alerts.lowStock.map((item: any) => (
+                      <tr key={item.id}>
+                        <td style={{ fontWeight: 600 }}>{item.medicine?.name || item.name}</td>
+                        <td>{item.store?.name || '—'}</td>
+                        <td style={{ color: 'var(--danger)', fontWeight: 700 }}>{item.currentStock}</td>
+                        <td>{item.reorderLevel || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ marginBottom: 20 }}>
+            <div className="card-title">Expiry Alerts (within 60 days)</div>
+            {expiryAlerts.length === 0 ? (
+              <div className="empty">No items expiring within 60 days.</div>
+            ) : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr><th>Medicine</th><th>Batch</th><th>Expiry Date</th><th>Days Left</th><th>Status</th></tr>
+                  </thead>
+                  <tbody>
+                    {expiryAlerts.map((item: any) => {
+                      const days = daysUntil(item.expiryDate);
+                      return (
+                        <tr key={item.id}>
+                          <td style={{ fontWeight: 600 }}>{item.medicine?.name || item.name}</td>
+                          <td className="mono">{item.batchNumber || '—'}</td>
+                          <td>{formatDate(item.expiryDate)}</td>
+                          <td style={{ color: days !== null && days <= 30 ? '#dc2626' : undefined, fontWeight: 700 }}>
+                            {days === null ? '—' : `${days}d`}
+                          </td>
+                          <td><ExpiryBadge status={expiryStatus(days)} /></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ marginBottom: 20 }}>
+            <div className="card-title">Drug Interaction Warnings</div>
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr><th>Drug Combination</th><th>Severity</th><th>Potential Effect</th><th>Recommended Action</th></tr>
+                </thead>
+                <tbody>
+                  {DRUG_INTERACTIONS.map((i) => (
+                    <tr key={i.drugs}>
+                      <td style={{ fontWeight: 600 }}>{i.drugs}</td>
+                      <td>
+                        <span className={`badge ${i.severity === 'MAJOR' ? 'badge-red' : i.severity === 'MODERATE' ? 'badge-yellow' : 'badge-gray'}`}>
+                          {i.severity}
+                        </span>
+                      </td>
+                      <td>{i.effect}</td>
+                      <td>{i.action}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginBottom: 20 }}>
+            <div className="card-title">Controlled Substance Register</div>
+            <div className="table-wrap" style={{ marginBottom: 16 }}>
+              <table className="table">
+                <thead>
+                  <tr><th>Substance</th><th>Common Form</th><th>Schedule</th></tr>
+                </thead>
+                <tbody>
+                  {CONTROLLED_SUBSTANCES.map((c) => (
+                    <tr key={c.name}>
+                      <td style={{ fontWeight: 600 }}>{c.name}</td>
+                      <td>{c.form}</td>
+                      <td><span className="badge badge-red">{c.schedule}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="card-title">Log Usage</div>
+            <div className="form-grid" style={{ marginBottom: 16 }}>
+              <div className="field">
+                <label className="label">Substance</label>
+                <select className="input" value={drug} onChange={(e) => setDrug(e.target.value)}>
+                  {CONTROLLED_SUBSTANCES.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label className="label">Quantity Used</label>
+                <input className="input" type="number" min={1} value={qty} onChange={(e) => setQty(Number(e.target.value))} />
+              </div>
+              <div className="field">
+                <label className="label">Patient</label>
+                <input className="input" value={patient} onChange={(e) => setPatient(e.target.value)} placeholder="Patient name or MRN" />
+              </div>
+              <div className="field">
+                <label className="label">Notes</label>
+                <textarea className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Prescription reference, administered by..." />
+              </div>
+            </div>
+            <button className="btn btn-primary" style={{ marginBottom: 20 }} onClick={addUsage}>Record Usage Entry</button>
+
+            <div className="card-title">Usage Log</div>
+            {log.length === 0 ? (
+              <div className="empty">No controlled substance usage recorded yet.</div>
+            ) : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr><th>Date</th><th>Substance</th><th>Quantity</th><th>Patient</th><th>Notes</th><th>Logged By</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    {log.map((entry) => (
+                      <tr key={entry.id}>
+                        <td>{formatDateTime(entry.at)}</td>
+                        <td style={{ fontWeight: 600 }}>{entry.drug}</td>
+                        <td>{entry.quantity}</td>
+                        <td>{entry.patient || '—'}</td>
+                        <td>{entry.notes || '—'}</td>
+                        <td>{entry.by || '—'}</td>
+                        <td>
+                          <button className="btn btn-sm btn-danger" onClick={() => deleteEntry(entry.id)}>Delete</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {alerts?.outOfStock?.length > 0 && (
+            <div className="card">
+              <div className="card-title">Out of Stock Items</div>
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr><th>Medicine</th><th>Store</th><th>Batch</th></tr>
+                  </thead>
+                  <tbody>
+                    {alerts.outOfStock.map((item: any) => (
+                      <tr key={item.id}>
+                        <td style={{ fontWeight: 600 }}>{item.medicine?.name || item.name}</td>
+                        <td>{item.store?.name || '—'}</td>
+                        <td className="mono">{item.batchNumber || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+function PharmacyPageInner() {
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => getTab(searchParams));
+
+  useEffect(() => {
+    setActiveTab(getTab(searchParams));
+  }, [searchParams]);
+
+  function switchTab(tab: string) {
+    setActiveTab(tab);
+    window.history.replaceState(null, '', `/pharmacy?tab=${tab}`);
+  }
+
+  return (
+    <AppShell>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Pharmacy</h1>
+          <p className="page-subtitle">Medicines, dispensing, sales, stores, alerts and expiry management</p>
+        </div>
+      </div>
+
+      <div className="tabs">
+        {VALID_TABS.map((t) => (
+          <button key={t} className={`tab ${activeTab === t ? 'active' : ''}`} onClick={() => switchTab(t)}>
+            {TAB_LABELS[t]}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'medicines' && <MedicinesTab />}
+      {activeTab === 'dispensing' && <DispensingTab />}
+      {activeTab === 'sales' && <SalesTab />}
+      {activeTab === 'stores' && <StoresTab />}
+      {activeTab === 'alerts' && <AlertsTab />}
+      {activeTab === 'expiry' && <ExpiryTab />}
+    </AppShell>
+  );
+}
+
 export default function PharmacyPage() {
   return (
-    <Suspense fallback={<p className="muted">Loading...</p>}>
+    <Suspense fallback={<div className="loading">Loading...</div>}>
       <PharmacyPageInner />
     </Suspense>
   );

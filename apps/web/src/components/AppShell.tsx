@@ -20,6 +20,9 @@ const LAB = ['LAB_TECHNICIAN', 'PATHOLOGIST'];
 const RAD = ['RADIOLOGIST', 'RADIOLOGY_TECHNICIAN'];
 const INVENTORY = ['INVENTORY_MANAGER', 'STORE_KEEPER', 'PURCHASE_OFFICER'];
 const PHARMACY = ['PHARMACIST'];
+const OT = ['OT_TECHNICIAN', 'OT_NURSE', 'ANESTHETIST'];
+const QUALITY = ['QUALITY_MANAGER', 'DEPARTMENT_HEAD'];
+const INSURANCE = ['INSURANCE_OFFICER'];
 
 interface NavItem {
   label: string;
@@ -33,27 +36,18 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     title: 'Clinical',
     items: [
       { label: 'Dashboard', href: '/dashboard', icon: '▦' },
-      { label: 'Patients', href: '/patients', icon: '☺', roles: [...CLINICAL_WIDE] },
-      { label: 'Billing', href: '/billing', icon: '₨', roles: [...FINANCE, ...ADMIN, ...SUPER, 'INSURANCE_OFFICER'] },
-      { label: 'Admit', href: '/admissions', icon: '▣', roles: [...CLINICAL_WIDE] },
+      { label: 'Patients', href: '/patients', icon: '☺', roles: [...CLINICAL_WIDE, 'DEPARTMENT_HEAD'] },
+      { label: 'Billing', href: '/billing', icon: '₨', roles: [...FINANCE, ...ADMIN, ...SUPER, ...INSURANCE] },
+      { label: 'Admit', href: '/admissions', icon: '▣', roles: [...CLINICAL_WIDE, 'DEPARTMENT_HEAD'] },
       { label: 'Beds', href: '/bed-management', icon: '⊞', roles: [...CLINICAL_WIDE] },
-      { label: 'Appointments', href: '/appointments', icon: '◷', roles: [...CLINICAL_WIDE] },
+      { label: 'Appointments', href: '/appointments', icon: '◷', roles: [...CLINICAL_WIDE, 'DEPARTMENT_HEAD'] },
       { label: 'Doctors', href: '/doctors', icon: '✚', roles: [...CLINICAL_WIDE] },
-      { label: 'Encounters', href: '/encounters', icon: '✎', roles: [...CLINICAL, ...ADMIN, ...SUPER] },
+      { label: 'Encounters', href: '/encounters', icon: '✎', roles: [...CLINICAL, ...ADMIN, ...SUPER, 'DEPARTMENT_HEAD'] },
       { label: 'Emergency', href: '/emergency', icon: '⚠', roles: [...CLINICAL_WIDE] },
       { label: 'Nursing', href: '/nursing', icon: '♡', roles: ['NURSE', 'OT_NURSE', 'WARD_INCHARGE', 'ICU_STAFF', ...ADMIN, ...SUPER] },
-      {
-        label: 'Adverse Events',
-        href: '/adverse-events',
-        icon: '✖',
-        roles: [...CLINICAL, ...ADMIN, ...SUPER, 'QUALITY_MANAGER'],
-      },
-      {
-        label: 'Theatre (OT)',
-        href: '/ot',
-        icon: '⌁',
-        roles: [...CLINICAL_WIDE, 'OT_TECHNICIAN', 'OT_NURSE', 'ANESTHETIST'],
-      },
+      { label: 'Adverse Events', href: '/adverse-events', icon: '✖', roles: [...CLINICAL, ...ADMIN, ...SUPER, ...QUALITY] },
+      { label: 'Theatre (OT)', href: '/ot', icon: '⌁', roles: [...CLINICAL_WIDE, ...OT] },
+      { label: 'Approvals', href: '/approvals', icon: '✓', roles: ['DEPARTMENT_HEAD', 'WARD_INCHARGE', ...ADMIN, ...SUPER] },
     ],
   },
   {
@@ -78,12 +72,21 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Revenue',
     items: [
-      { label: 'Insurance', href: '/insurance', icon: '◈', roles: [...FINANCE, ...ADMIN, ...SUPER, 'INSURANCE_OFFICER'] },
+      { label: 'Insurance', href: '/insurance', icon: '◈', roles: [...FINANCE, ...ADMIN, ...SUPER, ...INSURANCE] },
       { label: 'Memberships', href: '/memberships', icon: '★', roles: [...FINANCE, ...ADMIN, ...SUPER, ...FRONT] },
       { label: 'Doctor Share', href: '/doctor-share', icon: '➗', roles: [...ADMIN, ...SUPER] },
       { label: 'Accounting', href: '/accounting', icon: '⇄', roles: [...FINANCE, ...ADMIN, ...SUPER] },
-      { label: 'Reports', href: '/reports', icon: '▦', roles: [...ADMIN, ...SUPER, 'AUDITOR', 'QUALITY_MANAGER', 'FINANCE_MANAGER', 'RECEPTIONIST'] },
+      { label: 'Reports', href: '/reports', icon: '▦', roles: [...ADMIN, ...SUPER, 'AUDITOR', 'QUALITY_MANAGER', 'FINANCE_MANAGER', 'RECEPTIONIST', 'RECEPTION_SUPERVISOR', 'DEPARTMENT_HEAD'] },
       { label: 'Procurement', href: '/procurement', icon: '↦', roles: [...INVENTORY, ...ADMIN, ...SUPER] },
+      { label: 'CRM', href: '/crm', icon: '⊞', roles: [...FRONT, 'DEPARTMENT_HEAD', ...ADMIN, ...SUPER] },
+    ],
+  },
+  {
+    title: 'Operations',
+    items: [
+      { label: 'Quality', href: '/quality', icon: '◆', roles: ['QUALITY_MANAGER', 'DEPARTMENT_HEAD', ...ADMIN, ...SUPER] },
+      { label: 'Equipment', href: '/equipment', icon: '⚙', roles: ['BIOMEDICAL_ENGINEER', ...ADMIN, ...SUPER] },
+      { label: 'Ambulance', href: '/ambulance', icon: '✦', roles: ['AMBULANCE_STAFF', ...ADMIN, ...SUPER] },
     ],
   },
   {

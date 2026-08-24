@@ -1,152 +1,162 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { api } from '@/lib/api';
-import { formatDateTime } from '@/lib/hooks';
+import { useEffect, useState } from 'react';
+import AppShell from '@/components/AppShell';
 import ModulePage from '@/components/ModulePage';
+import { api } from '@/lib/api';
+import { formatDate, formatMoney } from '@/lib/hooks';
 
-type Tab = 'suppliers' | 'orders' | 'receipts';
+type Tab = 'orders' | 'requests' | 'items' | 'transfers' | 'expiry';
+
+interface StockTransfer {
+  id: string;
+  date: string;
+  fromStore: string;
+  toStore: string;
+  item: string;
+  quantity: number;
+  status: string;
+}
+
+interface ExpiryEntry {
+  expiryDate: string;
+  removed: boolean;
+}
+
+function unwrap(r: any): any {
+  return r?.data?.data ?? r?.data ?? r;
+}
+
+function readLS<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeLS(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+}
+
+const EXPIRY_WINDOW_DAYS = 30;
 
 export default function ProcurementPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('suppliers');
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<any>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [tab, setTab] = useState<Tab>('orders');
   const [suppliers, setSuppliers] = useState<any[]>([]);
 
-  const tabBtn = (key: Tab, label: string) => (
-    <button className="btn btn-sm" style={{ background: activeTab === key ? 'var(--primary)' : 'var(--bg-secondary)', color: activeTab === key ? '#fff' : undefined }} onClick={() => { setActiveTab(key); setDetailId(null); setDetail(null); }}>{label}</button>
-  );
+  const [transfers, setTransfers] = useState<StockTransfer[]>([]);
+  const [transferForm, setTransferForm] = useState({ fromStore: '', toStore: '', item: '', quantity: '' });
+
+  const [expiryItems, setExpiryItems] = useState<any[]>([]);
+  const [loadingExpiry, setLoadingExpiry] = useState(false);
+  const [expiryMap, setExpiryMap] = useState<Record<string, ExpiryEntry>>({});
 
   useEffect(() => {
-    api('/procurement/suppliers?limit=500').then((r) => setSuppliers(r?.data?.data ?? r?.data ?? [])).catch(() => {});
+    api('/procurement/suppliers?limit=500')
+      .then((r) => {
+        const data = unwrap(r);
+        setSuppliers(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {});
+    setTransfers(readLS<StockTransfer[]>('stock_transfers', []));
+    setExpiryMap(readLS<Record<string, ExpiryEntry>>('item_expiry_dates', {}));
   }, []);
 
-  const loadDetail = useCallback(async (id: string) => {
-    setDetailId(id);
-    setLoadingDetail(true);
-    try {
-      const r = await api(`/procurement/purchase-orders/${id}`);
-      setDetail(r?.data ?? r);
-    } catch { setDetail(null); }
-    setLoadingDetail(false);
-  }, []);
+  useEffect(() => {
+    if (tab !== 'expiry') return;
+    setLoadingExpiry(true);
+    api('/procurement/inventory-items?limit=200')
+      .then((r) => {
+        const data = unwrap(r);
+        setExpiryItems(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setExpiryItems([]));
+    setLoadingExpiry(false);
+  }, [tab]);
 
-  const updatePOStatus = async (id: string, status: string) => {
-    try {
-      await api(`/procurement/purchase-orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
-      loadDetail(id);
-    } catch {}
+  const addTransfer = () => {
+    if (!transferForm.fromStore.trim() || !transferForm.toStore.trim() || !transferForm.item.trim()) return;
+    const rec: StockTransfer = {
+      id: `${Date.now()}`,
+      date: new Date().toISOString(),
+      fromStore: transferForm.fromStore,
+      toStore: transferForm.toStore,
+      item: transferForm.item,
+      quantity: Number(transferForm.quantity) || 0,
+      status: 'COMPLETED',
+    };
+    const next = [...transfers, rec];
+    setTransfers(next);
+    writeLS('stock_transfers', next);
+    setTransferForm({ fromStore: '', toStore: '', item: '', quantity: '' });
   };
 
-  if (detailId) {
-    if (loadingDetail) return <div className="loading">Loading purchase order...</div>;
-    if (!detail) return <div className="error-msg">Order not found</div>;
+  const totalMoved = transfers.reduce((sum, t) => sum + (t.quantity || 0), 0);
 
-    const statusTones: Record<string, string> = {
-      DRAFT: 'var(--muted)', SENT: 'var(--info)', CONFIRMED: 'var(--warning)',
-      PARTIAL_RECEIVED: 'var(--primary)', RECEIVED: 'var(--success)', INVOICED: 'var(--success)', CANCELLED: 'var(--danger)',
+  const todayMs = new Date().toISOString().slice(0, 10);
+  const expiryRows = expiryItems
+    .map((item: any) => {
+      const entry = expiryMap[item.id];
+      const raw = entry?.expiryDate || item.expiryDate || '';
+      let state: 'expired' | 'expiring' | 'safe' | 'none' = 'none';
+      if (raw) {
+        const diffDays = Math.round((new Date(raw).getTime() - new Date(todayMs).getTime()) / 86400000);
+        if (diffDays < 0) state = 'expired';
+        else if (diffDays <= EXPIRY_WINDOW_DAYS) state = 'expiring';
+        else state = 'safe';
+      }
+      return { ...item, effectiveExpiry: raw, state };
+    })
+    .sort((a, b) => {
+      if (!a.effectiveExpiry) return 1;
+      if (!b.effectiveExpiry) return -1;
+      return a.effectiveExpiry.localeCompare(b.effectiveExpiry);
+    });
+
+  const expiredCount = expiryRows.filter((r) => r.state === 'expired').length;
+  const expiringCount = expiryRows.filter((r) => r.state === 'expiring').length;
+  const safeCount = expiryRows.filter((r) => r.state === 'safe').length;
+
+  const setItemExpiry = (id: string, value: string) => {
+    const next: Record<string, ExpiryEntry> = {
+      ...expiryMap,
+      [id]: { expiryDate: value, removed: expiryMap[id]?.removed ?? false },
     };
+    setExpiryMap(next);
+    writeLS('item_expiry_dates', next);
+  };
 
-    return (
-      <div style={{ padding: '0 0 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button className="btn btn-sm btn-ghost" onClick={() => { setDetailId(null); setDetail(null); }}>← Back</button>
-              <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>PO {detail.poNumber}</h1>
-            </div>
-          </div>
-          <span className="badge" style={{ background: statusTones[detail.status] || 'var(--muted)', color: '#fff', padding: '4px 10px', borderRadius: 6, fontSize: 12 }}>{detail.status?.replace(/_/g, ' ')}</span>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-          <div className="card" style={{ padding: 16 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>Order Info</div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              <div>Supplier: {detail.supplier?.name || '—'}</div>
-              <div>Store: {detail.store?.name || '—'}</div>
-              <div>Order Date: {formatDateTime(detail.orderDate)}</div>
-              {detail.expectedDate && <div>Expected: {formatDateTime(detail.expectedDate)}</div>}
-              <div>Total: Rs. {Number(detail.totalAmount || 0).toLocaleString()}</div>
-            </div>
-          </div>
-          <div className="card" style={{ padding: 16 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>Actions</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {detail.status === 'DRAFT' && <button className="btn btn-sm" style={{ background: 'var(--info)', color: '#fff' }} onClick={() => updatePOStatus(detail.id, 'SENT')}>Send</button>}
-              {detail.status === 'SENT' && <button className="btn btn-sm" style={{ background: 'var(--warning)', color: '#fff' }} onClick={() => updatePOStatus(detail.id, 'CONFIRMED')}>Confirm</button>}
-              {detail.status === 'CONFIRMED' && <button className="btn btn-sm" style={{ background: 'var(--success)', color: '#fff' }} onClick={() => updatePOStatus(detail.id, 'RECEIVED')}>Mark Received</button>}
-              {detail.status !== 'CANCELLED' && detail.status !== 'RECEIVED' && detail.status !== 'INVOICED' && (
-                <button className="btn btn-sm btn-ghost" style={{ color: 'var(--danger)' }} onClick={() => updatePOStatus(detail.id, 'CANCELLED')}>Cancel</button>
-              )}
-            </div>
-            {detail.terms && <div style={{ marginTop: 12, fontSize: 12 }}><strong>Terms:</strong> {detail.terms}</div>}
-            {detail.notes && <div style={{ marginTop: 4, fontSize: 12 }}><strong>Notes:</strong> {detail.notes}</div>}
-          </div>
-        </div>
-
-        {detail.items && detail.items.length > 0 && (
-          <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-            <div style={{ fontWeight: 600, marginBottom: 12 }}>Order Items</div>
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Total</th><th>Received</th></tr>
-                </thead>
-                <tbody>
-                  {detail.items.map((item: any) => (
-                    <tr key={item.id}>
-                      <td>{item.itemName}</td>
-                      <td>{item.quantity}</td>
-                      <td>Rs. {Number(item.unitPrice).toLocaleString()}</td>
-                      <td>Rs. {Number(item.totalPrice).toLocaleString()}</td>
-                      <td>{Number(item.receivedQuantity || 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
+  const markRemoved = (id: string) => {
+    const next: Record<string, ExpiryEntry> = {
+      ...expiryMap,
+      [id]: { expiryDate: expiryMap[id]?.expiryDate ?? '', removed: true },
+    };
+    setExpiryMap(next);
+    writeLS('item_expiry_dates', next);
+  };
 
   return (
-    <>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {tabBtn('suppliers', 'Suppliers')}
-        {tabBtn('orders', 'Purchase Orders')}
-        {tabBtn('receipts', 'Goods Receipts')}
+    <AppShell>
+      <div className="page-header">
+        <div>
+          <h1>Procurement</h1>
+          <p className="page-subtitle">Purchase orders, requests, inventory items, transfers and expiry tracking</p>
+        </div>
       </div>
 
-      {activeTab === 'suppliers' && (
-        <ModulePage
-          title="Suppliers"
-          subtitle="Manage vendors and suppliers"
-          endpoint="/procurement/suppliers"
-          createLabel="Add supplier"
-          columns={[
-            { key: 'name', label: 'Name' },
-            { key: 'contactPerson', label: 'Contact Person', render: (r) => r.contactPerson || '—' },
-            { key: 'phone', label: 'Phone', render: (r) => r.phone || '—' },
-            { key: 'email', label: 'Email', render: (r) => r.email || '—' },
-            { key: 'panNumber', label: 'PAN', render: (r) => <span className="mono">{r.panNumber || '—'}</span> },
-            { key: 'isActive', label: 'Status', badge: true },
-          ]}
-          fields={[
-            { name: 'name', label: 'Name', required: true },
-            { name: 'contactPerson', label: 'Contact Person' },
-            { name: 'phone', label: 'Phone' },
-            { name: 'email', label: 'Email' },
-            { name: 'address', label: 'Address', full: true },
-            { name: 'panNumber', label: 'PAN Number' },
-          ]}
-        />
-      )}
+      <div className="tabs" role="tablist">
+        <button className={`tab ${tab === 'orders' ? 'active' : ''}`} onClick={() => setTab('orders')}>Purchase Orders</button>
+        <button className={`tab ${tab === 'requests' ? 'active' : ''}`} onClick={() => setTab('requests')}>Purchase Requests</button>
+        <button className={`tab ${tab === 'items' ? 'active' : ''}`} onClick={() => setTab('items')}>Inventory Items</button>
+        <button className={`tab ${tab === 'transfers' ? 'active' : ''}`} onClick={() => setTab('transfers')}>Stock Transfers</button>
+        <button className={`tab ${tab === 'expiry' ? 'active' : ''}`} onClick={() => setTab('expiry')}>Expiry Tracking</button>
+      </div>
 
-      {activeTab === 'orders' && (
+      {tab === 'orders' && (
         <ModulePage
           title="Purchase Orders"
           subtitle="Manage purchase orders"
@@ -156,8 +166,8 @@ export default function ProcurementPage() {
             { key: 'poNumber', label: 'PO Number', render: (r) => <span className="mono">{r.poNumber}</span> },
             { key: 'supplier', label: 'Supplier', render: (r) => r.supplier?.name || '—' },
             { key: 'status', label: 'Status', badge: true },
-            { key: 'totalAmount', label: 'Total', render: (r) => `Rs. ${Number(r.totalAmount || 0).toLocaleString()}` },
-            { key: 'orderDate', label: 'Date', render: (r) => formatDateTime(r.orderDate) },
+            { key: 'totalAmount', label: 'Total', render: (r) => formatMoney(r.totalAmount) },
+            { key: 'orderDate', label: 'Date', render: (r) => formatDate(r.orderDate) },
           ]}
           fields={[
             { name: 'supplierId', label: 'Supplier', type: 'select', options: suppliers.map((s: any) => ({ value: s.id, label: s.name })) },
@@ -167,31 +177,225 @@ export default function ProcurementPage() {
             { name: 'notes', label: 'Notes', full: true },
             { name: 'items', label: 'Items', type: 'json', required: true, full: true, hint: '[{itemName, quantity, unitPrice, medicineId?}]' },
           ]}
-          actions={[{ label: 'View', onClick: (r) => loadDetail(r.id) }]}
         />
       )}
 
-      {activeTab === 'receipts' && (
+      {tab === 'requests' && (
         <ModulePage
-          title="Goods Receipts"
-          subtitle="Track received goods"
-          endpoint="/procurement/goods-receipts"
-          createLabel="New receipt"
+          title="Purchase Requests"
+          subtitle="Track and approve purchase requests"
+          endpoint="/procurement/purchase-requests"
+          createLabel="New request"
           columns={[
-            { key: 'grnNumber', label: 'GRN Number', render: (r) => <span className="mono">{r.grnNumber}</span> },
-            { key: 'purchaseOrder', label: 'PO', render: (r) => r.purchaseOrder?.poNumber || '—' },
-            { key: 'invoiceNumber', label: 'Invoice', render: (r) => r.invoiceNumber || '—' },
-            { key: 'receivedDate', label: 'Received', render: (r) => formatDateTime(r.receivedDate) },
+            { key: 'requestNumber', label: 'Request #', render: (r) => <span className="mono">{r.requestNumber || '—'}</span> },
+            { key: 'requestedBy', label: 'Requested By', render: (r) => r.requestedBy?.name || [r.requestedBy?.firstName, r.requestedBy?.lastName].filter(Boolean).join(' ') || '—' },
+            { key: 'department', label: 'Department', render: (r) => r.department?.name || '—' },
+            { key: 'status', label: 'Status', badge: true },
+            { key: 'neededBy', label: 'Needed By', render: (r) => formatDate(r.neededBy || r.requiredDate) },
+            { key: 'createdAt', label: 'Created', render: (r) => formatDate(r.createdAt) },
           ]}
           fields={[
-            { name: 'purchaseOrderId', label: 'Purchase Order', type: 'select', options: [] },
-            { name: 'supplierId', label: 'Supplier', type: 'select', options: suppliers.map((s: any) => ({ value: s.id, label: s.name })) },
-            { name: 'invoiceNumber', label: 'Invoice Number' },
-            { name: 'remarks', label: 'Remarks', full: true },
-            { name: 'items', label: 'Items', type: 'json', required: true, full: true, hint: '[{itemName, quantity, unitPrice, batchNumber?, expiryDate?, medicineId?}]' },
+            { name: 'departmentId', label: 'Department', type: 'select', optionsFrom: { valueKey: 'id', labelKeys: ['name'], endpoint: '/departments' } },
+            { name: 'neededBy', label: 'Needed By', type: 'date' },
+            { name: 'priority', label: 'Priority', type: 'select', options: [{ value: 'LOW', label: 'LOW' }, { value: 'NORMAL', label: 'NORMAL' }, { value: 'HIGH', label: 'HIGH' }, { value: 'URGENT', label: 'URGENT' }] },
+            { name: 'justification', label: 'Justification', type: 'textarea', full: true },
+            { name: 'notes', label: 'Notes', type: 'textarea', full: true },
           ]}
         />
       )}
-    </>
+
+      {tab === 'items' && (
+        <ModulePage
+          title="Inventory Items"
+          subtitle="Manage procurement catalog and stock"
+          endpoint="/procurement/inventory-items"
+          createLabel="Add item"
+          columns={[
+            { key: 'name', label: 'Name' },
+            { key: 'sku', label: 'SKU', render: (r) => <span className="mono">{r.sku || r.code || '—'}</span> },
+            { key: 'category', label: 'Category', render: (r) => r.category || '—' },
+            { key: 'unitPrice', label: 'Unit Price', render: (r) => formatMoney(r.unitPrice) },
+            { key: 'quantity', label: 'Qty', render: (r) => r.quantity ?? r.stockQuantity ?? '—' },
+            { key: 'isActive', label: 'Status', badge: true },
+          ]}
+          fields={[
+            { name: 'name', label: 'Name', required: true },
+            { name: 'sku', label: 'SKU / Code' },
+            { name: 'category', label: 'Category' },
+            { name: 'unit', label: 'Unit' },
+            { name: 'unitPrice', label: 'Unit Price', type: 'number' },
+            { name: 'quantity', label: 'Quantity', type: 'number' },
+            { name: 'reorderLevel', label: 'Reorder Level', type: 'number' },
+            { name: 'description', label: 'Description', type: 'textarea', full: true },
+          ]}
+        />
+      )}
+
+      {tab === 'transfers' && (
+        <>
+          <div className="stat-grid">
+            <div className="stat-card">
+              <div className="stat-label">Total Transfers</div>
+              <div className="stat-value">{transfers.length}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Total Quantity Moved</div>
+              <div className="stat-value" style={{ color: 'var(--primary)' }}>{totalMoved.toLocaleString()}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">This Month</div>
+              <div className="stat-value" style={{ color: 'var(--info)' }}>
+                {transfers.filter((tr) => tr.date.slice(0, 7) === new Date().toISOString().slice(0, 7)).length}
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Last Transfer</div>
+              <div className="stat-value" style={{ fontSize: 18 }}>
+                {transfers.length ? formatDate(transfers[transfers.length - 1].date) : '—'}
+              </div>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginBottom: 16 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 12px' }}>Transfer Stock</h3>
+            <div className="form-grid">
+              <div className="field">
+                <label className="label">From Store *</label>
+                <input className="input" value={transferForm.fromStore} onChange={(e) => setTransferForm({ ...transferForm, fromStore: e.target.value })} placeholder="e.g. Main Store" />
+              </div>
+              <div className="field">
+                <label className="label">To Store *</label>
+                <input className="input" value={transferForm.toStore} onChange={(e) => setTransferForm({ ...transferForm, toStore: e.target.value })} placeholder="e.g. Pharmacy Store" />
+              </div>
+              <div className="field">
+                <label className="label">Item *</label>
+                <input className="input" value={transferForm.item} onChange={(e) => setTransferForm({ ...transferForm, item: e.target.value })} placeholder="Item name or SKU" />
+              </div>
+              <div className="field">
+                <label className="label">Quantity</label>
+                <input className="input" type="number" min="1" value={transferForm.quantity} onChange={(e) => setTransferForm({ ...transferForm, quantity: e.target.value })} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn btn-sm" onClick={addTransfer}>+ Record Transfer</button>
+            </div>
+          </div>
+
+          {transfers.length === 0 ? (
+            <div className="empty">No stock transfers recorded yet.</div>
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>Item</th>
+                    <th>Qty</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...transfers].reverse().map((tr) => (
+                    <tr key={tr.id}>
+                      <td>{formatDate(tr.date)}</td>
+                      <td><strong>{tr.fromStore}</strong></td>
+                      <td><strong>{tr.toStore}</strong></td>
+                      <td>{tr.item}</td>
+                      <td>{tr.quantity}</td>
+                      <td><span className="badge badge-green">{tr.status.replace(/_/g, ' ')}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === 'expiry' && (
+        <>
+          <div className="stat-grid">
+            <div className="stat-card">
+              <div className="stat-label">Tracked Items</div>
+              <div className="stat-value">{expiryRows.length}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Expired</div>
+              <div className="stat-value" style={{ color: 'var(--danger)' }}>{expiredCount}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Expiring ({EXPIRY_WINDOW_DAYS}d)</div>
+              <div className="stat-value" style={{ color: 'var(--warning)' }}>{expiringCount}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Safe</div>
+              <div className="stat-value" style={{ color: 'var(--success)' }}>{safeCount}</div>
+            </div>
+          </div>
+
+          {loadingExpiry ? (
+            <div className="loading">Loading inventory items...</div>
+          ) : expiryRows.length === 0 ? (
+            <div className="empty">No inventory items found.</div>
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Category</th>
+                    <th>Expiry Date</th>
+                    <th>Status</th>
+                    <th>Value</th>
+                    <th style={{ width: 1 }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expiryRows.map((item) => {
+                    const removed = expiryMap[item.id]?.removed ?? false;
+                    return (
+                      <tr key={item.id} style={removed ? { opacity: 0.5 } : undefined}>
+                        <td><strong>{item.name}</strong></td>
+                        <td>{item.category || '—'}</td>
+                        <td>
+                          <input
+                            className="input"
+                            type="date"
+                            style={{ maxWidth: 170 }}
+                            value={item.effectiveExpiry}
+                            onChange={(e) => setItemExpiry(item.id, e.target.value)}
+                          />
+                        </td>
+                        <td>
+                          {removed ? (
+                            <span className="badge badge-gray">REMOVED</span>
+                          ) : item.state === 'expired' ? (
+                            <span className="badge badge-red">EXPIRED</span>
+                          ) : item.state === 'expiring' ? (
+                            <span className="badge badge-yellow">EXPIRING SOON</span>
+                          ) : item.state === 'safe' ? (
+                            <span className="badge badge-green">SAFE</span>
+                          ) : (
+                            <span className="badge badge-gray">NO DATE</span>
+                          )}
+                        </td>
+                        <td>{item.unitPrice != null ? formatMoney(Number(item.unitPrice) * Number(item.quantity ?? 0)) : formatMoney(item.unitPrice)}</td>
+                        <td>
+                          {!removed && (
+                            <button className="btn btn-sm btn-secondary" onClick={() => markRemoved(item.id)}>Mark Removed</button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </AppShell>
   );
 }

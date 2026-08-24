@@ -1,44 +1,131 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
-import { formatDateTime } from '@/lib/hooks';
-import { PATIENT_REF } from '@/lib/options';
-import ModulePage from '@/components/ModulePage';
+import { formatDate, formatDateTime } from '@/lib/hooks';
 
-type Tab = 'vitals' | 'notes' | 'mar' | 'summary';
+type Tab = 'summary' | 'vitals' | 'notes' | 'medadmin' | 'handover' | 'tracking';
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'summary', label: 'Summary' },
+  { key: 'vitals', label: 'Vitals' },
+  { key: 'notes', label: 'Notes' },
+  { key: 'medadmin', label: 'Med Admin' },
+  { key: 'handover', label: 'Shift Handover' },
+  { key: 'tracking', label: 'Patient Tracking' },
+];
+
+function unwrap(r: any): any {
+  return r?.data?.data ?? r?.data ?? r;
+}
+
+function toList(r: any): any[] {
+  const d = unwrap(r);
+  if (Array.isArray(d)) return d;
+  if (Array.isArray(d?.data)) return d.data;
+  if (Array.isArray(d?.items)) return d.items;
+  return [];
+}
+
+function patientName(p: any): string {
+  if (!p) return '—';
+  return [p.firstName, p.lastName].filter(Boolean).join(' ') || p.mrn || p.id || '—';
+}
+
+function medStatusGroup(m: any): 'DUE' | 'GIVEN' | 'SKIPPED' {
+  const st = String(m.status || '').toUpperCase();
+  if (st === 'GIVEN') return 'GIVEN';
+  if (st === 'MISSED' || st === 'REFUSED' || st === 'HELD') return 'SKIPPED';
+  return 'DUE';
+}
+
+function daysAdmitted(a: any): number {
+  const start = a.admissionDate ? new Date(a.admissionDate).getTime() : Date.now();
+  const end = a.dischargeDate ? new Date(a.dischargeDate).getTime() : Date.now();
+  return Math.max(0, Math.floor((end - start) / 86400000));
+}
 
 export default function NursingPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('summary');
-  const [patientId, setPatientId] = useState('');
-  const [admissionId, setAdmissionId] = useState('');
-  const [vitals, setVitals] = useState<any[]>([]);
-  const [loadingVitals, setLoadingVitals] = useState(false);
-  const [notes, setNotes] = useState<any[]>([]);
-  const [loadingNotes, setLoadingNotes] = useState(false);
-  const [meds, setMeds] = useState<any[]>([]);
-  const [loadingMeds, setLoadingMeds] = useState(false);
-  const [summary, setSummary] = useState<any>(null);
-  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [tab, setTab] = useState<Tab>('summary');
+
   const [patients, setPatients] = useState<any[]>([]);
   const [admissions, setAdmissions] = useState<any[]>([]);
+  const [wards, setWards] = useState<any[]>([]);
+  const [doctors, setDoctors] = useState<any[]>([]);
 
-  const tabBtn = (key: Tab, label: string) => (
-    <button className="btn btn-sm" style={{ background: activeTab === key ? 'var(--primary)' : 'var(--bg-secondary)', color: activeTab === key ? '#fff' : undefined }} onClick={() => setActiveTab(key)}>{label}</button>
-  );
+  const [patientId, setPatientId] = useState('');
+  const [vitals, setVitals] = useState<any[]>([]);
+  const [loadingVitals, setLoadingVitals] = useState(false);
+
+  const [notesAdmissionId, setNotesAdmissionId] = useState('');
+  const [notes, setNotes] = useState<any[]>([]);
+  const [loadingNotes, setLoadingNotes] = useState(false);
+
+  const [marAdmissionId, setMarAdmissionId] = useState('');
+  const [meds, setMeds] = useState<any[]>([]);
+  const [loadingMeds, setLoadingMeds] = useState(false);
+
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [latestVitalMap, setLatestVitalMap] = useState<Record<string, string>>({});
+  const [loadingTasks, setLoadingTasks] = useState(false);
+
+  const [handoverWardId, setHandoverWardId] = useState('');
+  const [shiftDate, setShiftDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [handoverNotes, setHandoverNotes] = useState('');
+  const [handovers, setHandovers] = useState<any[]>([]);
+  const [handoverSavedMsg, setHandoverSavedMsg] = useState('');
+
+  const [sortBy, setSortBy] = useState<'ward' | 'date'>('ward');
+
+  const loadCore = useCallback(async () => {
+    const [p, a, w, d] = await Promise.allSettled([
+      api('/patients?limit=500'),
+      api('/admissions?limit=100&status=ADMITTED'),
+      api('/bed-management/wards?limit=200'),
+      api('/doctors?limit=200'),
+    ]);
+    setPatients(p.status === 'fulfilled' ? toList(p.value) : []);
+    setAdmissions(a.status === 'fulfilled' ? toList(a.value) : []);
+    setWards(w.status === 'fulfilled' ? toList(w.value) : []);
+    setDoctors(d.status === 'fulfilled' ? toList(d.value) : []);
+  }, []);
 
   useEffect(() => {
-    api('/patients?limit=500').then((r) => setPatients(r?.data?.data ?? r?.data ?? [])).catch(() => {});
-    api('/admissions?limit=500&status=ADMITTED').then((r) => setAdmissions(r?.data?.data ?? r?.data ?? [])).catch(() => {});
-  }, []);
+    loadCore();
+    try {
+      const raw = localStorage.getItem('shift_handovers');
+      if (raw) setHandovers(JSON.parse(raw));
+    } catch {}
+  }, [loadCore]);
+
+  const wardOf = useCallback(
+    (a: any): string => {
+      const bed = a.bedAllocations?.[0]?.bed;
+      if (!bed) return 'Unassigned';
+      const ward = wards.find((w) => w.id === bed.wardId);
+      return ward?.name || bed.ward?.name || 'Unassigned';
+    },
+    [wards],
+  );
+
+  const doctorName = useCallback(
+    (id?: string): string => {
+      if (!id) return '—';
+      const doc = doctors.find((d) => d.id === id);
+      return doc ? patientName(doc.user) || patientName(doc) : 'Unknown';
+    },
+    [doctors],
+  );
 
   const loadVitals = useCallback(async (pid: string) => {
     if (!pid) return;
     setLoadingVitals(true);
     try {
-      const r = await api(`/encounters/vitals/patient/${pid}`);
-      setVitals(r?.data?.data ?? r?.data ?? []);
-    } catch { setVitals([]); }
+      setVitals(toList(await api(`/encounters/vitals/patient/${pid}`)));
+    } catch {
+      setVitals([]);
+    }
     setLoadingVitals(false);
   }, []);
 
@@ -46,9 +133,10 @@ export default function NursingPage() {
     if (!admId) return;
     setLoadingNotes(true);
     try {
-      const r = await api(`/admissions/${admId}/nursing-notes`);
-      setNotes(r?.data?.data ?? r?.data ?? []);
-    } catch { setNotes([]); }
+      setNotes(toList(await api(`/admissions/${admId}/nursing-notes`)));
+    } catch {
+      setNotes([]);
+    }
     setLoadingNotes(false);
   }, []);
 
@@ -56,317 +144,669 @@ export default function NursingPage() {
     if (!admId) return;
     setLoadingMeds(true);
     try {
-      const r = await api(`/admissions/${admId}/medications`);
-      setMeds(r?.data?.data ?? r?.data ?? []);
-    } catch { setMeds([]); }
+      setMeds(toList(await api(`/admissions/${admId}/medications`)));
+    } catch {
+      setMeds([]);
+    }
     setLoadingMeds(false);
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'vitals' && patientId) loadVitals(patientId);
-    if (activeTab === 'notes' && admissionId) loadNotes(admissionId);
-    if (activeTab === 'mar' && admissionId) loadMeds(admissionId);
-    if (activeTab === 'summary') {
-      setLoadingSummary(true);
-      api('/admissions?limit=1&status=ADMITTED').then((r) => {
-        const d = r?.data?.data ?? r?.data ?? [];
-        setSummary({ activeAdmissions: Array.isArray(d) ? d.length : 0 });
-        setLoadingSummary(false);
-      }).catch(() => setLoadingSummary(false));
-    }
-  }, [activeTab, patientId, admissionId, loadVitals, loadNotes, loadMeds]);
+    if ((tab === 'vitals' || tab === 'summary') && patientId) loadVitals(patientId);
+  }, [tab, patientId, loadVitals]);
+
+  useEffect(() => {
+    if (tab === 'notes' && notesAdmissionId) loadNotes(notesAdmissionId);
+  }, [tab, notesAdmissionId, loadNotes]);
+
+  useEffect(() => {
+    if (tab === 'medadmin' && marAdmissionId) loadMeds(marAdmissionId);
+  }, [tab, marAdmissionId, loadMeds]);
+
+  useEffect(() => {
+    if (tab !== 'summary' || admissions.length === 0) return;
+    let active = true;
+    setLoadingTasks(true);
+    const sample = admissions.slice(0, 10);
+    Promise.allSettled(
+      sample.map((a) =>
+        Promise.all([
+          api(`/admissions/${a.id}/medications`).catch(() => []),
+          api(`/admissions/${a.id}/nursing-notes`).catch(() => []),
+          api(`/encounters/vitals/patient/${a.patientId}`).catch(() => []),
+        ]),
+      ),
+    ).then((results) => {
+      if (!active) return;
+      const built: any[] = [];
+      const vitalMap: Record<string, string> = {};
+      results.forEach((res, i) => {
+        if (res.status !== 'fulfilled') return;
+        const a = sample[i];
+        const [medsR, notesR, vitalsR] = res.value as [any, any, any];
+        const medList = Array.isArray(medsR) ? medsR : toList(medsR);
+        const noteList = Array.isArray(notesR) ? notesR : toList(notesR);
+        const vitalList = Array.isArray(vitalsR) ? vitalsR : toList(vitalsR);
+        const label = patientName(a.patient);
+        const loc = `${wardOf(a)} · ${a.bedAllocations?.[0]?.bed?.bedNumber || 'No bed'}`;
+        medList
+          .filter((m: any) => medStatusGroup(m) === 'DUE')
+          .forEach((m: any) => {
+            const due = m.scheduledTime ? new Date(m.scheduledTime) : null;
+            const overdue = due ? due.getTime() < Date.now() : false;
+            built.push({
+              id: `med-${m.id}`,
+              type: 'MEDS DUE',
+              tone: overdue ? 'badge-red' : 'badge-yellow',
+              patient: label,
+              location: loc,
+              admissionId: a.id,
+              detail: `${m.medicineName} ${m.dose}${due ? ` · scheduled ${formatDateTime(due)}` : ''}${overdue ? ' (overdue)' : ''}`,
+            });
+          });
+        if (noteList.length === 0) {
+          built.push({
+            id: `note-${a.id}`,
+            type: 'NOTES PENDING',
+            tone: 'badge-gray',
+            patient: label,
+            location: loc,
+            admissionId: a.id,
+            detail: 'No nursing note recorded yet',
+          });
+        }
+        const lastVital = vitalList[0]?.recordedAt ? new Date(vitalList[0].recordedAt) : null;
+        if (lastVital) vitalMap[a.id] = lastVital.toISOString();
+        const hoursSince = lastVital ? (Date.now() - lastVital.getTime()) / 3600000 : Infinity;
+        if (hoursSince >= 8) {
+          built.push({
+            id: `vital-${a.id}`,
+            type: 'VITALS DUE',
+            tone: hoursSince === Infinity ? 'badge-yellow' : 'badge-yellow',
+            patient: label,
+            location: loc,
+            admissionId: a.id,
+            detail:
+              hoursSince === Infinity
+                ? 'No vitals recorded this admission'
+                : `Last recorded ${Math.floor(hoursSince)}h ago`,
+          });
+        }
+      });
+      setTasks(built);
+      setLatestVitalMap(vitalMap);
+      setLoadingTasks(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [tab, admissions, wardOf]);
 
   const recordVital = async (data: any) => {
-    try {
-      await api('/encounters/vitals', { method: 'POST', body: JSON.stringify(data) });
-      if (patientId) loadVitals(patientId);
-    } catch {}
+    await api('/encounters/vitals', { method: 'POST', body: JSON.stringify(data) }).catch(() => {});
+    if (patientId) loadVitals(patientId);
   };
 
   const addNote = async (data: any) => {
-    if (!admissionId) return;
-    try {
-      await api(`/admissions/${admissionId}/nursing-notes`, { method: 'POST', body: JSON.stringify(data) });
-      loadNotes(admissionId);
-    } catch {}
+    if (!notesAdmissionId) return;
+    await api(`/admissions/${notesAdmissionId}/nursing-notes`, { method: 'POST', body: JSON.stringify(data) }).catch(() => {});
+    loadNotes(notesAdmissionId);
   };
 
   const administerMed = async (medId: string) => {
-    if (!admissionId) return;
-    try {
-      await api(`/admissions/${admissionId}/medications/${medId}/administer`, { method: 'POST', body: JSON.stringify({ status: 'GIVEN', givenTime: new Date().toISOString() }) });
-      loadMeds(admissionId);
-    } catch {}
+    if (!marAdmissionId) return;
+    await api(`/admissions/${marAdmissionId}/medications/${medId}/administer`, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'GIVEN', givenTime: new Date().toISOString() }),
+    }).catch(() => {});
+    loadMeds(marAdmissionId);
   };
 
-  const VitalForm = () => {
-    const [form, setForm] = useState({ temperature: '', pulse: '', respiratoryRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', weight: '', painScore: '', bloodGlucose: '', notes: '' });
-    const submit = () => {
-      const payload: any = { patientId, notes: form.notes || undefined };
-      if (form.temperature) payload.temperature = parseFloat(form.temperature);
-      if (form.pulse) payload.pulse = parseInt(form.pulse);
-      if (form.respiratoryRate) payload.respiratoryRate = parseInt(form.respiratoryRate);
-      if (form.bloodPressureSystolic) payload.bloodPressureSystolic = parseInt(form.bloodPressureSystolic);
-      if (form.bloodPressureDiastolic) payload.bloodPressureDiastolic = parseInt(form.bloodPressureDiastolic);
-      if (form.oxygenSaturation) payload.oxygenSaturation = parseFloat(form.oxygenSaturation);
-      if (form.weight) payload.weight = parseFloat(form.weight);
-      if (form.painScore) payload.painScore = parseInt(form.painScore);
-      if (form.bloodGlucose) payload.bloodGlucose = parseFloat(form.bloodGlucose);
-      recordVital(payload);
-      setForm({ temperature: '', pulse: '', respiratoryRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', weight: '', painScore: '', bloodGlucose: '', notes: '' });
+  const saveHandover = () => {
+    const wardName = wards.find((w) => w.id === handoverWardId)?.name || '';
+    const entry = {
+      id: `${Date.now()}`,
+      wardId: handoverWardId,
+      wardName,
+      shiftDate,
+      notes: handoverNotes,
+      savedAt: new Date().toISOString(),
     };
+    const next = [...handovers, entry];
+    setHandovers(next);
+    localStorage.setItem('shift_handovers', JSON.stringify(next));
+    setHandoverNotes('');
+    setHandoverSavedMsg(`Handover saved for ${wardName} (${shiftDate}).`);
+    setTimeout(() => setHandoverSavedMsg(''), 4000);
+  };
+
+  const wardCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    admissions.forEach((a) => {
+      const name = wardOf(a);
+      counts.set(name, (counts.get(name) || 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((x, y) => y[1] - x[1]);
+  }, [admissions, wardOf]);
+
+  const handoverPatients = useMemo(() => {
+    const wardName = wards.find((w) => w.id === handoverWardId)?.name;
+    if (!wardName) return [];
+    return admissions.filter((a) => wardOf(a) === wardName);
+  }, [handoverWardId, wards, admissions, wardOf]);
+
+  const trackedPatients = useMemo(() => {
+    const rows = [...admissions];
+    if (sortBy === 'ward') rows.sort((a, b) => wardOf(a).localeCompare(wardOf(b)));
+    else rows.sort((a, b) => new Date(b.admissionDate).getTime() - new Date(a.admissionDate).getTime());
+    return rows;
+  }, [admissions, sortBy, wardOf]);
+
+  const urgencyOf = (a: any): { color: string; bg: string; label: string } => {
+    const ward = wardOf(a).toUpperCase();
+    if (ward.includes('ICU')) return { color: 'var(--danger)', bg: 'var(--danger-light)', label: 'ICU' };
+    if (daysAdmitted(a) <= 3) return { color: 'var(--warning)', bg: 'var(--warning-light)', label: 'NEW' };
+    return { color: 'var(--success)', bg: 'var(--success-light)', label: 'STABLE' };
+  };
+
+  const statusBadgeTone = (s: string) =>
+    ({ ADMITTED: 'badge-blue', TRANSFERRED: 'badge-purple', PENDING: 'badge-yellow' }[String(s).toUpperCase()] || 'badge-gray');
+
+  const renderSummary = () => (
+    <div>
+      <div className="stat-grid">
+        <div className="stat-card">
+          <div className="stat-label">Admitted Patients</div>
+          <div className="stat-value">{admissions.length}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Wards Occupied</div>
+          <div className="stat-value" style={{ color: 'var(--primary)' }}>{wardCounts.length}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Pending Tasks</div>
+          <div className="stat-value" style={{ color: 'var(--warning)' }}>{tasks.length}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Overdue Meds</div>
+          <div className="stat-value" style={{ color: 'var(--danger)' }}>
+            {tasks.filter((t) => t.type === 'MEDS DUE' && t.tone === 'badge-red').length}
+          </div>
+        </div>
+      </div>
+
+      {wardCounts.length > 0 && (
+        <>
+          <h2 style={{ fontSize: 16, fontWeight: 700, margin: '4px 0 12px' }}>Ward-wise Census</h2>
+          <div className="stat-grid">
+            {wardCounts.map(([name, count]) => (
+              <div key={name} className="stat-card">
+                <div className="stat-label">{name}</div>
+                <div className="stat-value">{count}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title">Pending Tasks</div>
+        {loadingTasks ? (
+          <div className="loading">Computing tasks…</div>
+        ) : tasks.length === 0 ? (
+          <div className="empty">No pending tasks for recent admissions.</div>
+        ) : (
+          tasks.map((t) => (
+            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+              <span className={`badge ${t.tone}`}>{t.type}</span>
+              <strong style={{ fontSize: 13.5 }}>{t.patient}</strong>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.location}</span>
+              <span style={{ fontSize: 13 }}>{t.detail}</span>
+            </div>
+          ))
+        )}
+        {!loadingTasks && tasks.length > 0 && (
+          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 8 }}>
+            Based on the 10 most recent admissions.
+          </div>
+        )}
+      </div>
+
+      <h2 style={{ fontSize: 16, fontWeight: 700, margin: '4px 0 12px' }}>Quick Patient Grid</h2>
+      {admissions.length === 0 ? (
+        <div className="empty">No admitted patients.</div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 12 }}>
+          {admissions.map((a) => {
+            const lastIso = latestVitalMap[a.id];
+            const nextVitals = lastIso
+              ? formatDateTime(new Date(new Date(lastIso).getTime() + 8 * 3600000))
+              : 'Check now';
+            return (
+              <div key={a.id} className="card" style={{ boxShadow: 'none', marginBottom: 0 }}>
+                <strong style={{ fontSize: 14 }}>{patientName(a.patient)}</strong>
+                <div style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'grid', gap: 2, marginTop: 6 }}>
+                  <span>Bed: {a.bedAllocations?.[0]?.bed?.bedNumber || '—'}</span>
+                  <span>Ward: {wardOf(a)}</span>
+                  <span>Next vitals: {nextVitals}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderVitalsChart = () => {
+    const chartData = [...vitals].slice(0, 5).reverse();
+    if (chartData.length === 0) return null;
+    const maxPulse = Math.max(120, ...chartData.map((v) => Number(v.pulse) || 0));
     return (
-      <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>Record Vitals</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
-          {[
-            { key: 'temperature', label: 'Temp (°F)', step: '0.1' },
-            { key: 'pulse', label: 'Pulse', step: '1' },
-            { key: 'respiratoryRate', label: 'Resp Rate', step: '1' },
-            { key: 'bloodPressureSystolic', label: 'BP Systolic', step: '1' },
-            { key: 'bloodPressureDiastolic', label: 'BP Diastolic', step: '1' },
-            { key: 'oxygenSaturation', label: 'SpO2 (%)', step: '0.1' },
-            { key: 'weight', label: 'Weight (kg)', step: '0.1' },
-            { key: 'painScore', label: 'Pain (0-10)', step: '1' },
-            { key: 'bloodGlucose', label: 'Glucose', step: '0.1' },
-          ].map(({ key, label, step }) => (
-            <div key={key}>
-              <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>{label}</label>
-              <input className="input" type="number" step={step} value={(form as any)[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} style={{ width: '100%' }} />
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title">Heart Rate Trend (last 5 readings)</div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 150 }}>
+          {chartData.map((v) => {
+            const p = Number(v.pulse) || 0;
+            const pct = p > 0 ? Math.round((p / maxPulse) * 100) : 2;
+            const color = p > 100 ? 'var(--danger)' : p > 0 && p < 60 ? 'var(--warning)' : 'var(--primary)';
+            return (
+              <div key={v.id} style={{ flex: 1, height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>{p || '—'}</span>
+                <div style={{ width: '65%', height: `${pct}%`, background: color, borderRadius: '4px 4px 0 0', minHeight: 3 }} />
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                  {v.recordedAt ? new Date(v.recordedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : ''}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderVitals = () => (
+    <div>
+      <div className="toolbar">
+        <select className="input" style={{ maxWidth: 320 }} value={patientId} onChange={(e) => setPatientId(e.target.value)}>
+          <option value="">Choose patient...</option>
+          {patients.map((p: any) => (
+            <option key={p.id} value={p.id}>{patientName(p)} ({p.mrn})</option>
+          ))}
+        </select>
+      </div>
+
+      {patientId && renderVitalsChart()}
+      {loadingVitals && <div className="loading">Loading vitals...</div>}
+      {vitals.length > 0 && (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>BP</th>
+                <th>Temp</th>
+                <th>Pulse</th>
+                <th>Resp</th>
+                <th>SpO2</th>
+                <th>Weight</th>
+                <th>Pain</th>
+                <th>Glucose</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vitals.slice(0, 10).map((v: any) => (
+                <tr key={v.id}>
+                  <td style={{ fontSize: 12 }}>{formatDateTime(v.recordedAt)}</td>
+                  <td>{v.bloodPressureSystolic && v.bloodPressureDiastolic ? `${v.bloodPressureSystolic}/${v.bloodPressureDiastolic}` : '—'}</td>
+                  <td>{v.temperature ?? '—'}</td>
+                  <td>{v.pulse ?? '—'}</td>
+                  <td>{v.respiratoryRate ?? '—'}</td>
+                  <td>{v.oxygenSaturation != null ? `${v.oxygenSaturation}%` : '—'}</td>
+                  <td>{v.weight ? `${v.weight} kg` : '—'}</td>
+                  <td>{v.painScore ?? '—'}</td>
+                  <td>{v.bloodGlucose ?? '—'}</td>
+                  <td style={{ fontSize: 12, maxWidth: 150 }}>{v.notes || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {!loadingVitals && patientId && vitals.length === 0 && (
+        <div className="empty">No vital records found for this patient.</div>
+      )}
+    </div>
+  );
+
+  const renderNotes = () => (
+    <div>
+      <div className="toolbar">
+        <select className="input" style={{ maxWidth: 340 }} value={notesAdmissionId} onChange={(e) => setNotesAdmissionId(e.target.value)}>
+          <option value="">Choose admission...</option>
+          {admissions.map((a: any) => (
+            <option key={a.id} value={a.id}>{a.admissionNumber} — {patientName(a.patient)}</option>
+          ))}
+        </select>
+      </div>
+
+      {loadingNotes && <div className="loading">Loading notes...</div>}
+      {notes.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {notes.map((n: any) => (
+            <div key={n.id} className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontWeight: 600, fontSize: 13 }}>Nursing Note</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{formatDateTime(n.createdAt)}</span>
+              </div>
+              <div style={{ fontSize: 13, marginBottom: 4 }}>{n.note}</div>
+              {n.assessment && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}><strong>Assessment:</strong> {n.assessment}</div>}
+              {n.plan && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}><strong>Plan:</strong> {n.plan}</div>}
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 12 }}>
-          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Notes</label>
-          <input className="input" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} style={{ width: '100%' }} placeholder="Optional notes" />
-        </div>
-        <button className="btn" style={{ marginTop: 12, background: 'var(--primary)', color: '#fff' }} onClick={submit}>Record</button>
-      </div>
-    );
-  };
+      )}
+      {!loadingNotes && notesAdmissionId && notes.length === 0 && (
+        <div className="empty">No nursing notes for this admission.</div>
+      )}
+      {!notesAdmissionId && <div className="empty">Select an admission to view and add nursing notes.</div>}
+    </div>
+  );
 
-  const NoteForm = () => {
-    const [form, setForm] = useState({ note: '', assessment: '', plan: '' });
-    const submit = () => {
-      if (!form.note.trim()) return;
-      addNote(form);
-      setForm({ note: '', assessment: '', plan: '' });
+  const renderMedAdmin = () => {
+    const dayStartMins = 0;
+    const trackPct = (iso?: string) => {
+      if (!iso) return null;
+      const d = new Date(iso);
+      const mins = d.getHours() * 60 + d.getMinutes();
+      return Math.min(98, Math.max(dayStartMins, (mins / 1440) * 100));
+    };
+    const groupColor: Record<string, string> = {
+      DUE: 'var(--warning)',
+      GIVEN: 'var(--success)',
+      SKIPPED: 'var(--danger)',
     };
     return (
-      <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>Add Nursing Note</div>
-        <div style={{ marginBottom: 8 }}>
-          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Note *</label>
-          <textarea className="input" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={{ width: '100%', minHeight: 60 }} placeholder="Nursing note..." />
+      <div>
+        <div className="toolbar">
+          <select className="input" style={{ maxWidth: 340 }} value={marAdmissionId} onChange={(e) => setMarAdmissionId(e.target.value)}>
+            <option value="">Choose admission...</option>
+            {admissions.map((a: any) => (
+              <option key={a.id} value={a.id}>{a.admissionNumber} — {patientName(a.patient)}</option>
+            ))}
+          </select>
         </div>
-        <div style={{ marginBottom: 8 }}>
-          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Assessment</label>
-          <textarea className="input" value={form.assessment} onChange={(e) => setForm({ ...form, assessment: e.target.value })} style={{ width: '100%', minHeight: 40 }} placeholder="Assessment..." />
-        </div>
-        <div style={{ marginBottom: 8 }}>
-          <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Plan</label>
-          <textarea className="input" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} style={{ width: '100%', minHeight: 40 }} placeholder="Plan..." />
-        </div>
-        <button className="btn" style={{ background: 'var(--primary)', color: '#fff' }} onClick={submit}>Add Note</button>
-      </div>
-    );
-  };
 
-  const statusColors: Record<string, string> = {
-    SCHEDULED: 'var(--info)', DUE: 'var(--warning)', GIVEN: 'var(--success)',
-    MISSED: 'var(--danger)', HELD: 'var(--muted)', REFUSED: 'var(--danger)',
-  };
+        {loadingMeds && <div className="loading">Loading medications...</div>}
 
-  const renderContent = () => {
-    if (activeTab === 'summary') {
-      return (
-        <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Nursing Dashboard</h2>
-          {loadingSummary && <div className="loading">Loading...</div>}
-          {summary && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16 }}>
-              <div className="card" style={{ padding: 16, textAlign: 'center' }}>
-                <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--primary)' }}>{summary.activeAdmissions}</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Active Admissions</div>
+        {!loadingMeds && marAdmissionId && meds.length === 0 && (
+          <div className="empty">No medications scheduled for this admission.</div>
+        )}
+
+        {meds.length > 0 && (
+          <>
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div className="card-title">Medication Timeline (24h)</div>
+              {meds.map((m: any) => {
+                const grp = medStatusGroup(m);
+                const left = trackPct(m.scheduledTime);
+                return (
+                  <div key={`tl-${m.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                    <span style={{ width: 170, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {m.medicineName} {m.dose}
+                    </span>
+                    <div style={{ flex: 1, position: 'relative', height: 14, background: '#f1f5f9', borderRadius: 7 }}>
+                      {left != null && (
+                        <div
+                          title={`${formatDateTime(m.scheduledTime)} · ${grp}`}
+                          style={{
+                            position: 'absolute',
+                            left: `${left}%`,
+                            top: 0,
+                            bottom: 0,
+                            width: '5%',
+                            minWidth: 10,
+                            background: groupColor[grp],
+                            borderRadius: 7,
+                          }}
+                        />
+                      )}
+                    </div>
+                    <span style={{ width: 46, textAlign: 'right', fontSize: 11, color: 'var(--text-muted)' }}>
+                      {m.scheduledTime ? new Date(m.scheduledTime).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : ''}
+                    </span>
+                  </div>
+                );
+              })}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)', paddingLeft: 180, paddingRight: 56 }}>
+                <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
               </div>
             </div>
-          )}
-          <div style={{ marginTop: 24 }}>
-            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Select a patient from the Vitals tab to record vital signs, or an admission from Notes/MAR tabs to manage nursing notes and medications.</p>
-          </div>
-        </div>
-      );
-    }
 
-    if (activeTab === 'vitals') {
-      return (
-        <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Vital Signs</h2>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Select Patient</label>
-            <select className="input" value={patientId} onChange={(e) => setPatientId(e.target.value)} style={{ minWidth: 250 }}>
-              <option value="">Choose patient...</option>
-              {patients.map((p: any) => <option key={p.id} value={p.id}>{[p.firstName, p.lastName].filter(Boolean).join(' ')} ({p.mrn})</option>)}
-            </select>
-          </div>
-
-          {patientId && <VitalForm />}
-
-          {loadingVitals && <div className="loading">Loading vitals...</div>}
-          {vitals.length > 0 && (
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>BP</th>
-                    <th>Temp</th>
-                    <th>Pulse</th>
-                    <th>Resp</th>
-                    <th>SpO2</th>
-                    <th>Weight</th>
-                    <th>Pain</th>
-                    <th>Glucose</th>
-                    <th>Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {vitals.map((v: any) => (
-                    <tr key={v.id}>
-                      <td style={{ fontSize: 12 }}>{formatDateTime(v.recordedAt)}</td>
-                      <td>{v.bloodPressureSystolic && v.bloodPressureDiastolic ? `${v.bloodPressureSystolic}/${v.bloodPressureDiastolic}` : '—'}</td>
-                      <td>{v.temperature ?? '—'}</td>
-                      <td>{v.pulse ?? '—'}</td>
-                      <td>{v.respiratoryRate ?? '—'}</td>
-                      <td>{v.oxygenSaturation != null ? `${v.oxygenSaturation}%` : '—'}</td>
-                      <td>{v.weight ? `${v.weight} kg` : '—'}</td>
-                      <td>{v.painScore ?? '—'}</td>
-                      <td>{v.bloodGlucose ?? '—'}</td>
-                      <td style={{ fontSize: 12, maxWidth: 150 }}>{v.notes || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {!loadingVitals && patientId && vitals.length === 0 && (
-            <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>No vital records found for this patient.</div>
-          )}
-        </div>
-      );
-    }
-
-    if (activeTab === 'notes') {
-      return (
-        <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Nursing Notes</h2>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Select Admission</label>
-            <select className="input" value={admissionId} onChange={(e) => setAdmissionId(e.target.value)} style={{ minWidth: 300 }}>
-              <option value="">Choose admission...</option>
-              {admissions.map((a: any) => <option key={a.id} value={a.id}>{a.admissionNumber} — {a.patient?.firstName} {a.patient?.lastName}</option>)}
-            </select>
-          </div>
-
-          {admissionId && <NoteForm />}
-
-          {loadingNotes && <div className="loading">Loading notes...</div>}
-          {notes.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {notes.map((n: any) => (
-                <div key={n.id} className="card" style={{ padding: 16 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontWeight: 600, fontSize: 13 }}>Nursing Note</span>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{formatDateTime(n.createdAt)}</span>
-                  </div>
-                  <div style={{ fontSize: 13, marginBottom: 4 }}>{n.note}</div>
-                  {n.assessment && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}><strong>Assessment:</strong> {n.assessment}</div>}
-                  {n.plan && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}><strong>Plan:</strong> {n.plan}</div>}
-                </div>
-              ))}
-            </div>
-          )}
-          {!loadingNotes && admissionId && notes.length === 0 && (
-            <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>No nursing notes for this admission.</div>
-          )}
-        </div>
-      );
-    }
-
-    if (activeTab === 'mar') {
-      return (
-        <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Medication Administration Record</h2>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Select Admission</label>
-            <select className="input" value={admissionId} onChange={(e) => setAdmissionId(e.target.value)} style={{ minWidth: 300 }}>
-              <option value="">Choose admission...</option>
-              {admissions.map((a: any) => <option key={a.id} value={a.id}>{a.admissionNumber} — {a.patient?.firstName} {a.patient?.lastName}</option>)}
-            </select>
-          </div>
-
-          {loadingMeds && <div className="loading">Loading medications...</div>}
-          {meds.length > 0 && (
             <div className="table-wrap">
               <table className="table">
                 <thead>
                   <tr>
                     <th>Medicine</th>
-                    <th>Dose</th>
+                    <th>Dosage</th>
                     <th>Route</th>
-                    <th>Scheduled</th>
-                    <th>Given</th>
+                    <th>Scheduled Time</th>
                     <th>Status</th>
-                    <th>Action</th>
+                    <th style={{ width: 1 }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {meds.map((m: any) => (
-                    <tr key={m.id}>
-                      <td style={{ fontWeight: 600 }}>{m.medicineName}</td>
-                      <td>{m.dose}</td>
-                      <td>{m.route || '—'}</td>
-                      <td style={{ fontSize: 12 }}>{formatDateTime(m.scheduledTime)}</td>
-                      <td style={{ fontSize: 12 }}>{m.givenTime ? formatDateTime(m.givenTime) : '—'}</td>
-                      <td>
-                        <span className="badge" style={{ background: statusColors[m.status] || 'var(--muted)', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>{m.status}</span>
-                      </td>
-                      <td>
-                        {m.status !== 'GIVEN' && m.status !== 'MISSED' && m.status !== 'REFUSED' && (
-                          <button className="btn btn-sm btn-ghost" style={{ color: 'var(--success)' }} onClick={() => administerMed(m.id)}>Give</button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {[...meds]
+                    .sort((a, b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime())
+                    .map((m: any) => {
+                      const grp = medStatusGroup(m);
+                      return (
+                        <tr key={m.id}>
+                          <td style={{ fontWeight: 600 }}>{m.medicineName}</td>
+                          <td>{m.dose}</td>
+                          <td>{m.route || '—'}</td>
+                          <td style={{ fontSize: 12 }}>{formatDateTime(m.scheduledTime)}</td>
+                          <td>
+                            <span className="badge" style={{ background: groupColor[grp], color: grp === 'DUE' ? '#92400e' : undefined }}>
+                              {grp}
+                            </span>
+                            {grp !== 'GIVEN' && m.givenTime && (
+                              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>given {formatDateTime(m.givenTime)}</span>
+                            )}
+                          </td>
+                          <td>
+                            {grp === 'DUE' && (
+                              <button className="btn btn-sm" onClick={() => administerMed(m.id)}>Give</button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {!marAdmissionId && !loadingMeds && <div className="empty">Select an admitted patient to view their medication schedule.</div>}
+      </div>
+    );
+  };
+
+  const renderHandover = () => {
+    const previous = [...handovers].reverse();
+    return (
+      <div>
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-title">Create Shift Handover</div>
+          {handoverSavedMsg && <div className="alert alert-success">{handoverSavedMsg}</div>}
+          <div className="form-grid">
+            <div className="field">
+              <label className="label">Ward *</label>
+              <select className="input" value={handoverWardId} onChange={(e) => setHandoverWardId(e.target.value)}>
+                <option value="">-- Select ward --</option>
+                {wards.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label className="label">Ward Name (auto)</label>
+              <input className="input" readOnly value={wards.find((w) => w.id === handoverWardId)?.name || ''} placeholder="Select a ward" />
+            </div>
+            <div className="field">
+              <label className="label">Shift Date *</label>
+              <input className="input" type="date" value={shiftDate} onChange={(e) => setShiftDate(e.target.value)} />
+            </div>
+            <div className="field field-full">
+              <label className="label">Handover Notes</label>
+              <textarea
+                className="textarea"
+                value={handoverNotes}
+                onChange={(e) => setHandoverNotes(e.target.value)}
+                placeholder="Critical events, pending investigations, watch points for the incoming shift..."
+                style={{ minHeight: 90 }}
+              />
+            </div>
+          </div>
+          <div className="form-actions">
+            <button className="btn" disabled={!handoverWardId} onClick={saveHandover}>Save Handover</button>
+          </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-title">Patient Summary — {wards.find((w) => w.id === handoverWardId)?.name || 'Select a ward'}</div>
+          {!handoverWardId ? (
+            <div className="empty">Select a ward to see its patients.</div>
+          ) : handoverPatients.length === 0 ? (
+            <div className="empty">No admitted patients in this ward.</div>
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Bed</th>
+                    <th>Diagnosis</th>
+                    <th>Key Concerns</th>
+                    <th>Pending Tasks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {handoverPatients.map((a) => {
+                    const diagnosis =
+                      a.provisionalDiagnosis || a.primaryDiagnosis || a.finalDiagnosis || '—';
+                    const concern =
+                      String(a.admissionType).toUpperCase() === 'EMERGENCY'
+                        ? 'Emergency admission'
+                        : String(a.admissionType).toUpperCase() === 'TRANSFER'
+                          ? 'Recent transfer'
+                          : 'None flagged';
+                    const pt = tasks.filter((t) => t.admissionId === a.id);
+                    return (
+                      <tr key={a.id}>
+                        <td style={{ fontWeight: 600 }}>{patientName(a.patient)}</td>
+                        <td>{a.bedAllocations?.[0]?.bed?.bedNumber || '—'}</td>
+                        <td style={{ fontSize: 13 }}>{diagnosis}</td>
+                        <td style={{ fontSize: 13 }}>{concern}</td>
+                        <td style={{ fontSize: 13 }}>{pt.length ? `${pt.length} pending` : 'None'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
-          {!loadingMeds && admissionId && meds.length === 0 && (
-            <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>No medications scheduled for this admission.</div>
+        </div>
+
+        <div className="card">
+          <div className="card-title">Previous Handovers</div>
+          {previous.length === 0 ? (
+            <div className="empty">No saved handovers yet.</div>
+          ) : (
+            previous.map((h: any) => (
+              <div key={h.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
+                  <span className="badge badge-blue">{h.wardName || h.wardId}</span>
+                  <strong style={{ fontSize: 13 }}>{h.shiftDate}</strong>
+                  <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>saved {formatDateTime(h.savedAt)}</span>
+                </div>
+                <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{h.notes || '—'}</div>
+              </div>
+            ))
           )}
         </div>
-      );
-    }
-
-    return null;
+      </div>
+    );
   };
 
-  return (
-    <div style={{ padding: '0 0 24px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Nursing</h1>
-          <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 13 }}>Vitals, nursing notes, and medication administration</p>
+  const renderTracking = () => (
+    <div>
+      <div className="toolbar">
+        <select className="input" style={{ maxWidth: 220 }} value={sortBy} onChange={(e) => setSortBy(e.target.value as 'ward' | 'date')}>
+          <option value="ward">Sort by ward</option>
+          <option value="date">Sort by admission date</option>
+        </select>
+        <span style={{ display: 'flex', gap: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+          <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--danger)', borderRadius: 2, marginRight: 5 }} />ICU</span>
+          <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--warning)', borderRadius: 2, marginRight: 5 }} />First 3 days</span>
+          <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--success)', borderRadius: 2, marginRight: 5 }} />Stable</span>
+        </span>
+      </div>
+
+      {trackedPatients.length === 0 ? (
+        <div className="empty">No admitted patients to track.</div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+          {trackedPatients.map((a) => {
+            const u = urgencyOf(a);
+            const days = daysAdmitted(a);
+            return (
+              <div
+                key={a.id}
+                className="card"
+                style={{ boxShadow: 'none', marginBottom: 0, borderLeft: `4px solid ${u.color}`, background: u.bg }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <strong style={{ fontSize: 14.5 }}>{patientName(a.patient)}</strong>
+                  <span className={`badge ${statusBadgeTone(a.status)}`}>{String(a.status).replace(/_/g, ' ')}</span>
+                </div>
+                <div style={{ fontSize: 12.5, display: 'grid', gap: 3 }}>
+                  <span>Bed/Ward: {a.bedAllocations?.[0]?.bed?.bedNumber || '—'} / {wardOf(a)}</span>
+                  <span>Admitted: {formatDate(a.admissionDate)}</span>
+                  <span>Days admitted: {days}</span>
+                  <span>Doctor: {doctorName(a.admittingDoctorId)}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {tabBtn('summary', 'Dashboard')}
-          {tabBtn('vitals', 'Vitals')}
-          {tabBtn('notes', 'Notes')}
-          {tabBtn('mar', 'MAR')}
+      )}
+    </div>
+  );
+
+  return (
+    <AppShell>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Nursing</h1>
+          <p className="page-subtitle">Census, vitals, notes, medication administration and shift handover</p>
         </div>
       </div>
-      {renderContent()}
-    </div>
+
+      <div className="tabs" role="tablist">
+        {TABS.map((t) => (
+          <button key={t.key} className={`tab ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'summary' && renderSummary()}
+      {tab === 'vitals' && renderVitals()}
+      {tab === 'notes' && renderNotes()}
+      {tab === 'medadmin' && renderMedAdmin()}
+      {tab === 'handover' && renderHandover()}
+      {tab === 'tracking' && renderTracking()}
+    </AppShell>
   );
 }

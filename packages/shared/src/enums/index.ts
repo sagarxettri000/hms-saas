@@ -98,6 +98,20 @@ export enum BedStatus {
   BLOCKED = 'BLOCKED',
 }
 
+export enum BedType {
+  GENERAL = 'GENERAL',
+  SEMI_PRIVATE = 'SEMI_PRIVATE',
+  PRIVATE = 'PRIVATE',
+  DELUXE = 'DELUXE',
+  ICU = 'ICU',
+  NICU = 'NICU',
+  EMERGENCY = 'EMERGENCY',
+  MATERNITY = 'MATERNITY',
+  PEDIATRIC = 'PEDIATRIC',
+  ISOLATION = 'ISOLATION',
+  SURGICAL = 'SURGICAL',
+}
+
 export enum AdmissionStatus {
   PENDING = 'PENDING',
   ADMITTED = 'ADMITTED',

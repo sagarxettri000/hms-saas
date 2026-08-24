@@ -83,7 +83,7 @@ async function cleanup() {
     await prisma.$transaction([
       prisma.session.deleteMany({ where: { userId: { in: demoUserIds } } }),
       prisma.auditLog.deleteMany({ where: { userId: { in: demoUserIds } } }),
-      prisma.availabilitySlot.deleteMany({ where: { doctorId: { contains: 'demo' } } }),
+      prisma.availabilitySlot.deleteMany({ where: { doctorId: { in: demoUserIds } } }),
     ]);
   }
 
@@ -101,6 +101,7 @@ async function cleanup() {
   await prisma.store.deleteMany();
   await prisma.medicine.deleteMany();
   await prisma.labTest.deleteMany();
+  await prisma.bedMaintenance.deleteMany();
   await prisma.bedMovement.deleteMany();
   await prisma.bedAllocation.deleteMany();
   await prisma.bed.deleteMany();
@@ -497,6 +498,21 @@ async function seedDoctors(tenantId: string, departments: Record<string, string>
         doctors[d.firstName] = profile.id;
         continue;
       }
+      await prisma.doctorProfile.create({
+        data: {
+          tenantId,
+          userId: existing.id,
+          departmentId: departments[d.dept],
+          specialization: d.specialization,
+          qualification: 'MD, MBBS',
+          licenseNumber: `NMC-${1000 + i}`,
+          consultationFee: d.fee,
+          experienceYears: d.exp,
+        },
+      });
+      const prof = await prisma.doctorProfile.findUnique({ where: { userId: existing.id } });
+      if (prof) doctors[d.firstName] = prof.id;
+      continue;
     }
 
     const passwordHash = await bcrypt.hash('Doctor@123', 12);
@@ -602,14 +618,14 @@ async function seedStaff(tenantId: string, departments: Record<string, string>) 
 
 async function seedBeds(tenantId: string, departments: Record<string, string>) {
   const wardConfig = [
-    { name: 'General Medicine Ward', dept: 'General Medicine', rooms: 4, bedsPerRoom: 4, rate: 1000 },
-    { name: 'General Surgery Ward', dept: 'General Surgery', rooms: 4, bedsPerRoom: 4, rate: 1000 },
-    { name: 'Pediatrics Ward', dept: 'Pediatrics', rooms: 3, bedsPerRoom: 4, rate: 800 },
-    { name: 'Gynecology Ward', dept: 'Gynecology', rooms: 3, bedsPerRoom: 4, rate: 900 },
-    { name: 'Orthopedics Ward', dept: 'Orthopedics', rooms: 3, bedsPerRoom: 4, rate: 1000 },
-    { name: 'ICU', dept: 'ICU', rooms: 1, bedsPerRoom: 8, rate: 5000 },
-    { name: 'NICU', dept: 'NICU', rooms: 1, bedsPerRoom: 6, rate: 4500 },
-    { name: 'Emergency Ward', dept: 'Emergency', rooms: 2, bedsPerRoom: 4, rate: 1200 },
+    { name: 'General Medicine Ward', dept: 'General Medicine', rooms: 4, bedsPerRoom: 4, rate: 1000, floor: 1, bedType: 'GENERAL' as const },
+    { name: 'General Surgery Ward', dept: 'General Surgery', rooms: 4, bedsPerRoom: 4, rate: 1000, floor: 2, bedType: 'SURGICAL' as const },
+    { name: 'Pediatrics Ward', dept: 'Pediatrics', rooms: 3, bedsPerRoom: 4, rate: 800, floor: 3, bedType: 'PEDIATRIC' as const },
+    { name: 'Gynecology Ward', dept: 'Gynecology', rooms: 3, bedsPerRoom: 4, rate: 900, floor: 3, bedType: 'MATERNITY' as const },
+    { name: 'Orthopedics Ward', dept: 'Orthopedics', rooms: 3, bedsPerRoom: 4, rate: 1000, floor: 4, bedType: 'GENERAL' as const },
+    { name: 'ICU', dept: 'ICU', rooms: 1, bedsPerRoom: 8, rate: 5000, floor: 5, bedType: 'ICU' as const },
+    { name: 'NICU', dept: 'NICU', rooms: 1, bedsPerRoom: 6, rate: 4500, floor: 5, bedType: 'NICU' as const },
+    { name: 'Emergency Ward', dept: 'Emergency', rooms: 2, bedsPerRoom: 4, rate: 1200, floor: 0, bedType: 'EMERGENCY' as const },
   ];
 
   for (const wc of wardConfig) {
@@ -619,6 +635,8 @@ async function seedBeds(tenantId: string, departments: Record<string, string>) {
         departmentId: departments[wc.dept],
         name: wc.name,
         code: wc.name.toUpperCase().replace(/[^A-Z0-9]/g, '_'),
+        floor: wc.floor,
+        capacity: wc.rooms * wc.bedsPerRoom,
       },
     });
 
@@ -642,6 +660,7 @@ async function seedBeds(tenantId: string, departments: Record<string, string>) {
             wardId: ward.id,
             roomId: room.id,
             bedNumber: `B-${r}${String(b).padStart(2, '0')}`,
+            bedType: wc.bedType,
             ratePerDay: wc.rate,
             status: 'AVAILABLE',
           },

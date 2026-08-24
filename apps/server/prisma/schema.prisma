@@ -759,11 +759,11 @@ model BedAllocation {
   status      BedStatus     @default(OCCUPIED)
   createdBy   String?
   createdAt   DateTime      @default(now())
+  updatedAt   DateTime?     @updatedAt
 
   @@index([tenantId, bedId])
   @@index([tenantId, admissionId])
   @@map("bed_allocations")
-  updatedAt    DateTime?    @updatedAt
 }
 
 model BedMovement {
@@ -780,10 +780,10 @@ model BedMovement {
   reason       String?
   movedBy      String?
   movedAt      DateTime   @default(now())
+  createdAt    DateTime   @default(now())
 
   @@index([tenantId, admissionId])
   @@map("bed_movements")
-  createdAt    DateTime     @default(now())
 }
 
 model BedMaintenance {

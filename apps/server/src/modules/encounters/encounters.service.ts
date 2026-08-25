@@ -262,6 +262,63 @@ export class EncountersService {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
+    const patientSelect = {
+      id: true,
+      firstName: true,
+      middleName: true,
+      lastName: true,
+      mrn: true,
+      mobile: true,
+      gender: true,
+    };
+    const doctorInclude = {
+      include: { user: { select: { firstName: true, lastName: true } } },
+    };
+
+    const term = params.search?.trim();
+
+    if (term) {
+      const patientWhere: any = {
+        tenantId,
+        OR: [
+          { firstName: { contains: term, mode: "insensitive" } },
+          { middleName: { contains: term, mode: "insensitive" } },
+          { lastName: { contains: term, mode: "insensitive" } },
+          { mrn: { contains: term, mode: "insensitive" } },
+          { mobile: { contains: term, mode: "insensitive" } },
+        ],
+      };
+      const patients = await this.prisma.patient.findMany({
+        where: patientWhere,
+        select: { id: true },
+        take: limit,
+      });
+      const patientIds = patients.map((p) => p.id);
+      if (patientIds.length === 0) return [];
+
+      const encounterWhere: any = {
+        tenantId,
+        patientId: { in: patientIds },
+      };
+      if (params.status === "upcoming") {
+        encounterWhere.followUpDate = { gte: tomorrow };
+      } else if (params.status === "today") {
+        encounterWhere.followUpDate = { gte: today, lt: tomorrow };
+      } else if (params.status === "overdue") {
+        encounterWhere.followUpDate = { lt: today };
+      }
+
+      return this.prisma.encounter.findMany({
+        where: encounterWhere,
+        include: {
+          patient: { select: patientSelect },
+          doctor: doctorInclude,
+        },
+        orderBy: { followUpDate: "asc" },
+        take: limit,
+      });
+    }
+
     const where: any = { tenantId, followUpDate: { not: null } };
     if (params.doctorId) where.doctorId = params.doctorId;
     if (params.status === "upcoming") {
@@ -271,35 +328,12 @@ export class EncountersService {
     } else if (params.status === "overdue") {
       where.followUpDate = { lt: today };
     }
-    if (params.search?.trim()) {
-      const term = params.search.trim();
-      where.patient = {
-        is: {
-          OR: [
-            { firstName: { contains: term, mode: "insensitive" } },
-            { middleName: { contains: term, mode: "insensitive" } },
-            { lastName: { contains: term, mode: "insensitive" } },
-            { mrn: { contains: term, mode: "insensitive" } },
-          ],
-        },
-      };
-    }
 
     return this.prisma.encounter.findMany({
       where,
       include: {
-        patient: {
-          select: {
-            id: true,
-            firstName: true,
-            middleName: true,
-            lastName: true,
-            mrn: true,
-          },
-        },
-        doctor: {
-          include: { user: { select: { firstName: true, lastName: true } } },
-        },
+        patient: { select: patientSelect },
+        doctor: doctorInclude,
       },
       orderBy: { followUpDate: "asc" },
       take: limit,

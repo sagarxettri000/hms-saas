@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import AppShell from '@/components/AppShell';
+import AsyncSearchSelect from '@/components/AsyncSearchSelect';
 import { badgeTone, formatDate } from '@/lib/hooks';
 import type { ApiResponse, Row } from '@/lib/types';
 
@@ -21,6 +22,16 @@ export default function FollowUpsPage() {
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [flash, setFlash] = useState<string | null>(null);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [schedulePatientId, setSchedulePatientId] = useState('');
+  const [patientEncounters, setPatientEncounters] = useState<Row[]>([]);
+  const [loadingEncounters, setLoadingEncounters] = useState(false);
+  const [selectedEncounterId, setSelectedEncounterId] = useState('');
+  const [followUpDate, setFollowUpDate] = useState('');
+  const [followUpNotes, setFollowUpNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const patientName = (r: Row) =>
     [r.patient?.firstName, r.patient?.middleName, r.patient?.lastName]
@@ -38,7 +49,7 @@ export default function FollowUpsPage() {
       return { label: r.status === 'CANCELLED' ? 'Cancelled' : 'Completed', tone: 'secondary' };
     }
     const raw = r.followUpDate ? new Date(r.followUpDate) : null;
-    if (!raw || isNaN(raw.getTime())) return { label: 'Unscheduled', tone: 'secondary' };
+    if (!raw || isNaN(raw.getTime())) return { label: 'Not scheduled', tone: 'secondary' };
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const date = new Date(raw);
@@ -71,9 +82,13 @@ export default function FollowUpsPage() {
   }, [load]);
 
   useEffect(() => {
-    if (!search) return;
-    const id = setTimeout(load, 350);
-    return () => clearTimeout(id);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!search) {
+      load();
+      return;
+    }
+    debounceRef.current = setTimeout(() => { load(); }, 350);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [search, load]);
 
   useEffect(() => {
@@ -82,16 +97,94 @@ export default function FollowUpsPage() {
     return () => clearTimeout(t);
   }, [flash]);
 
+  useEffect(() => {
+    if (!schedulePatientId) {
+      setPatientEncounters([]);
+      setSelectedEncounterId('');
+      return;
+    }
+    let active = true;
+    setLoadingEncounters(true);
+    (async () => {
+      try {
+        const res: ApiResponse<any> = await api(`/encounters?patientId=${schedulePatientId}&limit=50`);
+        const payload = res.data as any;
+        const list: Row[] = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+        if (active) setPatientEncounters(list);
+      } catch {
+        if (active) setPatientEncounters([]);
+      } finally {
+        if (active) setLoadingEncounters(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [schedulePatientId]);
+
+  function openSchedule() {
+    setSchedulePatientId('');
+    setPatientEncounters([]);
+    setSelectedEncounterId('');
+    setFollowUpDate('');
+    setFollowUpNotes('');
+    setScheduleError(null);
+    setShowSchedule(true);
+  }
+
+  async function saveSchedule(e: React.FormEvent) {
+    e.preventDefault();
+    if (!schedulePatientId) {
+      setScheduleError('Search and select a patient.');
+      return;
+    }
+    if (!followUpDate) {
+      setScheduleError('Follow-up date is required.');
+      return;
+    }
+    setSaving(true);
+    setScheduleError(null);
+    try {
+      if (selectedEncounterId) {
+        await api(`/encounters/${selectedEncounterId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            followUpDate: new Date(followUpDate).toISOString(),
+            followUpNotes,
+          }),
+        });
+      } else {
+        await api('/encounters', {
+          method: 'POST',
+          body: JSON.stringify({
+            patientId: schedulePatientId,
+            type: 'FOLLOWUP',
+            followUpDate: new Date(followUpDate).toISOString(),
+            followUpNotes,
+          }),
+        });
+      }
+      setShowSchedule(false);
+      setFlash('Follow-up scheduled successfully');
+      load();
+    } catch (err) {
+      setScheduleError(err instanceof Error ? err.message : 'Failed to schedule follow-up');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <AppShell>
       <div className="page-header">
         <div>
           <h1 className="page-title">Follow-ups</h1>
-          <p className="page-subtitle">All scheduled patient follow-ups</p>
+          <p className="page-subtitle">Search patients and schedule follow-ups</p>
         </div>
-        <button className="btn btn-secondary" onClick={() => router.push('/patients')}>
-          Back to patients
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn" onClick={openSchedule}>+ Schedule follow-up</button>
+          <button className="btn btn-secondary" onClick={() => router.push('/patients')}>
+            Back to patients
+          </button>
+        </div>
       </div>
 
       <div className="tabs" role="tablist">
@@ -106,12 +199,12 @@ export default function FollowUpsPage() {
         ))}
       </div>
 
-      {flash && <div className="alert alert-error">{flash}</div>}
+      {flash && <div className="alert alert-success">{flash}</div>}
 
       <div className="toolbar">
         <input
           className="input search-input"
-          placeholder="Search patient name or MRN…"
+          placeholder="Search patient name, MRN, or mobile…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -120,7 +213,9 @@ export default function FollowUpsPage() {
       {loading ? (
         <div className="loading">Loading…</div>
       ) : !rows.length ? (
-        <div className="empty">No follow-ups found.</div>
+        <div className="empty">
+          {search ? 'No encounters found for this search. Try a different name or schedule a follow-up.' : 'No follow-ups scheduled yet. Click "+ Schedule follow-up" to get started.'}
+        </div>
       ) : (
         <div className="table-wrap">
           <table className="table">
@@ -146,7 +241,7 @@ export default function FollowUpsPage() {
                     </td>
                     <td className="mono">{r.patient?.mrn || '—'}</td>
                     <td>
-                      <strong>{formatDate(r.followUpDate)}</strong>
+                      {r.followUpDate ? <strong>{formatDate(r.followUpDate)}</strong> : <span className="note">Not set</span>}
                     </td>
                     <td>
                       <span className={`badge badge-${s.tone}`}>{s.label}</span>
@@ -155,7 +250,7 @@ export default function FollowUpsPage() {
                     <td>{r.diagnosis || r.chiefComplaint || '—'}</td>
                     <td>{r.followUpNotes || '—'}</td>
                     <td>
-                      <button className="btn btn-sm btn-ghost" onClick={() => router.push(`/patients/${r.patient?.id}`)}>
+                      <button className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); router.push(`/patients/${r.patient?.id}`); }}>
                         View
                       </button>
                     </td>
@@ -164,6 +259,83 @@ export default function FollowUpsPage() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {showSchedule && (
+        <div className="modal-backdrop" onClick={() => setShowSchedule(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">Schedule follow-up</h3>
+              <button className="modal-close" onClick={() => setShowSchedule(false)} aria-label="Close">×</button>
+            </div>
+            <form onSubmit={saveSchedule}>
+              <div className="form-grid">
+                <div className="field field-full">
+                  <label className="label">Patient *</label>
+                  <AsyncSearchSelect
+                    endpoint="/patients"
+                    valueKey="id"
+                    labelKeys={['firstName', 'lastName', 'mrn']}
+                    value={schedulePatientId}
+                    onChange={setSchedulePatientId}
+                    placeholder="Search patient by name, MRN, or mobile…"
+                    required
+                  />
+                </div>
+                {schedulePatientId && (
+                  <div className="field field-full">
+                    <label className="label">Existing encounter (optional)</label>
+                    {loadingEncounters ? (
+                      <div className="note">Loading encounters…</div>
+                    ) : patientEncounters.length > 0 ? (
+                      <select
+                        className="input"
+                        value={selectedEncounterId}
+                        onChange={(e) => setSelectedEncounterId(e.target.value)}
+                      >
+                        <option value="">— Create new follow-up encounter —</option>
+                        {patientEncounters.map((enc: Row) => (
+                          <option key={enc.id} value={enc.id}>
+                            {formatDate(enc.createdAt)} · {enc.type || 'OPD'} · {enc.diagnosis || enc.chiefComplaint || 'Encounter'}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="note">No existing encounters. A new encounter will be created.</div>
+                    )}
+                  </div>
+                )}
+                <div className="field">
+                  <label className="label">Follow-up date *</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={followUpDate}
+                    onChange={(e) => setFollowUpDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="field field-full">
+                  <label className="label">Notes</label>
+                  <textarea
+                    className="input"
+                    style={{ minHeight: 80 }}
+                    placeholder="What should be reviewed at the next visit?"
+                    value={followUpNotes}
+                    onChange={(e) => setFollowUpNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+              {scheduleError && <div className="alert alert-error" style={{ marginTop: 14 }}>{scheduleError}</div>}
+              <div className="form-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowSchedule(false)}>Cancel</button>
+                <button type="submit" className="btn" disabled={saving}>
+                  {saving ? 'Saving…' : 'Schedule follow-up'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </AppShell>

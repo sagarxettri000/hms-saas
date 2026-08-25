@@ -58,12 +58,11 @@ export default function AsyncSearchSelect({
     let active = true;
     (async () => {
       try {
-        const res: ApiResponse<any> = await api(`${endpoint}?limit=1`);
-        const payload = res.data as any;
-        const list: any[] = Array.isArray(payload) ? payload : payload.data ?? [];
-        const match = list.find((r: any) => r[valueKey] === value);
-        if (match && active) setDisplayLabel(formatLabel(match, labelKeys));
+        const res: ApiResponse<any> = await api(`${endpoint}/${value}`);
+        const item = (res.data as any)?.data ?? res.data;
+        if (item && active) setDisplayLabel(formatLabel(item, labelKeys));
       } catch {
+        setDisplayLabel(String(value));
       }
     })();
     return () => { active = false; };

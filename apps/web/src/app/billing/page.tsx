@@ -266,12 +266,8 @@ function BillingPageInner() {
     }
   }
 
-  async function reprintReceipt(row: Row) {
-    try {
-      await api(`/billing/invoices/${row.id}/reprint`, { method: 'POST' });
-    } catch {
-      // Reprint logging is best-effort; receipt still opens
-    }
+  function reprintReceipt(row: Row) {
+    api(`/billing/invoices/${row.id}/reprint`, { method: 'POST' }).catch(() => {});
     setReceiptTarget(row);
   }
 
@@ -313,12 +309,14 @@ function BillingPageInner() {
               tone: 'secondary',
               onClick: (row) => setReceiptTarget(row),
               condition: (row) => Number(row.paidAmount || 0) > 0,
+              skipReload: true,
             },
             {
               label: 'Reprint',
               tone: 'ghost',
               onClick: (row) => reprintReceipt(row),
               condition: (row) => Number(row.paidAmount || 0) > 0,
+              skipReload: true,
             },
           ],
           fields: [

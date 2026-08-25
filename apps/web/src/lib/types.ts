@@ -53,6 +53,7 @@ export interface Action {
   onClick: (row: Row) => void;
   tone?: 'primary' | 'secondary' | 'danger' | 'ghost';
   condition?: (row: Row) => boolean;
+  skipReload?: boolean;
 }
 
 export type ApiResponse<T = any> = {

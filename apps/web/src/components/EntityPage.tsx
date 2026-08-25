@@ -416,7 +416,7 @@ function CreateModal({
 
   useEffect(() => {
     let active = true;
-    const dynamic = fields.filter((f) => f.optionsFrom);
+    const dynamic = fields.filter((f) => f.optionsFrom && f.type !== 'searchSelect');
     Promise.all(
       dynamic.map(async (f) => {
         const src = f.optionsFrom!;
@@ -452,7 +452,7 @@ function CreateModal({
   const resolvedFields = useMemo(
     () =>
       fields.map((f) =>
-        f.optionsFrom ? { ...f, options: extraOptions[f.name] || [] } : f,
+        f.optionsFrom && f.type !== 'searchSelect' ? { ...f, options: extraOptions[f.name] || [] } : f,
       ),
     [fields, extraOptions],
   );
@@ -600,7 +600,7 @@ function EditModal({
 
   useEffect(() => {
     let active = true;
-    const dynamic = fields.filter((f) => f.optionsFrom);
+    const dynamic = fields.filter((f) => f.optionsFrom && f.type !== 'searchSelect');
     Promise.all(
       dynamic.map(async (f) => {
         const src = f.optionsFrom!;
@@ -631,7 +631,7 @@ function EditModal({
   const resolvedFields = useMemo(
     () =>
       fields.map((f) =>
-        f.optionsFrom ? { ...f, options: extraOptions[f.name] || [] } : f,
+        f.optionsFrom && f.type !== 'searchSelect' ? { ...f, options: extraOptions[f.name] || [] } : f,
       ),
     [fields, extraOptions],
   );
@@ -943,7 +943,7 @@ export default function EntityPage(props: EntityPageProps) {
           try {
             await a.onClick(row);
           } finally {
-            load();
+            if (!a.skipReload) load();
           }
         },
       })),

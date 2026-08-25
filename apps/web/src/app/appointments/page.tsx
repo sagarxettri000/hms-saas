@@ -39,7 +39,7 @@ export default function AppointmentsPage() {
         { key: 'reason', label: 'Reason' },
       ]}
       fields={[
-        { name: 'patientId', label: 'Existing patient', type: 'select', optionsFrom: PATIENT_REF, hint: 'Leave empty to auto-register a new patient' },
+        { name: 'patientId', label: 'Existing patient', type: 'searchSelect', optionsFrom: PATIENT_REF, hint: 'Leave empty to auto-register a new patient' },
         { name: 'patientFirstName', label: 'New patient — First name' },
         { name: 'patientLastName', label: 'Last name' },
         { name: 'patientMobile', label: 'Mobile' },

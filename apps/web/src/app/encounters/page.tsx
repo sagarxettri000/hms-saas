@@ -31,7 +31,7 @@ export default function EncountersPage() {
         { key: 'createdAt', label: 'Started', render: (r) => formatDateTime(r.createdAt) },
       ]}
       fields={[
-        { name: 'patientId', label: 'Patient', required: true, type: 'select', optionsFrom: PATIENT_REF },
+        { name: 'patientId', label: 'Patient', required: true, type: 'searchSelect', optionsFrom: PATIENT_REF },
         { name: 'doctorId', label: 'Doctor', type: 'select', optionsFrom: DOCTOR_REF },
         { name: 'type', label: 'Type', type: 'select', options: ENCOUNTER_TYPES, defaultValue: 'OPD' },
         { name: 'symptoms', label: 'Symptoms', type: 'textarea', full: true },

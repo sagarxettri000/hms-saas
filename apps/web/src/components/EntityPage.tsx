@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { badgeTone, formatMoney, pick } from '@/lib/hooks';
 import type { ApiResponse, Column, FormField, ListPayload, Row, Action } from '@/lib/types';
 import PatientPrescriptions from '@/components/PatientPrescriptions';
+import AsyncSearchSelect from '@/components/AsyncSearchSelect';
 
 interface TabConfig {
   key: string;
@@ -297,6 +298,19 @@ function FieldInput({
           </option>
         ))}
       </select>
+    );
+  }
+  if (field.type === 'searchSelect' && field.optionsFrom) {
+    return (
+      <AsyncSearchSelect
+        endpoint={field.optionsFrom.endpoint}
+        valueKey={field.optionsFrom.valueKey}
+        labelKeys={field.optionsFrom.labelKeys}
+        value={value ?? ''}
+        onChange={onChange}
+        placeholder={field.placeholder || 'Type to search...'}
+        required={field.required}
+      />
     );
   }
   if (field.type === 'textarea') {

@@ -25,7 +25,7 @@ export default function EmergencyPage() {
         { key: 'createdAt', label: 'Arrived', render: (r) => formatDateTime(r.createdAt) },
       ]}
       fields={[
-        { name: 'patientId', label: 'Patient', required: true, type: 'select', optionsFrom: PATIENT_REF },
+        { name: 'patientId', label: 'Patient', required: true, type: 'searchSelect', optionsFrom: PATIENT_REF },
         { name: 'triageLevel', label: 'Triage level', type: 'select', options: [
           { value: 'RED', label: 'Red (resuscitation)' },
           { value: 'ORANGE', label: 'Orange (emergent)' },

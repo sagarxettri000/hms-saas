@@ -20,7 +20,8 @@ export type FieldType =
   | 'url'
   | 'json'
   | 'checkbox'
-  | 'items';
+  | 'items'
+  | 'searchSelect';
 
 export interface FormField {
   name: string;

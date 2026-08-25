@@ -225,7 +225,7 @@ export default function RadiologyPage() {
             { key: 'orderedAt', label: 'Ordered', render: (r) => formatDateTime(r.orderedAt) },
           ]}
           fields={[
-            { name: 'patientId', label: 'Patient', required: true, type: 'select', optionsFrom: PATIENT_REF },
+            { name: 'patientId', label: 'Patient', required: true, type: 'searchSelect', optionsFrom: PATIENT_REF },
             { name: 'doctorId', label: 'Doctor', type: 'select', optionsFrom: DOCTOR_REF },
             { name: 'modality', label: 'Modality', type: 'select', options: MODALITIES.map((m) => ({ value: m, label: m })) },
             { name: 'bodyPart', label: 'Body Part' },

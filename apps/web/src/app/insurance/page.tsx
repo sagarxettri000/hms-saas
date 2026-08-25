@@ -691,7 +691,7 @@ export default function InsurancePage() {
                 { key: 'status', label: 'Status', badge: true },
               ]}
               fields={[
-                { name: 'patientId', label: 'Patient', required: true, type: 'select', optionsFrom: PATIENT_REF },
+                { name: 'patientId', label: 'Patient', required: true, type: 'searchSelect', optionsFrom: PATIENT_REF },
                 { name: 'providerId', label: 'Provider', required: true, type: 'select', options: providers.map((p: any) => ({ value: p.id, label: p.name })) },
                 { name: 'policyNumber', label: 'Policy Number', required: true },
                 { name: 'groupNumber', label: 'Group Number' },

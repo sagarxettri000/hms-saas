@@ -49,7 +49,7 @@ export default function AdverseEventsPage() {
         { key: 'occurredAt', label: 'Occurred', render: (r) => formatDateTime(r.occurredAt) },
       ]}
       fields={[
-        { name: 'patientId', label: 'Patient', type: 'select', optionsFrom: PATIENT_REF },
+        { name: 'patientId', label: 'Patient', type: 'searchSelect', optionsFrom: PATIENT_REF },
         { name: 'type', label: 'Event type', required: true, placeholder: 'e.g. Medication error' },
         {
           name: 'severity',

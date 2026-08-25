@@ -550,7 +550,7 @@ export default function LaboratoryPage() {
           { key: 'orderedAt', label: 'Ordered', render: (r) => formatDateTime(r.orderedAt) },
         ]}
         fields={[
-          { name: 'patientId', label: 'Patient', required: true, type: 'select', optionsFrom: PATIENT_REF },
+          { name: 'patientId', label: 'Patient', required: true, type: 'searchSelect', optionsFrom: PATIENT_REF },
           { name: 'doctorId', label: 'Doctor', type: 'select', optionsFrom: DOCTOR_REF },
           { name: 'isStat', label: 'STAT', type: 'checkbox' },
           { name: 'isEmergency', label: 'Emergency', type: 'checkbox' },

@@ -52,7 +52,7 @@ export default function MembershipsPage() {
             { key: 'status', label: 'Status', badge: true },
           ],
           fields: [
-            { name: 'patientId', label: 'Patient', required: true, type: 'select', optionsFrom: PATIENT_REF },
+            { name: 'patientId', label: 'Patient', required: true, type: 'searchSelect', optionsFrom: PATIENT_REF },
             {
               name: 'packageId',
               label: 'Package',

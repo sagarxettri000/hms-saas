@@ -322,7 +322,7 @@ function BillingPageInner() {
             },
           ],
           fields: [
-            { name: 'patientId', label: 'Patient', required: true, type: 'select', optionsFrom: PATIENT_REF },
+            { name: 'patientId', label: 'Patient', required: true, type: 'searchSelect', optionsFrom: PATIENT_REF },
             { name: 'type', label: 'Type', type: 'select', options: INVOICE_TYPES },
             { name: 'schemeId', label: 'Scheme', type: 'select', optionsFrom: schemeRef },
             { name: 'encounterId', label: 'Encounter ID' },
@@ -347,7 +347,7 @@ function BillingPageInner() {
             { key: 'status', label: 'Status', badge: true },
           ],
           fields: [
-            { name: 'patientId', label: 'Patient', required: true, type: 'select', optionsFrom: PATIENT_REF },
+            { name: 'patientId', label: 'Patient', required: true, type: 'searchSelect', optionsFrom: PATIENT_REF },
             { name: 'invoiceId', label: 'Invoice', required: true, type: 'select', optionsFrom: {
               valueKey: 'id', labelKeys: ['invoiceNumber'], endpoint: '/billing/invoices',
             } },
@@ -376,7 +376,7 @@ function BillingPageInner() {
             { key: 'status', label: 'Status', badge: true },
           ],
           fields: [
-            { name: 'patientId', label: 'Patient', required: true, type: 'select', optionsFrom: PATIENT_REF },
+            { name: 'patientId', label: 'Patient', required: true, type: 'searchSelect', optionsFrom: PATIENT_REF },
             { name: 'type', label: 'Type', type: 'select', options: [
               { value: 'ADMISSION', label: 'Admit' },
               { value: 'IPD', label: 'IPD' },

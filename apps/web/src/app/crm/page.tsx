@@ -59,7 +59,7 @@ export default function CrmPage() {
             { key: 'status', label: 'Status', badge: true },
           ],
           fields: [
-            { name: 'patientId', label: 'Patient', type: 'select', optionsFrom: PATIENT_REF },
+            { name: 'patientId', label: 'Patient', type: 'searchSelect', optionsFrom: PATIENT_REF },
             {
               name: 'enquiryId',
               label: 'Enquiry',

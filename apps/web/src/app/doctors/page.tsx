@@ -118,6 +118,7 @@ export default function DoctorsPage() {
 
   const [me, setMe] = useState<any>(null);
   const [myEncounters, setMyEncounters] = useState<any[]>([]);
+  const [myFollowUps, setMyFollowUps] = useState<any[]>([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
   const [histOpen, setHistOpen] = useState(false);
   const [histPatient, setHistPatient] = useState<{ id: string; name: string } | null>(null);
@@ -176,12 +177,25 @@ export default function DoctorsPage() {
     }
     if (tab === 'patients' && role === 'DOCTOR') {
       setLoadingPatients(true);
-      Promise.allSettled([api('/auth/me'), api('/encounters?limit=50')])
-        .then(([m, enc]) => {
-          setMe(m.status === 'fulfilled' ? unwrap(m.value) : null);
-          setMyEncounters(enc.status === 'fulfilled' ? toList(enc.value) : []);
-        })
-        .finally(() => setLoadingPatients(false));
+      (async () => {
+        const [m, enc] = await Promise.allSettled([api('/auth/me'), api('/encounters?limit=50')]);
+        const meData = m.status === 'fulfilled' ? unwrap(m.value) : null;
+        setMe(meData);
+        setMyEncounters(enc.status === 'fulfilled' ? toList(enc.value) : []);
+        const profileId = meData?.doctorProfile?.id;
+        if (profileId) {
+          try {
+            const fuRes: any = await api(`/follow-ups?doctorId=${profileId}&limit=200`);
+            const payload = fuRes?.data?.data ?? fuRes?.data ?? fuRes;
+            setMyFollowUps(Array.isArray(payload) ? payload : payload?.data ?? []);
+          } catch {
+            setMyFollowUps([]);
+          }
+        } else {
+          setMyFollowUps([]);
+        }
+        setLoadingPatients(false);
+      })();
     }
   }, [tab, role, loadSchedules]);
 
@@ -257,12 +271,17 @@ export default function DoctorsPage() {
     const mine = myEncounters.filter(
       (e) => (profileId && e.doctorId === profileId) || (me?.id && e.doctorUserId === me.id),
     );
+    const activeFuByPatient = new Map<string, any>();
+    myFollowUps
+      .filter((f) => f.status === 'PENDING' || f.status === 'IN_PROGRESS')
+      .forEach((f) => {
+        if (f.patientId) activeFuByPatient.set(f.patientId, f);
+      });
     const map = new Map<string, any>();
     mine.forEach((e) => {
       const pid = e.patientId;
       const cur = map.get(pid);
       const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
-      const fu = e.followUpDate ? new Date(e.followUpDate).getTime() : 0;
       if (!cur) {
         map.set(pid, {
           patientId: pid,
@@ -272,7 +291,7 @@ export default function DoctorsPage() {
           lastVisit: e.createdAt,
           type: e.type,
           status: e.status,
-          nextFu: fu > Date.now() ? fu : null,
+          activeFu: activeFuByPatient.get(pid) || null,
         });
       } else {
         if (ts > cur.lastTs) {
@@ -281,11 +300,10 @@ export default function DoctorsPage() {
           cur.type = e.type;
           cur.status = e.status;
         }
-        if (fu > Date.now() && (!cur.nextFu || fu < cur.nextFu)) cur.nextFu = fu;
       }
     });
     return Array.from(map.values()).sort((a, b) => b.lastTs - a.lastTs);
-  }, [me, myEncounters]);
+  }, [me, myEncounters, myFollowUps]);
 
   const openHistory = async (row: any) => {
     setHistPatient({ id: row.patientId, name: row.name });
@@ -599,9 +617,9 @@ export default function DoctorsPage() {
                 <div className="stat-value">{myPatientRows.length}</div>
               </div>
               <div className="stat-card">
-                <div className="stat-label">Follow-ups Scheduled</div>
+                <div className="stat-label">Active Follow-ups</div>
                 <div className="stat-value" style={{ color: 'var(--primary)' }}>
-                  {myPatientRows.filter((r) => r.nextFu).length}
+                  {myPatientRows.filter((r) => r.activeFu).length}
                 </div>
               </div>
             </div>
@@ -614,7 +632,7 @@ export default function DoctorsPage() {
                     <th>Last Visit</th>
                     <th>Type</th>
                     <th>Status</th>
-                    <th>Next Visit</th>
+                    <th>Follow-up</th>
                     <th style={{ width: 1 }}>History</th>
                   </tr>
                 </thead>
@@ -630,7 +648,15 @@ export default function DoctorsPage() {
                           {String(r.status || '—').replace(/_/g, ' ')}
                         </span>
                       </td>
-                      <td>{r.nextFu ? formatDate(r.nextFu) : '—'}</td>
+                      <td>
+                        {r.activeFu ? (
+                          <span className={`badge badge-${r.activeFu.status === 'IN_PROGRESS' ? 'primary' : 'warning'}`}>
+                            {r.activeFu.status === 'IN_PROGRESS' ? 'In progress' : 'Pending'}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                       <td>
                         <button className="btn btn-sm btn-secondary" onClick={(e) => { e.stopPropagation(); openHistory(r); }}>
                           View

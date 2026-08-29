@@ -201,6 +201,8 @@ export class BedManagementService {
     query: { search?: string; page?: number; limit?: number },
   ) {
     const { search, page = 1, limit = 50 } = query;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Number(limit) || 50);
     const where: any = { tenantId, isActive: true };
     if (search)
       where.OR = [
@@ -215,8 +217,8 @@ export class BedManagementService {
           department: { select: { id: true, name: true } },
         },
         orderBy: { name: "asc" },
-        skip: (page - 1) * limit,
-        take: limit,
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
       }),
       this.prisma.ward.count({ where }),
     ]);
@@ -290,6 +292,8 @@ export class BedManagementService {
     },
   ) {
     const { wardId, search, page = 1, limit = 50 } = query;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Number(limit) || 50);
     const where: any = { tenantId, isActive: true };
     if (wardId) where.wardId = wardId;
     if (search)
@@ -305,13 +309,13 @@ export class BedManagementService {
           ward: { select: { id: true, name: true } },
         },
         orderBy: { name: "asc" },
-        skip: (page - 1) * limit,
-        take: limit,
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
       }),
       this.prisma.room.count({ where }),
     ]);
 
-    return { data: rows, total, page, limit };
+    return { data: rows, total, page: pageNum, limit: limitNum };
   }
 
   async createRoom(tenantId: string, dto: CreateRoomDto) {
@@ -373,6 +377,8 @@ export class BedManagementService {
       page = 1,
       limit = 50,
     } = query;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Number(limit) || 50);
     const where: any = { tenantId };
     if (wardId) where.wardId = wardId;
     if (roomId) where.roomId = roomId;
@@ -411,13 +417,13 @@ export class BedManagementService {
           },
         },
         orderBy: { bedNumber: "asc" },
-        skip: (page - 1) * limit,
-        take: limit,
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
       }),
       this.prisma.bed.count({ where }),
     ]);
 
-    return { data: rows, total, page, limit };
+    return { data: rows, total, page: pageNum, limit: limitNum };
   }
 
   async createBed(tenantId: string, dto: CreateBedDto) {
@@ -657,6 +663,8 @@ export class BedManagementService {
     },
   ) {
     const { wardId, status, page = 1, limit = 50 } = query;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Number(limit) || 50);
     const where: any = { tenantId };
     if (wardId) where.wardId = wardId;
     if (status) where.status = status;
@@ -669,13 +677,13 @@ export class BedManagementService {
           bed: { select: { id: true, bedNumber: true } },
         },
         orderBy: { scheduledAt: "desc" },
-        skip: (page - 1) * limit,
-        take: limit,
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
       }),
       this.prisma.bedMaintenance.count({ where }),
     ]);
 
-    return { data: rows, total, page, limit };
+    return { data: rows, total, page: pageNum, limit: limitNum };
   }
 
   async createMaintenance(tenantId: string, dto: CreateMaintenanceDto) {

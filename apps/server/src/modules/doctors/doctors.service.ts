@@ -444,8 +444,12 @@ export class DoctorsService {
           invoice: { tenantId, status: { not: "CANCELLED" } },
         },
       }),
-      this.prisma.encounter.count({
-        where: { tenantId, doctorId, followUpDate: { gte: today } },
+      this.prisma.followUp.count({
+        where: {
+          tenantId,
+          doctors: { some: { doctorId } },
+          status: { in: ["PENDING", "IN_PROGRESS"] },
+        },
       }),
     ]);
 

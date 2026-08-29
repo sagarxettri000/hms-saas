@@ -22,46 +22,13 @@ export default function ReceiptModal({
   const [tenantName, setTenantName] = useState('Hospital');
 
   useEffect(() => {
+    let cancelled = false;
     setTenantName(localStorage.getItem('tenantName') || 'Hospital');
     api(`/billing/invoices/${invoice.id}`)
-      .then((res: any) => setData(res.data ?? res))
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load invoice'));
+      .then((res: any) => { if (!cancelled) setData(res.data ?? res); })
+      .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load invoice'); });
+    return () => { cancelled = true; };
   }, [invoice.id]);
-
-  if (error) {
-    return (
-      <div className="modal-backdrop" onClick={onClose}>
-        <div className="modal">
-          <div className="alert alert-error">{error}</div>
-          <div className="form-actions">
-            <button className="btn btn-secondary" onClick={onClose}>
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="modal-backdrop">
-        <div className="modal">
-          <div className="loading">Loading receipt…</div>
-        </div>
-      </div>
-    );
-  }
-
-  const patient = data.patient ?? {};
-  const items: Row[] = data.items ?? [];
-  const payments: Row[] = data.payments ?? [];
-  const paidAmount = Number(data.paidAmount || 0);
-  const totalAmount = Number(data.totalAmount || 0);
-  const dueAmount = Number(data.dueAmount || 0);
-  const discountAmount = Number(data.discountAmount || 0);
-  const taxAmount = Number(data.taxAmount || 0);
-  const subtotal = Number(data.subtotal || 0);
 
   const downloadPdf = useCallback(
     async (endpoint: string, defaultName: string) => {
@@ -89,6 +56,46 @@ export default function ReceiptModal({
     },
     [],
   );
+
+  if (error) {
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="alert alert-error">{error}</div>
+          <div className="form-actions">
+            <button className="btn btn-secondary" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="loading">Loading receipt…</div>
+          <div className="form-actions">
+            <button className="btn btn-secondary" onClick={onClose}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const patient = data.patient ?? {};
+  const items: Row[] = Array.isArray(data.items) ? data.items : [];
+  const payments: Row[] = Array.isArray(data.payments) ? data.payments : [];
+  const paidAmount = Number(data.paidAmount || 0);
+  const totalAmount = Number(data.totalAmount || 0);
+  const dueAmount = Number(data.dueAmount || 0);
+  const discountAmount = Number(data.discountAmount || 0);
+  const taxAmount = Number(data.taxAmount || 0);
+  const subtotal = Number(data.subtotal || 0);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>

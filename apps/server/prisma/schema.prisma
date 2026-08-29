@@ -194,6 +194,13 @@ enum EncounterType {
   FOLLOWUP
 }
 
+enum FollowUpStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 enum AdmissionStatus {
   PENDING
   ADMITTED
@@ -571,6 +578,7 @@ model Tenant {
   patients                Patient[]
   appointments            Appointment[]
   encounters              Encounter[]
+  followUps               FollowUp[]
   admissions              Admission[]
   invoices                Invoice[]
   payments                Payment[]
@@ -1094,6 +1102,8 @@ model DoctorProfile {
   consultations Encounter[]
   shareRules    DoctorShareRule[]
   prescriptions Prescription[]
+  assignedFollowUps FollowUp[] @relation("AssignedFollowUps")
+  followUpDoctors   FollowUpDoctor[]
 
   @@index([tenantId])
   @@index([departmentId])
@@ -1262,6 +1272,7 @@ model Patient {
   medicalTourismCases MedicalTourismCase[]
   adverseEvents       AdverseEvent[]
   documentSignatures  DocumentSignature[]
+  followUps           FollowUp[]
 
   @@index([tenantId, mrn])
   @@index([tenantId, mobile])
@@ -1425,6 +1436,7 @@ model Encounter {
   procedures      Procedure[]
   nursingNotes    NursingNote[]
   admission       Admission?
+  followUps       FollowUp[]
 
   @@index([tenantId, patientId])
   @@index([tenantId, doctorId])
@@ -1433,6 +1445,47 @@ model Encounter {
   @@index([departmentId])
   @@index([doctorId])
   @@index([patientId])
+}
+
+model FollowUp {
+  id              String        @id @default(cuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId       String
+  patient         Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  encounterId     String?
+  encounter       Encounter?    @relation(fields: [encounterId], references: [id], onDelete: SetNull)
+  status          FollowUpStatus @default(PENDING)
+  notes           String?
+  assignedDoctorId String?
+  createdBy       String?
+  updatedBy       String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  assignedDoctor DoctorProfile? @relation("AssignedFollowUps", fields: [assignedDoctorId], references: [id], onDelete: SetNull)
+  doctors        FollowUpDoctor[]
+
+  @@index([tenantId, patientId])
+  @@index([tenantId, status])
+  @@index([assignedDoctorId])
+  @@index([encounterId])
+  @@map("follow_ups")
+}
+
+model FollowUpDoctor {
+  id           String        @id @default(cuid())
+  tenantId     String
+  followUpId   String
+  followUp     FollowUp      @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+  doctorId     String
+  doctor       DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  isPrimary    Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+
+  @@index([followUpId])
+  @@index([doctorId])
+  @@map("follow_up_doctors")
 }
 
 model Vital {

@@ -13,6 +13,7 @@ import { PatientsModule } from "./modules/patients/patients.module";
 import { AppointmentsModule } from "./modules/appointments/appointments.module";
 import { DoctorsModule } from "./modules/doctors/doctors.module";
 import { EncountersModule } from "./modules/encounters/encounters.module";
+import { FollowUpsModule } from "./modules/follow-ups/follow-ups.module";
 import { DepartmentsModule } from "./modules/departments/departments.module";
 import { SettingsModule } from "./modules/settings/settings.module";
 import { HealthModule } from "./modules/health/health.module";
@@ -77,6 +78,7 @@ import { AppController } from "./app.controller";
     AppointmentsModule,
     DoctorsModule,
     EncountersModule,
+    FollowUpsModule,
     DepartmentsModule,
     SettingsModule,
     HealthModule,

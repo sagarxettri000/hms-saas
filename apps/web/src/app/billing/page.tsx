@@ -266,8 +266,12 @@ function BillingPageInner() {
     }
   }
 
-  function reprintReceipt(row: Row) {
-    api(`/billing/invoices/${row.id}/reprint`, { method: 'POST' }).catch(() => {});
+  async function reprintReceipt(row: Row) {
+    try {
+      await api(`/billing/invoices/${row.id}/reprint`, { method: 'POST' });
+    } catch {
+      // silent – receipt still opens
+    }
     setReceiptTarget(row);
   }
 

@@ -87,21 +87,25 @@ export default function AdmissionsPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const [admRes, docRes, deptRes, bedRes]: ApiResponse<any>[] = await Promise.all([
+      const [admRes, docRes, deptRes, bedRes] = await Promise.allSettled([
         api(`/admissions?limit=15&page=${page}` + (searchAdmissions ? `&search=${encodeURIComponent(searchAdmissions)}` : '')),
         api('/doctors?limit=500'),
         api('/departments?limit=500'),
-        api('/bed-management/beds?limit=500'),
+        api('/bed-management/beds?limit=100'),
       ]);
-      const admPayload = admRes.data as any;
-      setAdmissions(Array.isArray(admPayload) ? admPayload : admPayload.data ?? []);
-      setTotal(Array.isArray(admPayload) ? admPayload.length : admPayload.total ?? 0);
-      const docPayload = docRes.data as any;
-      setDoctors(Array.isArray(docPayload) ? docPayload : docPayload.data ?? []);
-      const deptPayload = deptRes.data as any;
-      setDepartments(Array.isArray(deptPayload) ? deptPayload : deptPayload.data ?? []);
-      const bedPayload = bedRes.data as any;
-      setBeds(Array.isArray(bedPayload) ? bedPayload : bedPayload.data ?? []);
+      const admPayload = (admRes.status === 'fulfilled' ? admRes.value.data : null) as any;
+      const admList: Row[] = admPayload ? (Array.isArray(admPayload) ? admPayload : (admPayload.data ?? [])) : [];
+      setAdmissions(admList);
+      setTotal(admPayload && !Array.isArray(admPayload) ? (admPayload.total ?? 0) : admList.length);
+      const docPayload = (docRes.status === 'fulfilled' ? docRes.value.data : null) as any;
+      const docList: Row[] = docPayload ? (Array.isArray(docPayload) ? docPayload : (docPayload.data ?? [])) : [];
+      setDoctors(docList);
+      const deptPayload = (deptRes.status === 'fulfilled' ? deptRes.value.data : null) as any;
+      const deptList: Row[] = deptPayload ? (Array.isArray(deptPayload) ? deptPayload : (deptPayload.data ?? [])) : [];
+      setDepartments(deptList);
+      const bedPayload = (bedRes.status === 'fulfilled' ? bedRes.value.data : null) as any;
+      const bedList: Row[] = bedPayload ? (Array.isArray(bedPayload) ? bedPayload : (bedPayload.data ?? [])) : [];
+      setBeds(bedList);
     } catch {
     } finally {
       setLoading(false);

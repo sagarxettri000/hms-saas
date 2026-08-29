@@ -106,12 +106,16 @@ export default function PatientDetailPage() {
   const [followupTarget, setFollowupTarget] = useState<Row | null>(null);
   const [showFollowup, setShowFollowup] = useState(false);
   const [followupValues, setFollowupValues] = useState<{
+    id: string;
     encounterId: string;
-    followUpDate: string;
-    followUpNotes: string;
-  }>({ encounterId: '', followUpDate: '', followUpNotes: '' });
+    doctorIds: string[];
+    notes: string;
+  }>({ id: '', encounterId: '', doctorIds: [], notes: '' });
   const [savingFollowup, setSavingFollowup] = useState(false);
   const [followupError, setFollowupError] = useState<string | null>(null);
+  const [doctorOptions, setDoctorOptions] = useState<Row[]>([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [doctorFilter, setDoctorFilter] = useState('');
 
   useEffect(() => {
     setRole(localStorage.getItem('role') || '');
@@ -164,12 +168,15 @@ export default function PatientDetailPage() {
       api(`/admissions?patientId=${id}&limit=50`),
       api(`/appointments?patientId=${id}&limit=50`),
       api(`/insurance/claims?patientId=${id}&limit=50`),
+      api(`/follow-ups?patientId=${id}&limit=50`),
     ])
-      .then(([pat, enc, vitals, rx, labs, inv, adm, appts, claims]) => {
+      .then(([pat, enc, vitals, rx, labs, inv, adm, appts, claims, followups]) => {
         if (!activeFlag) return;
         const list = (r: any) =>
           Array.isArray(r?.data) ? r.data : Array.isArray(r?.data?.data) ? r.data.data : [];
         setPatient(pat.data ?? pat);
+        const fuPayload = followups?.data?.data ?? followups?.data ?? followups;
+        const fuList = Array.isArray(fuPayload) ? fuPayload : Array.isArray(fuPayload?.data) ? fuPayload.data : [];
         setData({
           encounters: list(enc),
           vitals: list(vitals),
@@ -185,6 +192,7 @@ export default function PatientDetailPage() {
           admissions: list(adm),
           appointments: list(appts),
           claims: list(claims),
+          followups: fuList,
         });
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load patient'))
@@ -274,9 +282,20 @@ export default function PatientDetailPage() {
     typeof a === 'string' ? a : `${a.allergen || a.name || ''}${a.severity ? ` (${a.severity})` : ''}`,
   );
 
-  const followups = (data.encounters || [])
-    .filter((e: Row) => e.followUpDate)
-    .sort((a: Row, b: Row) => (a.followUpDate > b.followUpDate ? 1 : -1));
+  const followups = (data.followups || []).sort((a: Row, b: Row) =>
+    (a.createdAt > b.createdAt ? -1 : 1),
+  );
+
+  const fuDoctorNames = (r: Row) => {
+    const docs =
+      (r.doctors || []).map((d: any) =>
+        [d.doctor?.user?.firstName, d.doctor?.user?.lastName].filter(Boolean).join(' '),
+      ) ||
+      [];
+    const names = docs.filter(Boolean);
+    if (names.length) return names.join(', ');
+    return [r.assignedDoctor?.user?.firstName, r.assignedDoctor?.user?.lastName].filter(Boolean).join(' ') || '—';
+  };
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
@@ -375,27 +394,21 @@ export default function PatientDetailPage() {
     '—';
 
   function followupStatus(r: Row) {
-    if (r.status === 'COMPLETED' || r.status === 'DISCHARGED' || r.status === 'CANCELLED') {
-      return { label: r.status === 'CANCELLED' ? 'Cancelled' : 'Completed', tone: 'secondary' };
-    }
-    const raw = r.followUpDate ? new Date(r.followUpDate) : null;
-    if (!raw || isNaN(raw.getTime())) return { label: 'Unscheduled', tone: 'secondary' };
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const date = new Date(raw);
-    date.setHours(0, 0, 0, 0);
-    const diff = Math.round((date.getTime() - today.getTime()) / 86400000);
-    if (diff < 0) return { label: `Overdue ${Math.abs(diff)}d`, tone: 'danger' };
-    if (diff === 0) return { label: 'Due today', tone: 'warning' };
-    return { label: `In ${diff}d`, tone: 'primary' };
+    const map: Record<string, { label: string; tone: string }> = {
+      PENDING: { label: 'Pending', tone: 'warning' },
+      IN_PROGRESS: { label: 'In progress', tone: 'primary' },
+      COMPLETED: { label: 'Completed', tone: 'green' },
+      CANCELLED: { label: 'Cancelled', tone: 'secondary' },
+    };
+    return map[r.status] || { label: r.status || 'Pending', tone: 'secondary' };
   }
 
   const followupCols = [
-    { key: 'followUpDate', label: 'Follow-up', render: (r: Row) => <strong>{formatDate(r.followUpDate)}</strong> },
-    { key: 'doctor', label: 'Doctor', render: (r: Row) => doctorName(r) },
-    { key: 'type', label: 'Type', render: (r: Row) => <span className={`badge badge-${badgeTone(r.type)}`}>{r.type}</span> },
-    { key: 'diagnosis', label: 'Reason', render: (r: Row) => r.diagnosis || r.chiefComplaint || '—' },
-    { key: 'followUpNotes', label: 'Notes' },
+    { key: 'createdAt', label: 'Created', render: (r: Row) => <strong>{formatDate(r.createdAt)}</strong> },
+    { key: 'doctors', label: 'Assigned doctor(s)', render: (r: Row) => fuDoctorNames(r) },
+    { key: 'encounterType', label: 'Source', render: (r: Row) => (r.encounter ? <span className={`badge badge-${badgeTone(r.encounter.type)}`}>{r.encounter.type}</span> : '—') },
+    { key: 'reason', label: 'Reason', render: (r: Row) => r.encounter?.diagnosis || r.encounter?.chiefComplaint || 'Follow-up' },
+    { key: 'notes', label: 'Notes', render: (r: Row) => r.notes || '—' },
     {
       key: '_status',
       label: 'Status',
@@ -413,54 +426,93 @@ export default function PatientDetailPage() {
               className="btn btn-secondary btn-sm"
               onClick={() => {
                 setFollowupValues({
-                  encounterId: r.id,
-                  followUpDate: r.followUpDate ? String(r.followUpDate).slice(0, 10) : '',
-                  followUpNotes: r.followUpNotes || '',
+                  id: r.id,
+                  encounterId: r.encounterId || '',
+                  doctorIds: (r.doctors || []).map((d: any) => d.doctorId),
+                  notes: r.notes || '',
                 });
+                setDoctorFilter('');
                 setFollowupError(null);
                 setShowFollowup(true);
+                loadDoctors();
               }}
             >
-              Edit
+              Assign
             </button>
           ),
         }]
       : []),
   ];
 
+  async function loadDoctors() {
+    if (doctorOptions.length) return;
+    setLoadingDoctors(true);
+    try {
+      const res: any = await api('/follow-ups/doctors');
+      const payload = res?.data?.data ?? res?.data ?? res;
+      const todoctors = Array.isArray(payload) ? payload : payload?.data ?? [];
+      setDoctorOptions(todoctors);
+    } catch {
+      setDoctorOptions([]);
+    } finally {
+      setLoadingDoctors(false);
+    }
+  }
+
   function openScheduleFollowup() {
     const first = (data.encounters || [])[0];
     setFollowupValues({
+      id: '',
       encounterId: first?.id || '',
-      followUpDate: '',
-      followUpNotes: '',
+      doctorIds: [],
+      notes: '',
     });
+    setDoctorFilter('');
     setFollowupError(null);
     setShowFollowup(true);
+    loadDoctors();
+  }
+
+  function toggleDoctor(id: string) {
+    setFollowupValues((prev) => ({
+      ...prev,
+      doctorIds: prev.doctorIds.includes(id)
+        ? prev.doctorIds.filter((d) => d !== id)
+        : [...prev.doctorIds, id],
+    }));
   }
 
   async function saveFollowup(e: React.FormEvent) {
     e.preventDefault();
-    if (!followupValues.encounterId) {
-      setFollowupError('Select an encounter to schedule the follow-up for.');
-      return;
-    }
-    if (!followupValues.followUpDate) {
-      setFollowupError('Follow-up date is required.');
+    if (!followupValues.doctorIds.length) {
+      setFollowupError('Select at least one doctor to create the follow-up.');
       return;
     }
     setSavingFollowup(true);
     setFollowupError(null);
     try {
-      await api(`/encounters/${followupValues.encounterId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          followUpDate: new Date(followupValues.followUpDate).toISOString(),
-          followUpNotes: followupValues.followUpNotes,
-        }),
-      });
+      const body = {
+        patientId: id,
+        encounterId: followupValues.encounterId || undefined,
+        doctorIds: followupValues.doctorIds,
+        notes: followupValues.notes,
+      };
+      if (followupValues.id) {
+        await api(`/follow-ups/${followupValues.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            doctorIds: followupValues.doctorIds,
+            notes: followupValues.notes,
+          }),
+        });
+      } else {
+        await api('/follow-ups', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+      }
       setShowFollowup(false);
-      setFlash('Follow-up scheduled successfully');
+      setFlash(followupValues.id ? 'Follow-up updated successfully' : 'Follow-up created successfully');
       reload();
     } catch (err) {
       setFollowupError(err instanceof Error ? err.message : 'Failed to save follow-up');
@@ -570,7 +622,7 @@ export default function PatientDetailPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 className="card-title" style={{ margin: 0 }}>Follow-up</h3>
               {canManageClinical && (
-                <button className="btn btn-secondary btn-sm" onClick={openScheduleFollowup}>+ Schedule</button>
+                <button className="btn btn-secondary btn-sm" onClick={openScheduleFollowup}>+ Follow up</button>
               )}
             </div>
             {followups.length ? (
@@ -579,17 +631,17 @@ export default function PatientDetailPage() {
                   const s = followupStatus(r);
                   return (
                     <li key={r.id} style={{ marginBottom: 8 }}>
-                      <strong>{formatDate(r.followUpDate)}</strong>{' '}
+                      <strong>{fuDoctorNames(r)}</strong>{' '}
                       <span className={`badge badge-${s.tone}`}>{s.label}</span>
                       <div className="muted" style={{ fontSize: 13 }}>
-                        {doctorName(r)} · {r.diagnosis || r.chiefComplaint || 'Follow-up'}
+                        {formatDate(r.createdAt)} · {r.encounter?.diagnosis || r.encounter?.chiefComplaint || 'Follow-up'}
                       </div>
                     </li>
                   );
                 })}
               </ul>
             ) : (
-              <p className="muted">No follow-ups scheduled.</p>
+              <p className="muted">No follow-ups assigned.</p>
             )}
             <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => setActive('followup')}>
               View all →
@@ -609,13 +661,13 @@ export default function PatientDetailPage() {
         <>
           {canManageClinical && (
             <div style={{ marginBottom: 12, textAlign: 'right' }}>
-              <button className="btn" onClick={openScheduleFollowup}>+ Schedule follow-up</button>
+              <button className="btn" onClick={openScheduleFollowup}>+ Follow up</button>
             </div>
           )}
-          <SectionTable title="Follow-up schedule" rows={followups} columns={followupCols} />
+          <SectionTable title="Follow-ups" rows={followups} columns={followupCols} />
           {!followups.length && (
             <div className="empty">
-              No follow-ups scheduled yet. Click “+ Schedule follow-up” to plan the next visit.
+              No follow-ups yet. Click “+ Follow up” to assign doctor(s) in real time.
             </div>
           )}
         </>
@@ -652,20 +704,20 @@ export default function PatientDetailPage() {
         <div className="modal-backdrop" onClick={() => setShowFollowup(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="modal-title">Schedule follow-up</h3>
+              <h3 className="modal-title">{followupValues.id ? 'Assign doctor(s)' : 'Create follow-up'}</h3>
               <button className="modal-close" onClick={() => setShowFollowup(false)} aria-label="Close">×</button>
             </div>
             <form onSubmit={saveFollowup}>
               <div className="form-grid">
                 <div className="field field-full">
-                  <label className="label" htmlFor="fu-encounter">Encounter</label>
+                  <label className="label" htmlFor="fu-encounter">Source encounter (optional)</label>
                   <select
                     id="fu-encounter"
                     className="input"
                     value={followupValues.encounterId}
                     onChange={(e) => setFollowupValues((prev) => ({ ...prev, encounterId: e.target.value }))}
                   >
-                    <option value="">— Select encounter —</option>
+                    <option value="">— No encounter —</option>
                     {(data.encounters || []).map((enc: Row) => (
                       <option key={enc.id} value={enc.id}>
                         {formatDate(enc.createdAt)} · {enc.type || 'OPD'} · {enc.diagnosis || enc.chiefComplaint || 'Encounter'}
@@ -673,15 +725,65 @@ export default function PatientDetailPage() {
                     ))}
                   </select>
                 </div>
-                <div className="field">
-                  <label className="label" htmlFor="fu-date">Follow-up date</label>
+                <div className="field field-full">
+                  <label className="label">
+                    Assigned doctor(s) * <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(active doctors)</span>
+                  </label>
                   <input
-                    id="fu-date"
-                    type="date"
                     className="input"
-                    value={followupValues.followUpDate}
-                    onChange={(e) => setFollowupValues((prev) => ({ ...prev, followUpDate: e.target.value }))}
+                    placeholder="Filter doctors…"
+                    value={doctorFilter}
+                    onChange={(e) => setDoctorFilter(e.target.value)}
                   />
+                  <div
+                    style={{
+                      marginTop: 8,
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      maxHeight: 200,
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {loadingDoctors ? (
+                      <div className="note" style={{ padding: 12 }}>Loading doctors…</div>
+                    ) : doctorOptions.length === 0 ? (
+                      <div className="note" style={{ padding: 12 }}>No active doctors available.</div>
+                    ) : (
+                      doctorOptions
+                        .filter((d) => {
+                          const name = [d.user?.firstName, d.user?.lastName].filter(Boolean).join(' ');
+                          return !doctorFilter || name?.toLowerCase().includes(doctorFilter.toLowerCase()) || d.specialization?.toLowerCase().includes(doctorFilter.toLowerCase());
+                        })
+                        .map((d) => {
+                          const checked = followupValues.doctorIds.includes(d.id);
+                          return (
+                            <label
+                              key={d.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 10,
+                                padding: '8px 12px',
+                                cursor: 'pointer',
+                                background: checked ? 'var(--primary-light, rgba(59,130,246,0.08))' : 'transparent',
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleDoctor(d.id)}
+                                style={{ width: 16, height: 16 }}
+                              />
+                              <span style={{ flex: 1 }}>
+                                {[d.user?.firstName, d.user?.lastName].filter(Boolean).join(' ')}
+                                {d.specialization ? <span className="muted" style={{ marginLeft: 6 }}>{d.specialization}</span> : null}
+                              </span>
+                              {checked && <span className="badge badge-blue" style={{ fontSize: 10 }}>assigned</span>}
+                            </label>
+                          );
+                        })
+                    )}
+                  </div>
                 </div>
                 <div className="field field-full">
                   <label className="label" htmlFor="fu-notes">Notes</label>
@@ -689,9 +791,9 @@ export default function PatientDetailPage() {
                     id="fu-notes"
                     className="input"
                     style={{ minHeight: 80 }}
-                    placeholder="What should be reviewed at the next visit?"
-                    value={followupValues.followUpNotes}
-                    onChange={(e) => setFollowupValues((prev) => ({ ...prev, followUpNotes: e.target.value }))}
+                    placeholder="What should be reviewed at the follow-up?"
+                    value={followupValues.notes}
+                    onChange={(e) => setFollowupValues((prev) => ({ ...prev, notes: e.target.value }))}
                   />
                 </div>
               </div>
@@ -699,7 +801,7 @@ export default function PatientDetailPage() {
               <div className="form-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowFollowup(false)}>Cancel</button>
                 <button type="submit" className="btn" disabled={savingFollowup}>
-                  {savingFollowup ? 'Saving...' : 'Save follow-up'}
+                  {savingFollowup ? 'Saving...' : followupValues.id ? 'Update follow-up' : 'Create follow-up'}
                 </button>
               </div>
             </form>

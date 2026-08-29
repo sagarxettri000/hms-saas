@@ -11,6 +11,7 @@ interface Stat {
   value: string | number;
   tone?: 'blue' | 'green' | 'purple' | 'amber' | 'red';
   icon?: string;
+  href?: string;
 }
 
 interface FocusTable {
@@ -314,11 +315,11 @@ export default function DashboardPage() {
     const lab = summaryOf(labSummaryR);
 
     setStats([
-      { label: "Today's appointments", value: sum.total ?? appts.length, tone: 'blue', icon: '📅' },
-      { label: 'My patients in queue', value: queue, tone: queue > 0 ? 'purple' : 'green', icon: '🩺' },
-      { label: 'Pending encounters', value: countOf(activeEncR), tone: 'blue', icon: '📋' },
-      { label: 'Pending prescriptions', value: pendingRx, tone: pendingRx > 0 ? 'amber' : 'green', icon: '💊' },
-      { label: 'Pending lab orders', value: lab.pendingOrders ?? 0, tone: (lab.pendingOrders ?? 0) > 0 ? 'amber' : 'green', icon: '🔬' },
+      { label: "Today's appointments", value: sum.total ?? appts.length, tone: 'blue', icon: '📅', href: '/appointments' },
+      { label: 'My patients in queue', value: queue, tone: queue > 0 ? 'purple' : 'green', icon: '🩺', href: '/appointments' },
+      { label: 'Pending encounters', value: countOf(activeEncR), tone: 'blue', icon: '📋', href: '/encounters' },
+      { label: 'Pending prescriptions', value: pendingRx, tone: pendingRx > 0 ? 'amber' : 'green', icon: '💊', href: '/pharmacy?tab=dispensing' },
+      { label: 'Pending lab orders', value: lab.pendingOrders ?? 0, tone: (lab.pendingOrders ?? 0) > 0 ? 'amber' : 'green', icon: '🔬', href: '/laboratory' },
     ]);
 
     setFocus({
@@ -720,7 +721,24 @@ export default function DashboardPage() {
         <>
           <div className="stat-grid">
             {stats.map((s) => (
-              <div key={s.label} className="card stat-card">
+              <div
+                key={s.label}
+                className="card stat-card"
+                onClick={s.href ? () => router.push(s.href!) : undefined}
+                role={s.href ? 'link' : undefined}
+                tabIndex={s.href ? 0 : undefined}
+                onKeyDown={
+                  s.href
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          router.push(s.href!);
+                        }
+                      }
+                    : undefined
+                }
+                style={s.href ? { cursor: 'pointer' } : undefined}
+              >
                 {s.icon && <span style={{ fontSize: 20 }}>{s.icon}</span>}
                 <p className="stat-label">{s.label}</p>
                 <p className={`stat-value stat-${s.tone || 'blue'}`}>{s.value}</p>

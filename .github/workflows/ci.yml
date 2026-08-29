@@ -31,6 +31,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build -w @hms/shared
+      - name: Generate Prisma client
+        run: npm run db:generate -w @hms/server
       - run: npm run typecheck -w @hms/server
       - run: npm run typecheck -w @hms/web
       - run: npm run test -w @hms/server

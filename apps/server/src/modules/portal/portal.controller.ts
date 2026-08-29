@@ -3,47 +3,40 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PortalService } from "./portal.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
-import { Public, TenantScoped } from "../../common/decorators/permissions.decorator";
+import { TenantScoped } from "../../common/decorators/permissions.decorator";
 
 @ApiTags("Patient Portal")
 @Controller("portal")
+@UseGuards(JwtAuthGuard, TenantGuard)
+@TenantScoped()
 export class PortalController {
   constructor(private readonly portalService: PortalService) {}
 
-  @Public()
   @Get("lookup")
-  @ApiOperation({ summary: "Lookup patient by MRN (public)" })
-  async lookup(@Query("mrn") mrn: string, @Query("tenantId") tenantId?: string) {
-    return this.portalService.lookupByMrn(mrn, tenantId);
+  @ApiOperation({ summary: "Lookup patient by MRN" })
+  async lookup(@Query("mrn") mrn: string, @Req() req: any) {
+    return this.portalService.lookupByMrn(mrn, req.user.tenantId);
   }
 
   @Get("labs")
-  @UseGuards(JwtAuthGuard, TenantGuard)
-  @TenantScoped()
   @ApiOperation({ summary: "Get patient lab results" })
   async getLabs(@Query("patientId") patientId: string, @Req() req: any) {
     return this.portalService.getPatientLabs(patientId, req.user.tenantId);
   }
 
   @Get("invoices")
-  @UseGuards(JwtAuthGuard, TenantGuard)
-  @TenantScoped()
   @ApiOperation({ summary: "Get patient invoices" })
   async getInvoices(@Query("patientId") patientId: string, @Req() req: any) {
     return this.portalService.getPatientInvoices(patientId, req.user.tenantId);
   }
 
   @Get("appointments")
-  @UseGuards(JwtAuthGuard, TenantGuard)
-  @TenantScoped()
   @ApiOperation({ summary: "Get patient appointments" })
   async getAppointments(@Query("patientId") patientId: string, @Req() req: any) {
     return this.portalService.getPatientAppointments(patientId, req.user.tenantId);
   }
 
   @Post("appointments")
-  @UseGuards(JwtAuthGuard, TenantGuard)
-  @TenantScoped()
   @ApiOperation({ summary: "Book an appointment" })
   async bookAppointment(@Body() dto: any, @Req() req: any) {
     return this.portalService.bookAppointment(req.user.tenantId, dto);

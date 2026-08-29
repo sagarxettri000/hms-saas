@@ -5,19 +5,10 @@ import { PrismaService } from "../../prisma/prisma.service";
 export class PortalService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async lookupByMrn(mrn: string, tenantId?: string) {
+  async lookupByMrn(mrn: string, tenantId: string) {
     if (!mrn || !String(mrn).trim()) throw new BadRequestException("MRN is required");
-    const where: any = { mrn: String(mrn).trim(), deletedAt: null };
-    if (tenantId) {
-      const tenant = await this.prisma.tenant.findFirst({
-        where: { id: tenantId, status: "ACTIVE" },
-        select: { id: true },
-      });
-      if (!tenant) throw new BadRequestException("Invalid tenant");
-      where.tenantId = tenantId;
-    }
     const patient = await this.prisma.patient.findFirst({
-      where,
+      where: { mrn: String(mrn).trim(), tenantId, deletedAt: null },
       select: {
         id: true, firstName: true, middleName: true, lastName: true, mrn: true,
         gender: true,

@@ -78,7 +78,6 @@ function balanceOf(inv: any): number {
 export default function PortalPage() {
   const [tab, setTab] = useState<Tab>('lookup');
   const [mrn, setMrn] = useState('');
-  const [tenantInput, setTenantInput] = useState('');
   const [patient, setPatient] = useState<any>(null);
   const [looking, setLooking] = useState(false);
   const [lookupError, setLookupError] = useState('');
@@ -100,18 +99,16 @@ export default function PortalPage() {
     setLookupError('');
     setPatient(null);
     try {
-      const q = tenantInput.trim() ? `&tenantId=${encodeURIComponent(tenantInput.trim())}` : '';
-      const r = await api(`/portal/lookup?mrn=${encodeURIComponent(mrn.trim())}${q}`);
+      const r = await api(`/portal/lookup?mrn=${encodeURIComponent(mrn.trim())}`);
       const p = objOf(r);
       if (p?.id) {
         setPatient(p);
-        setTenantInput(p.tenantId || tenantInput.trim());
         setTab('dashboard');
       } else {
         setLookupError('Patient not found');
       }
     } catch {
-      setLookupError('Lookup failed');
+      setLookupError('Please sign in to look up a patient.');
     }
     setLooking(false);
   }
@@ -251,15 +248,6 @@ export default function PortalPage() {
               onChange={(e) => setMrn(e.target.value)}
               placeholder="Enter your MRN"
               onKeyDown={(e) => e.key === 'Enter' && lookup()}
-            />
-          </div>
-          <div className="field" style={{ marginBottom: 16 }}>
-            <label className="label">Tenant ID (optional)</label>
-            <input
-              className="input"
-              value={tenantInput}
-              onChange={(e) => setTenantInput(e.target.value)}
-              placeholder="Leave blank for auto-detect"
             />
           </div>
           <button className="btn" style={{ width: '100%' }} onClick={lookup} disabled={looking}>

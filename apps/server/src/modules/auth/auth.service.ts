@@ -28,6 +28,12 @@ export interface AuthUser {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly twoFactorFailures = new Map<
+    string,
+    { count: number; resetAt: number }
+  >();
+  private static readonly TWO_FACTOR_MAX_ATTEMPTS = 5;
+  private static readonly TWO_FACTOR_WINDOW_MS = 15 * 60 * 1000;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -137,7 +143,14 @@ export class AuthService {
     this.checkUserAccessible(user);
 
     if (user.twoFactorEnabled && user.twoFactorSecret) {
-      this.twoFactorService.assertValid(user.twoFactorSecret, dto.twoFactorCode);
+      this.canAttemptTwoFactor(dto.email);
+      try {
+        this.twoFactorService.assertValid(user.twoFactorSecret, dto.twoFactorCode);
+        this.clearTwoFactorFailures(dto.email);
+      } catch (err) {
+        this.recordTwoFactorFailure(dto.email);
+        throw err;
+      }
     }
 
     const permissions = this.getUserPermissions(user.role);
@@ -500,6 +513,42 @@ export class AuthService {
 
   private getUserPermissions(role: string): string[] {
     return getRolePermissions(role as UserRole);
+  }
+
+  private canAttemptTwoFactor(email: string) {
+    const entry = this.twoFactorFailures.get(email);
+    if (!entry) return;
+    if (entry.resetAt <= Date.now()) {
+      this.twoFactorFailures.delete(email);
+      return;
+    }
+    if (entry.count >= AuthService.TWO_FACTOR_MAX_ATTEMPTS) {
+      throw new UnauthorizedException(
+        "Too many 2FA attempts. Try again later.",
+      );
+    }
+  }
+
+  private recordTwoFactorFailure(email: string) {
+    const now = Date.now();
+    const entry = this.twoFactorFailures.get(email);
+    if (!entry || entry.resetAt <= now) {
+      this.twoFactorFailures.set(email, {
+        count: 1,
+        resetAt: now + AuthService.TWO_FACTOR_WINDOW_MS,
+      });
+      return;
+    }
+    entry.count += 1;
+    if (entry.count >= AuthService.TWO_FACTOR_MAX_ATTEMPTS) {
+      throw new UnauthorizedException(
+        "Too many 2FA attempts. Try again later.",
+      );
+    }
+  }
+
+  private clearTwoFactorFailures(email: string) {
+    this.twoFactorFailures.delete(email);
   }
 
   private async recordFailedLogin(userId: string) {

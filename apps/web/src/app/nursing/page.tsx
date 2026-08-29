@@ -5,9 +5,10 @@ import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/hooks';
 
-type Tab = 'summary' | 'vitals' | 'notes' | 'medadmin' | 'handover' | 'tracking';
+type Tab = 'summary' | 'vitals' | 'notes' | 'medadmin' | 'handover' | 'tracking' | 'board';
 
 const TABS: { key: Tab; label: string }[] = [
+  { key: 'board', label: 'Bed Board' },
   { key: 'summary', label: 'Summary' },
   { key: 'vitals', label: 'Vitals' },
   { key: 'notes', label: 'Notes' },
@@ -46,8 +47,28 @@ function daysAdmitted(a: any): number {
   return Math.max(0, Math.floor((end - start) / 86400000));
 }
 
+const BED_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
+  OCCUPIED: { bg: '#dc2626', fg: '#fff', label: 'Occupied' },
+  AVAILABLE: { bg: '#16a34a', fg: '#fff', label: 'Available' },
+  RESERVED: { bg: '#f59e0b', fg: '#fff', label: 'Reserved' },
+  CLEANING: { bg: '#94a3b8', fg: '#fff', label: 'Cleaning' },
+  MAINTENANCE: { bg: '#64748b', fg: '#fff', label: 'Maintenance' },
+  BLOCKED: { bg: '#334155', fg: '#fff', label: 'Blocked' },
+};
+
+function bedLabel(s: string): string {
+  return BED_STYLE[s]?.label || String(s || 'UNKNOWN').replace(/_/g, ' ');
+}
+
+function boardBedBallot(b: any): { bg: string; fg: string } {
+  const st = String(b.status || '').toUpperCase();
+  if (b.bedType === 'ISOLATION' && st === 'OCCUPIED')
+    return { bg: '#7c3aed', fg: '#fff' };
+  return BED_STYLE[st] || { bg: '#94a3b8', fg: '#fff' };
+}
+
 export default function NursingPage() {
-  const [tab, setTab] = useState<Tab>('summary');
+  const [tab, setTab] = useState<Tab>('board');
 
   const [patients, setPatients] = useState<any[]>([]);
   const [admissions, setAdmissions] = useState<any[]>([]);
@@ -77,6 +98,51 @@ export default function NursingPage() {
   const [handoverSavedMsg, setHandoverSavedMsg] = useState('');
 
   const [sortBy, setSortBy] = useState<'ward' | 'date'>('ward');
+
+  const [board, setBoard] = useState<any>(null);
+  const [boardWard, setBoardWard] = useState<string>('all');
+  const [loadingBoard, setLoadingBoard] = useState(false);
+  const [boardMsg, setBoardMsg] = useState('');
+
+  const loadBoard = useCallback(async () => {
+    setLoadingBoard(true);
+    try {
+      const r = await api('/bed-management/board');
+      const d = unwrap(r);
+      setBoard(typeof d?.summary === 'object' ? d : { summary: {}, wards: [] });
+    } catch (e: any) {
+      setBoardMsg(e?.message || 'Failed to load bed board');
+    } finally {
+      setLoadingBoard(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'board') loadBoard();
+  }, [tab, loadBoard]);
+
+  const updateBedStatus = useCallback(async (bedId: string, status: string) => {
+    setBoardMsg('');
+    try {
+      await api(`/bed-management/beds/${bedId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+      await loadBoard();
+    } catch (e: any) {
+      setBoardMsg(e?.message || 'Failed to update bed status');
+    }
+  }, [loadBoard]);
+
+  const deallocateBed = useCallback(async (bedId: string) => {
+    setBoardMsg('');
+    try {
+      await api(`/bed-management/deallocate/${bedId}`, { method: 'POST' });
+      await loadBoard();
+    } catch (e: any) {
+      setBoardMsg(e?.message || 'Failed to release bed');
+    }
+  }, [loadBoard]);
 
   const loadCore = useCallback(async () => {
     const [p, a, w, d] = await Promise.allSettled([
@@ -784,6 +850,202 @@ export default function NursingPage() {
     </div>
   );
 
+  const renderBoard = () => {
+    const summary = board?.summary || {};
+    const wards = Array.isArray(board?.wards) ? board.wards : [];
+    const filtered = summary ? wards : [];
+    const visible = boardWard === 'all' ? filtered : filtered.filter((w: any) => w.id === boardWard);
+    const statCards = [
+      { label: 'Total Beds', value: summary.total ?? 0, tone: 'blue' },
+      { label: 'Available', value: summary.available ?? 0, tone: 'green' },
+      { label: 'Occupied', value: summary.occupied ?? 0, tone: 'red' },
+      { label: 'Cleaning', value: summary.cleaning ?? 0, tone: 'gray' },
+      { label: 'Reserved', value: summary.reserved ?? 0, tone: 'amber' },
+      { label: 'Isolation', value: summary.isolation ?? 0, tone: 'purple' },
+    ];
+    const statTone: Record<string, string> = {
+      blue: 'stat-blue',
+      green: 'stat-green',
+      red: 'stat-red',
+      amber: 'stat-amber',
+      gray: '',
+      purple: 'stat-purple',
+    };
+
+    const renderBed = (b: any) => {
+      const occ = b.allocations?.[0]?.admission;
+      const st = String(b.status || '').toUpperCase();
+      const { bg, fg } = boardBedBallot(b);
+      const isIsolation = b.bedType === 'ISOLATION';
+      return (
+        <div
+          key={b.id}
+          style={{
+            border: `1px solid ${isIsolation ? '#7c3aed' : 'var(--border)'}`,
+            borderRadius: 10,
+            padding: 10,
+            background: st === 'OCCUPIED' ? bg : 'var(--surface)',
+            color: st === 'OCCUPIED' ? fg : 'inherit',
+            minHeight: 118,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            position: 'relative',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong style={{ fontSize: 15 }}>{b.bedNumber}</strong>
+            <span
+              className="badge"
+              style={{
+                background: st === 'OCCUPIED' ? 'rgba(255,255,255,0.22)' : 'var(--border)',
+                color: st === 'OCCUPIED' ? '#fff' : 'inherit',
+                fontSize: 10.5,
+              }}
+            >
+              {bedLabel(st)}
+            </span>
+          </div>
+          {isIsolation && (
+            <span
+              className="badge"
+              style={{ background: '#7c3aed', color: '#fff', fontSize: 10, width: 'fit-content' }}
+            >
+              ISOLATION
+            </span>
+          )}
+          {occ ? (
+            <>
+              <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.2 }}>
+                {patientName(occ.patient)}
+              </div>
+              <div style={{ fontSize: 11, opacity: 0.85 }}>
+                {occ.admissionNumber} · MRN {occ.patient?.mrn || '—'}
+              </div>
+              {occ.primaryDiagnosis && (
+                <div style={{ fontSize: 11, opacity: 0.9, fontStyle: 'italic' }}>
+                  {occ.primaryDiagnosis}
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ fontSize: 12, opacity: 0.7 }}>No patient</div>
+          )}
+          <div style={{ display: 'flex', gap: 6, marginTop: 'auto', flexWrap: 'wrap' }}>
+            {st === 'OCCUPIED' ? (
+              <button className="btn btn-sm btn-secondary" style={{ fontSize: 11, flex: 1 }} onClick={() => deallocateBed(b.id)}>
+                Release / Discharge
+              </button>
+            ) : (
+              <>
+                <button
+                  className="btn btn-sm"
+                  style={{ fontSize: 11, flex: 1, background: '#16a34a', borderColor: '#16a34a' }}
+                  disabled={st === 'AVAILABLE' || st === 'OCCUPIED'}
+                  onClick={() => updateBedStatus(b.id, 'AVAILABLE')}
+                >
+                  Mark Available
+                </button>
+                <button
+                  className="btn btn-sm btn-secondary"
+                  style={{ fontSize: 11, flex: 1 }}
+                  disabled={st === 'CLEANING'}
+                  onClick={() => updateBedStatus(b.id, 'CLEANING')}
+                >
+                  Cleaning
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div>
+        {boardMsg && <div className="banner-danger">{boardMsg}</div>}
+
+        <div className="stat-grid" style={{ marginBottom: 20 }}>
+          {statCards.map((c) => (
+            <div className="stat-card" key={c.label}>
+              <div className="stat-label">{c.label}</div>
+              <div className={`stat-value ${statTone[c.tone]}`}>{c.value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="toolbar">
+          <select className="input" style={{ maxWidth: 260 }} value={boardWard} onChange={(e) => setBoardWard(e.target.value)}>
+            <option value="all">All wards</option>
+            {filtered.map((w: any) => (
+              <option key={w.id} value={w.id}>
+                {w.name} — {w.totalBeds} beds ({w.occupied} occ)
+              </option>
+            ))}
+          </select>
+          <button className="btn btn-secondary" onClick={loadBoard} disabled={loadingBoard}>
+            Refresh
+          </button>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            Occupancy {summary.occupancyRate ?? 0}%
+          </span>
+        </div>
+
+        {loadingBoard ? (
+          <div className="loading">Loading bed board…</div>
+        ) : visible.length === 0 ? (
+          <div className="empty">No wards or beds configured for your facility.</div>
+        ) : (
+          visible.map((w: any) => {
+            const rooms = Array.isArray(w.rooms) ? w.rooms : [];
+            const unassigned = Array.isArray(w.unassignedBeds) ? w.unassignedBeds : [];
+            return (
+              <div className="card" key={w.id} style={{ marginBottom: 18 }}>
+                <div className="row-between" style={{ marginBottom: 12 }}>
+                  <div>
+                    <span className="card-title">{w.name}</span>
+                    {w.department && (
+                      <span className="badge badge-blue" style={{ marginLeft: 8 }}>{w.department}</span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {w.totalBeds} beds · {w.occupied} occupied ({w.floor != null ? `Floor ${w.floor}` : w.code || ''})
+                  </span>
+                </div>
+
+                {rooms.length === 0 && unassigned.length === 0 ? (
+                  <div className="empty">No beds configured in this ward.</div>
+                ) : (
+                  rooms.map((r: any) => (
+                    <div key={r.id} style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-muted)' }}>
+                        {r.name || r.roomNumber || 'Room'}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+                        {r.beds.map(renderBed)}
+                      </div>
+                    </div>
+                  ))
+                )}
+
+                {unassigned.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-muted)' }}>
+                      Other beds
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+                      {unassigned.map(renderBed)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    );
+  };
+
   return (
     <AppShell>
       <div className="page-header">
@@ -801,6 +1063,7 @@ export default function NursingPage() {
         ))}
       </div>
 
+      {tab === 'board' && renderBoard()}
       {tab === 'summary' && renderSummary()}
       {tab === 'vitals' && renderVitals()}
       {tab === 'notes' && renderNotes()}

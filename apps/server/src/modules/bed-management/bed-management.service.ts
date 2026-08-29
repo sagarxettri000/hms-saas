@@ -196,6 +196,114 @@ export class BedManagementService {
     };
   }
 
+  async getBoard(tenantId: string) {
+    const wards = await this.prisma.ward.findMany({
+      where: { tenantId, isActive: true },
+      orderBy: [{ floor: "asc" }, { name: "asc" }],
+      include: {
+        department: { select: { id: true, name: true } },
+        rooms: {
+          where: { isActive: true },
+          orderBy: { name: "asc" },
+          include: {
+            beds: {
+              where: { isActive: true },
+              orderBy: { bedNumber: "asc" },
+              include: {
+                allocations: {
+                  where: { status: "OCCUPIED" },
+                  include: {
+                    admission: {
+                      select: {
+                        id: true,
+                        admissionNumber: true,
+                        primaryDiagnosis: true,
+                        patient: {
+                          select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            mrn: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
+        beds: {
+          where: { roomId: null, isActive: true },
+          orderBy: { bedNumber: "asc" },
+          include: {
+            allocations: {
+              where: { status: "OCCUPIED" },
+              include: {
+                admission: {
+                  select: {
+                    id: true,
+                    admissionNumber: true,
+                    primaryDiagnosis: true,
+                    patient: {
+                      select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        mrn: true,
+                      },
+                    },
+                  },
+                },
+              },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+
+    const allBeds = wards.flatMap((w) => [...w.rooms.flatMap((r) => r.beds), ...w.beds]);
+    const total = allBeds.length;
+    const count = (st: string) => allBeds.filter((b) => b.status === st).length;
+    const summary = {
+      total,
+      available: count("AVAILABLE"),
+      occupied: count("OCCUPIED"),
+      reserved: count("RESERVED"),
+      cleaning: count("CLEANING"),
+      maintenance: count("MAINTENANCE"),
+      blocked: count("BLOCKED"),
+      isolation: allBeds.filter((b) => b.bedType === "ISOLATION").length,
+      occupancyRate: total > 0 ? Math.round((count("OCCUPIED") / total) * 100) : 0,
+    };
+
+    const board = wards.map((w) => {
+      const wardRooms = w.rooms.map((r) => ({
+        ...r,
+        beds: r.beds,
+      }));
+      return {
+        id: w.id,
+        name: w.name,
+        code: w.code,
+        floor: w.floor,
+        department: w.department?.name ?? null,
+        capacity: w.capacity,
+        rooms: wardRooms,
+        unassignedBeds: w.beds,
+        totalBeds: wardRooms.reduce((s, r) => s + r.beds.length, 0) + w.beds.length,
+        occupied: [...wardRooms.flatMap((r) => r.beds), ...w.beds].filter(
+          (b) => b.status === "OCCUPIED",
+        ).length,
+      };
+    });
+
+    return { summary, wards: board };
+  }
+
   async findAllWards(
     tenantId: string,
     query: { search?: string; page?: number; limit?: number },

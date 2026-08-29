@@ -85,6 +85,29 @@ export interface DispenseDto {
   notes?: string;
 }
 
+export interface SaleItemDto {
+  medicineId: string;
+  batchNumber?: string;
+  quantity: number;
+  unitPrice?: number;
+  discountPercent?: number;
+  taxPercent?: number;
+}
+
+export interface CreatePharmacySaleDto {
+  patientId: string;
+  storeId: string;
+  prescriptionId?: string;
+  paymentMethod?: string;
+  referenceNumber?: string;
+  taxPercent?: number;
+  discountAmount?: number;
+  discountReason?: string;
+  isCredit?: boolean;
+  notes?: string;
+  items: SaleItemDto[];
+}
+
 @Injectable()
 export class PharmacyService {
   constructor(private readonly prisma: PrismaService) {}
@@ -556,6 +579,296 @@ export class PharmacyService {
       dispensedAt: new Date(),
       dispensedBy: userId,
     };
+  }
+
+  async sale(tenantId: string, dto: CreatePharmacySaleDto, userId?: string) {
+    if (!dto.items || dto.items.length === 0)
+      throw new BadRequestException("At least one item is required");
+
+    const store = await this.prisma.store.findFirst({
+      where: { id: dto.storeId, tenantId },
+    });
+    if (!store) throw new NotFoundException("Store not found");
+
+    const patient = await this.prisma.patient.findFirst({
+      where: { id: dto.patientId, tenantId },
+    });
+    if (!patient) throw new NotFoundException("Patient not found");
+
+    return this.prisma.$transaction(async (tx) => {
+      const invoiceItems: any[] = [];
+      let subtotal = 0;
+
+      for (const item of dto.items) {
+        const quantity = Number(item.quantity);
+        if (!quantity || quantity <= 0)
+          throw new BadRequestException(
+            `Invalid quantity for medicine ${item.medicineId}`,
+          );
+
+        const inventoryItem = await tx.inventoryItem.findFirst({
+          where: {
+            tenantId,
+            storeId: dto.storeId,
+            medicineId: item.medicineId,
+            ...(item.batchNumber
+              ? { batchNumber: item.batchNumber }
+              : {}),
+          },
+        });
+        if (!inventoryItem)
+          throw new NotFoundException(
+            `No stock found for medicine ${item.medicineId} in ${store.name}`,
+          );
+
+        const available = Number(inventoryItem.currentStock);
+        if (available < quantity)
+          throw new ConflictException(
+            `Insufficient stock for ${inventoryItem.name}. Available: ${available}, Requested: ${quantity}`,
+          );
+
+        const medicine = inventoryItem.medicineId
+          ? await tx.medicine.findFirst({
+              where: { id: inventoryItem.medicineId, tenantId },
+            })
+          : null;
+
+        const unitPrice = Number(item.unitPrice) || Number(inventoryItem.salesRate) || Number(medicine?.salesRate) || 0;
+        const taxPercent = Number(item.taxPercent ?? dto.taxPercent ?? 0);
+        const discountPercent = Number(item.discountPercent ?? 0);
+        const gross = quantity * unitPrice;
+        const discountAmount = (gross * discountPercent) / 100;
+        const taxable = gross - discountAmount;
+        const taxAmount = (taxable * taxPercent) / 100;
+        const lineTotal = Math.round(taxable + taxAmount);
+
+        subtotal += lineTotal;
+
+        const updated = await tx.inventoryItem.updateMany({
+          where: {
+            id: inventoryItem.id,
+            tenantId,
+            currentStock: { gte: quantity },
+          },
+          data: {
+            currentStock: available - quantity,
+          },
+        });
+        if (updated.count === 0)
+          throw new ConflictException(
+            `Insufficient stock for ${inventoryItem.name}`,
+          );
+
+        await tx.inventoryTransaction.create({
+          data: {
+            tenantId,
+            itemId: inventoryItem.id,
+            storeId: inventoryItem.storeId,
+            type: "CONSUMPTION" as any,
+            quantity,
+            unitPrice,
+            totalValue: unitPrice * quantity,
+            batchNumber: item.batchNumber || inventoryItem.batchNumber || undefined,
+            expiryDate: inventoryItem.expiryDate,
+            referenceType: "PHARMACY_SALE",
+            remarks: `Sold to ${patient.firstName} ${patient.lastName}`,
+            createdBy: userId,
+          },
+        });
+
+        invoiceItems.push({
+          tenantId,
+          serviceName: inventoryItem.name || medicine?.name || "Medicine",
+          serviceId: inventoryItem.medicineId || undefined,
+          serviceCode: medicine?.sku || inventoryItem.sku || undefined,
+          description: inventoryItem.batchNumber
+            ? `Batch: ${inventoryItem.batchNumber}`
+            : undefined,
+          quantity,
+          rate: unitPrice,
+          discountPercent,
+          discountAmount,
+          taxPercent: taxPercent || undefined,
+          taxAmount,
+          lineTotal,
+          referenceType: "PHARMACY_SALE",
+          referenceId: inventoryItem.id,
+        });
+      }
+
+      const invoiceDiscount = Math.max(
+        0,
+        Math.min(Number(dto.discountAmount || 0), subtotal),
+      );
+      const totalAmount = subtotal - invoiceDiscount;
+      if (totalAmount < 0)
+        throw new BadRequestException("Total amount cannot be negative");
+
+      const paidAmount =
+        !dto.isCredit && dto.paymentMethod ? totalAmount : 0;
+      const dueAmount = totalAmount - paidAmount;
+      const status =
+        dueAmount <= 0 ? "PAID" : dto.isCredit ? "PENDING" : "PARTIAL";
+
+      const invoiceNumber = await this.nextNumber(
+        tx,
+        tenantId,
+        "INV",
+        "invoice",
+        "invoiceNumber",
+      );
+      const invoice = await tx.invoice.create({
+        data: {
+          tenantId,
+          invoiceNumber,
+          patientId: dto.patientId,
+          type: "PHARMACY",
+          status: status as any,
+          subtotal,
+          discountAmount: invoiceDiscount,
+          discountReason: dto.discountReason || undefined,
+          taxAmount: invoiceItems.reduce((s, i) => s + i.taxAmount, 0),
+          taxPercent: dto.taxPercent || undefined,
+          totalAmount,
+          paidAmount,
+          dueAmount,
+          isCredit: dto.isCredit || false,
+          notes: dto.notes || "Pharmacy sale",
+          createdBy: userId,
+          items: { create: invoiceItems },
+        },
+        include: { items: true },
+      });
+
+      let paymentId: string | undefined;
+      if (!dto.isCredit && dto.paymentMethod) {
+        const paymentNumber = await this.nextNumber(
+          tx,
+          tenantId,
+          "PAY",
+          "payment",
+          "paymentNumber",
+        );
+        const payment = await tx.payment.create({
+          data: {
+            tenantId,
+            patientId: dto.patientId,
+            invoiceId: invoice.id,
+            paymentNumber,
+            amount: totalAmount,
+            method: dto.paymentMethod as any,
+            status: "COMPLETED",
+            referenceNumber: dto.referenceNumber,
+            receivedBy: userId,
+            paymentType: "INVOICE",
+            notes: dto.notes || "Pharmacy sale payment",
+          },
+        });
+        paymentId = payment.id;
+
+        await tx.financialTransaction.create({
+          data: {
+            tenantId,
+            txnNumber: await this.nextNumber(
+              tx,
+              tenantId,
+              "FT",
+              "financialTransaction",
+              "txnNumber",
+            ),
+            type: "PAYMENT",
+            direction: "CREDIT",
+            amount: totalAmount,
+            patientId: dto.patientId,
+            invoiceId: invoice.id,
+            referenceType: "payment",
+            referenceId: payment.id,
+            method: dto.paymentMethod as any,
+            notes: `Payment ${paymentNumber} received`,
+            createdBy: userId,
+          },
+        });
+      }
+
+      await tx.financialTransaction.create({
+        data: {
+          tenantId,
+          txnNumber: await this.nextNumber(
+            tx,
+            tenantId,
+            "FT",
+            "financialTransaction",
+            "txnNumber",
+          ),
+          type: "INVOICE",
+          direction: "CREDIT",
+          amount: totalAmount,
+          patientId: dto.patientId,
+          invoiceId: invoice.id,
+          referenceType: "invoice",
+          referenceId: invoice.id,
+          notes: `Invoice ${invoiceNumber} issued`,
+          createdBy: userId,
+        },
+      });
+
+      if (dto.prescriptionId) {
+        await tx.prescription.updateMany({
+          where: { id: dto.prescriptionId, tenantId },
+          data: { status: "DISPENSED" },
+        });
+      }
+
+      if (userId) {
+        await tx.auditLog.create({
+          data: {
+            tenantId,
+            userId,
+            entity: "Invoice",
+            entityId: invoice.id,
+            action: "CREATE",
+            metadata: { source: "PHARMACY_SALE", type: "PHARMACY" },
+          },
+        });
+      }
+
+      return {
+        success: true,
+        invoice,
+        paymentId,
+        payment: paymentId
+          ? await tx.payment.findUnique({ where: { id: paymentId } })
+          : undefined,
+        patientName: `${patient.firstName} ${patient.lastName}`,
+        storeName: store.name,
+        totalAmount,
+        paidAmount,
+        dueAmount,
+        status,
+        isCredit: dto.isCredit || false,
+      };
+    });
+  }
+
+  private async nextNumber(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    prefix: string,
+    model: "invoice" | "payment" | "financialTransaction",
+    field: string,
+  ): Promise<string> {
+    const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const latest: any = await (tx as any)[model].findFirst({
+      where: { tenantId, [field]: { startsWith: `${prefix}-${ymd}` } },
+      orderBy: { createdAt: "desc" },
+      select: { [field]: true },
+    });
+    let seq = 1;
+    if (latest) {
+      const parts = latest[field].split("-");
+      seq = parseInt(parts[parts.length - 1], 10) + 1;
+    }
+    return `${prefix}-${ymd}-${String(seq).padStart(5, "0")}`;
   }
 
   // ---------- Stock Alerts ----------

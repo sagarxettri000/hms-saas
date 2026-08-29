@@ -769,39 +769,32 @@ function SalesTab() {
     setSubmittingSale(true);
     setSaleError('');
     try {
-      const invRes = await api('/billing/invoices', {
+      const saleRes = await api('/pharmacy/sale', {
         method: 'POST',
         body: JSON.stringify({
           patientId: salesPatientId,
-          type: 'PHARMACY',
+          storeId: salesStoreId,
           items: salesItems.map((it) => ({
-            serviceId: it.medicineId,
-            serviceName: it.medicineName,
+            medicineId: it.medicineId,
             quantity: it.quantity,
-            rate: it.unitPrice,
+            unitPrice: it.unitPrice,
           })),
           discountAmount: salesDiscount || 0,
           taxPercent: salesTax || 0,
           isCredit: salesIsCredit,
+          paymentMethod: salesIsCredit ? undefined : salesPaymentMethod,
+          referenceNumber: salesPaymentRef || undefined,
           notes: 'Pharmacy walk-in sale',
         }),
       });
-      const inv = toObj(invRes);
-      if (!salesIsCredit && inv.id) {
-        await api('/billing/payments', {
-          method: 'POST',
-          body: JSON.stringify({
-            patientId: salesPatientId,
-            invoiceId: inv.id,
-            amount: Number(inv.totalAmount || 0),
-            method: salesPaymentMethod,
-            referenceNumber: salesPaymentRef,
-            notes: 'Pharmacy sale payment',
-          }),
-        });
+      const result = toObj(saleRes);
+      const invoice = result?.invoice ?? result;
+      if (invoice?.id) {
+        const receiptRes = await api(`/billing/invoices/${invoice.id}`);
+        setSaleReceipt(toObj(receiptRes) ?? invoice);
+      } else {
+        setSaleReceipt(invoice);
       }
-      const receiptRes = await api(`/billing/invoices/${inv.id}`);
-      setSaleReceipt(toObj(receiptRes));
       setSalesItems([]);
       setSalesPatientId('');
       setSalesDiscount(0);
@@ -944,12 +937,12 @@ function SalesTab() {
                     <select className="input" value={salesPaymentMethod} onChange={(e) => setSalesPaymentMethod(e.target.value)}>
                       <option value="CASH">Cash</option>
                       <option value="CARD">Card</option>
-                      <option value="BANK_TRANSFER">Bank Transfer</option>
-                      <option value="QR">QR / eSewa / Khalti</option>
+                      <option value="BANK">Bank Transfer</option>
+                      <option value="ONLINE">QR / eSewa / Khalti</option>
                       <option value="INSURANCE">Insurance</option>
                     </select>
                   </div>
-                  {(salesPaymentMethod === 'CARD' || salesPaymentMethod === 'BANK_TRANSFER' || salesPaymentMethod === 'QR') && (
+                  {(salesPaymentMethod === 'CARD' || salesPaymentMethod === 'BANK' || salesPaymentMethod === 'ONLINE') && (
                     <div className="field">
                       <label className="label">Reference Number</label>
                       <input className="input" value={salesPaymentRef} onChange={(e) => setSalesPaymentRef(e.target.value)} placeholder="Transaction ref" />

@@ -17,6 +17,7 @@ import {
   CreateInventoryItemDto,
   StockAdjustmentDto,
   DispenseDto,
+  CreatePharmacySaleDto,
 } from "./pharmacy.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
@@ -160,6 +161,13 @@ export class PharmacyController {
   }
 
   // ---------- Dispensing ----------
+
+  @Post("sale")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Create an atomic pharmacy sale (stock + billing)" })
+  createSale(@Body() dto: CreatePharmacySaleDto, @Req() req: any) {
+    return this.pharmacyService.sale(req.user.tenantId, dto, req.user.id);
+  }
 
   @Post("dispense")
   @Permissions(PermissionAction.CREATE)

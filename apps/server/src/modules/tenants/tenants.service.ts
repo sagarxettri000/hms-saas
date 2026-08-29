@@ -117,10 +117,10 @@ export class TenantsService {
 
       // Create hospital admin user if provided
       let adminUser: any = null;
+      let temporaryPassword: string | undefined;
       if (dto.adminEmail && dto.adminFirstName && dto.adminLastName) {
-        const passwordHash = await this.hashPassword(
-          dto.adminPassword || "ChangeMe@123",
-        );
+        const password = dto.adminPassword || this.generateTemporaryPassword();
+        const passwordHash = await this.hashPassword(password);
         adminUser = await tx.user.create({
           data: {
             tenantId: tenant.id,
@@ -131,8 +131,10 @@ export class TenantsService {
             role: "HOSPITAL_ADMIN",
             status: "ACTIVE",
             emailVerifiedAt: new Date(),
+            mustChangePassword: !dto.adminPassword,
           },
         });
+        if (!dto.adminPassword) temporaryPassword = password;
       }
 
       // Create default departments
@@ -166,7 +168,7 @@ export class TenantsService {
         });
       }
 
-      return { tenant, adminUser };
+      return { tenant, adminUser, temporaryPassword };
     });
 
     return result;
@@ -345,5 +347,16 @@ export class TenantsService {
   private async hashPassword(password: string): Promise<string> {
     const bcrypt = await import("bcryptjs");
     return bcrypt.hash(password, 12);
+  }
+
+  private generateTemporaryPassword(): string {
+    const chars =
+      "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*";
+    const buf = crypto.randomBytes(16);
+    let password = "";
+    for (let i = 0; i < 16; i++) {
+      password += chars[buf[i] % chars.length];
+    }
+    return password;
   }
 }

@@ -45,7 +45,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
         details = body.details;
       }
     } else if (exception instanceof Error) {
-      message = exception.message;
       error = exception.name;
       this.logger.error(
         `Unhandled exception: ${exception.message}`,

@@ -89,21 +89,29 @@ export class FollowUpsService {
       if (!encounter) throw new BadRequestException("Encounter not found");
     }
 
+    const orderedDoctors = dto.assignedDoctorId
+      ? [
+          ...doctors.filter((d) => d.id === dto.assignedDoctorId),
+          ...doctors.filter((d) => d.id !== dto.assignedDoctorId),
+        ]
+      : doctors;
+
+    const primaryDoctorId = orderedDoctors[0]?.id || null;
+
     const followUp = await this.prisma.followUp.create({
       data: {
         tenantId,
         patientId: dto.patientId,
         encounterId: dto.encounterId || null,
-        assignedDoctorId:
-          dto.assignedDoctorId || doctors[0]?.id || null,
+        assignedDoctorId: primaryDoctorId,
         notes: dto.notes || null,
         createdBy: userId,
         updatedBy: userId,
         doctors: {
-          create: doctors.map((d, i) => ({
+          create: orderedDoctors.map((d) => ({
             tenantId,
             doctorId: d.id,
-            isPrimary: i === 0,
+            isPrimary: d.id === primaryDoctorId,
           })),
         },
       },
@@ -268,20 +276,24 @@ export class FollowUpsService {
 
     if (dto.doctorIds) {
       const doctors = await this.verifyDoctors(tenantId, dto.doctorIds);
-      await this.prisma.followUpDoctor.deleteMany({
-        where: { followUpId: id },
-      });
-      await this.prisma.followUpDoctor.createMany({
-        data: doctors.map((d, i) => ({
-          tenantId,
-          followUpId: id,
-          doctorId: d.id,
-          isPrimary: i === 0,
-        })),
-      });
-      await this.prisma.followUp.update({
-        where: { id },
-        data: { assignedDoctorId: doctors[0]?.id || null, updatedBy: userId },
+      const orderedDoctors = [...doctors];
+      const primaryDoctorId = orderedDoctors[0]?.id || null;
+      await this.prisma.$transaction(async (tx) => {
+        await tx.followUpDoctor.deleteMany({
+          where: { followUpId: id },
+        });
+        await tx.followUpDoctor.createMany({
+          data: orderedDoctors.map((d) => ({
+            tenantId,
+            followUpId: id,
+            doctorId: d.id,
+            isPrimary: d.id === primaryDoctorId,
+          })),
+        });
+        await tx.followUp.update({
+          where: { id },
+          data: { assignedDoctorId: primaryDoctorId, updatedBy: userId },
+        });
       });
     }
 

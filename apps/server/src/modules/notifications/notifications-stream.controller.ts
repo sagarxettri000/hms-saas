@@ -1,8 +1,16 @@
-import { Controller, Query, Sse } from "@nestjs/common";
-import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import {
+  Controller,
+  Post,
+  Query,
+  Req,
+  Sse,
+  UseGuards,
+} from "@nestjs/common";
+import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Observable } from "rxjs";
 import { NotificationsHub, NotificationEvent } from "./notifications.hub";
 import { JwtService } from "@nestjs/jwt";
+import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 
 @ApiTags("Notifications")
 @Controller("notifications")
@@ -11,6 +19,22 @@ export class NotificationsStreamController {
     private readonly hub: NotificationsHub,
     private readonly jwtService: JwtService,
   ) {}
+
+  @Post("stream-token")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Issue a short-lived token for the notification stream" })
+  streamToken(@Req() req: any) {
+    const token = this.jwtService.sign(
+      {
+        tenantId: req.user.tenantId,
+        sub: req.user.id,
+        aud: "notification-stream",
+      },
+      { expiresIn: "60s" },
+    );
+    return { token };
+  }
 
   @Sse("stream")
   @ApiOperation({ summary: "SSE stream for real-time notifications" })
@@ -26,6 +50,11 @@ export class NotificationsStreamController {
         payload = this.jwtService.verify(token);
       } catch {
         subscriber.error("Invalid token");
+        return;
+      }
+
+      if (payload.aud !== "notification-stream") {
+        subscriber.error("Invalid token audience");
         return;
       }
 

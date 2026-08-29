@@ -39,14 +39,14 @@ export class UsersController {
   @ApiOperation({ summary: "Create a new user" })
   create(@Body() dto: CreateUserDto, @Req() req: any) {
     const tenantId = req.user.tenantId;
-    return this.usersService.create({ ...dto, tenantId });
+    return this.usersService.create({ ...dto, tenantId }, req.user.role);
   }
 
   @Post("invite")
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Invite a new user" })
   invite(@Body() dto: InviteUserDto, @Req() req: any) {
-    return this.usersService.invite(req.user.tenantId, dto);
+    return this.usersService.invite(req.user.tenantId, dto, req.user.role);
   }
 
   @Get()
@@ -94,6 +94,7 @@ export class UsersController {
       id,
       dto,
       req.user.role === "PLATFORM_SUPER_ADMIN" ? undefined : req.user.tenantId,
+      req.user.role,
     );
   }
 

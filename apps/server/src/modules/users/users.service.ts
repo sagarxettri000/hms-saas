@@ -54,7 +54,69 @@ export interface InviteUserDto {
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateUserDto) {
+  private static readonly ROLE_RANK: Record<string, number> = {
+    PLATFORM_SUPER_ADMIN: 100,
+    HOSPITAL_OWNER: 80,
+    HOSPITAL_ADMIN: 70,
+    IT_ADMIN: 60,
+    DEPARTMENT_HEAD: 50,
+    HR_MANAGER: 45,
+    FINANCE_MANAGER: 40,
+    INVENTORY_MANAGER: 40,
+    QUALITY_MANAGER: 40,
+    PATHOLOGIST: 30,
+    RADIOLOGIST: 30,
+    DOCTOR: 30,
+    ANESTHETIST: 30,
+    RECEPTION_SUPERVISOR: 25,
+    WARD_INCHARGE: 25,
+    PURCHASE_OFFICER: 22,
+    NURSE: 20,
+    RECEPTIONIST: 20,
+    LAB_TECHNICIAN: 20,
+    RADIOLOGY_TECHNICIAN: 20,
+    PHARMACIST: 20,
+    INSURANCE_OFFICER: 20,
+    OT_NURSE: 20,
+    OT_TECHNICIAN: 20,
+    STORE_KEEPER: 15,
+    ICU_STAFF: 15,
+    EMERGENCY_STAFF: 15,
+    AMBULANCE_STAFF: 15,
+    BLOOD_BANK_STAFF: 15,
+    BIOMEDICAL_ENGINEER: 15,
+    AUDITOR: 18,
+  };
+
+  private assertCanManageRoles(actorRole: string, targetRole: string) {
+    const managers = [
+      "PLATFORM_SUPER_ADMIN",
+      "HOSPITAL_OWNER",
+      "HOSPITAL_ADMIN",
+      "IT_ADMIN",
+      "HR_MANAGER",
+      "DEPARTMENT_HEAD",
+    ];
+    if (!managers.includes(actorRole)) {
+      throw new BadRequestException(
+        "You do not have permission to assign user roles",
+      );
+    }
+    if (targetRole && targetRole === "PLATFORM_SUPER_ADMIN") {
+      throw new BadRequestException(
+        "Super admin role cannot be assigned through this endpoint",
+      );
+    }
+    const actorRank = UsersService.ROLE_RANK[actorRole] ?? 0;
+    const targetRank = UsersService.ROLE_RANK[targetRole] ?? 0;
+    if (targetRank > actorRank) {
+      throw new BadRequestException(
+        "Cannot assign a role more privileged than your own",
+      );
+    }
+  }
+
+  async create(dto: CreateUserDto, actorRole?: string) {
     if (!dto.email || !String(dto.email).trim())
       throw new BadRequestException("Email is required");
     if (!dto.firstName || !String(dto.firstName).trim())
@@ -63,6 +125,7 @@ export class UsersService {
       throw new BadRequestException("Last name is required");
     if (!isRole(dto.role))
       throw new BadRequestException("Invalid user role");
+    this.assertCanManageRoles(actorRole || "", dto.role);
 
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
@@ -122,15 +185,19 @@ export class UsersService {
       }
     }
 
-    return { ...user, temporaryPassword: dto.password ? undefined : password };
+    const { passwordHash: _ph, ...safeUser } = user;
+    return { ...safeUser, temporaryPassword: dto.password ? undefined : password };
   }
 
-  async invite(tenantId: string, dto: InviteUserDto) {
-    return this.create({
-      ...dto,
-      tenantId,
-      isActive: true,
-    });
+  async invite(tenantId: string, dto: InviteUserDto, actorRole?: string) {
+    return this.create(
+      {
+        ...dto,
+        tenantId,
+        isActive: true,
+      },
+      actorRole,
+    );
   }
 
   async findAll(params: {
@@ -207,10 +274,11 @@ export class UsersService {
     });
 
     if (!user) throw new NotFoundException("User not found");
-    return user;
+    const { passwordHash: _ph, ...safeUser } = user;
+    return safeUser;
   }
 
-  async update(id: string, dto: UpdateUserDto, tenantId?: string) {
+  async update(id: string, dto: UpdateUserDto, tenantId?: string, actorRole?: string) {
     const user = await this.findScoped(id, tenantId);
     if (!user) throw new NotFoundException("User not found");
 
@@ -245,6 +313,7 @@ export class UsersService {
           "Super admin role cannot be assigned or changed through this endpoint",
         );
       }
+      this.assertCanManageRoles(actorRole || "", dto.role);
       data.role = dto.role;
     }
 

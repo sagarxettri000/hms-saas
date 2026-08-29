@@ -8,12 +8,19 @@ export class PortalService {
   async lookupByMrn(mrn: string, tenantId?: string) {
     if (!mrn || !String(mrn).trim()) throw new BadRequestException("MRN is required");
     const where: any = { mrn: String(mrn).trim(), deletedAt: null };
-    if (tenantId) where.tenantId = tenantId;
+    if (tenantId) {
+      const tenant = await this.prisma.tenant.findFirst({
+        where: { id: tenantId, status: "ACTIVE" },
+        select: { id: true },
+      });
+      if (!tenant) throw new BadRequestException("Invalid tenant");
+      where.tenantId = tenantId;
+    }
     const patient = await this.prisma.patient.findFirst({
       where,
       select: {
         id: true, firstName: true, middleName: true, lastName: true, mrn: true,
-        phone: true, email: true, gender: true, dateOfBirth: true,
+        gender: true,
         tenantId: true, tenant: { select: { id: true, name: true } },
       },
     });

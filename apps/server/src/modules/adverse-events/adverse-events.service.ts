@@ -69,8 +69,8 @@ export class AdverseEventsService {
     if (query.type) where.type = query.type;
     if (query.severity) where.severity = query.severity;
 
-    const page = Math.max(1, query.page || 1);
-    const limit = Math.min(100, Math.max(1, query.limit || 20));
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
 
     const [items, total] = await Promise.all([
       this.prisma.adverseEvent.findMany({

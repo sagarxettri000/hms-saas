@@ -25,11 +25,29 @@ export default function NotificationBell() {
 
   useEffect(() => {
     fetchUnreadCount();
+    connect();
+    const refresh = setInterval(connect, 30000);
+    return () => {
+      clearInterval(refresh);
+      closeEventSource();
+    };
+  }, []);
 
-    const token = localStorage.getItem('accessToken');
-    if (!token) return;
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const es = new EventSource(`${API_URL}/notifications/stream?token=${token}`);
+  async function fetchStreamToken(): Promise<string | null> {
+    try {
+      const res = await api('/notifications/stream-token', { method: 'POST' });
+      const payload = res?.data;
+      return payload?.token ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  function openEventSource(token: string) {
+    closeEventSource();
+    const es = new EventSource(`${API_URL}/notifications/stream?token=${encodeURIComponent(token)}`);
     eventSourceRef.current = es;
 
     es.onmessage = (event) => {
@@ -42,19 +60,24 @@ export default function NotificationBell() {
     };
 
     es.onerror = () => {
-      es.close();
-      setTimeout(() => {
-        if (eventSourceRef.current === es) {
-          reconnect(token);
-        }
-      }, 5000);
+      closeEventSource();
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = setTimeout(connect, 5000);
     };
+  }
 
-    return () => {
-      es.close();
+  function closeEventSource() {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
       eventSourceRef.current = null;
-    };
-  }, []);
+    }
+  }
+
+  async function connect() {
+    const token = await fetchStreamToken();
+    if (!token) return;
+    openEventSource(token);
+  }
 
   useEffect(() => {
     if (open) {
@@ -71,27 +94,6 @@ export default function NotificationBell() {
     if (open) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
-
-  function reconnect(token: string) {
-    const es = new EventSource(`${API_URL}/notifications/stream?token=${token}`);
-    eventSourceRef.current = es;
-
-    es.onmessage = (event) => {
-      try {
-        const notification = JSON.parse(event.data);
-        setUnreadCount((c) => c + 1);
-        setToast(notification);
-        setTimeout(() => setToast(null), 5000);
-      } catch {}
-    };
-
-    es.onerror = () => {
-      es.close();
-      setTimeout(() => {
-        if (eventSourceRef.current === es) reconnect(token);
-      }, 5000);
-    };
-  }
 
   async function fetchUnreadCount() {
     try {

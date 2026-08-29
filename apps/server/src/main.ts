@@ -8,6 +8,7 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
 import { NormalizeBodyInterceptor } from "./common/interceptors/normalize-body.interceptor";
 import { RequestLoggerInterceptor } from "./common/interceptors/request-logger.interceptor";
 import { ZodValidationPipe } from "./common/pipes/zod-validation.pipe";
+import { RlsContextInterceptor } from "./common/rls/rls-context.interceptor";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -42,6 +43,7 @@ async function bootstrap() {
   app.useGlobalInterceptors(
     new NormalizeBodyInterceptor(),
     new RequestLoggerInterceptor(),
+    new RlsContextInterceptor(),
     new TransformInterceptor(),
   );
 

@@ -48,6 +48,7 @@ import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "./common/guards/permissions.guard";
 import { TenantGuard } from "./common/guards/tenant.guard";
 import { MustChangePasswordGuard } from "./common/guards/must-change-password.guard";
+import { RlsBootstrap } from "./common/rls/rls.bootstrap";
 import { AppController } from "./app.controller";
 
 @Module({
@@ -131,6 +132,7 @@ import { AppController } from "./app.controller";
       provide: APP_GUARD,
       useClass: TenantGuard,
     },
+    RlsBootstrap,
   ],
 })
 export class AppModule implements NestModule {

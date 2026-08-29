@@ -4,7 +4,8 @@ import {
   OnModuleDestroy,
   Logger,
 } from "@nestjs/common";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
+import { RlsContext } from "../common/rls/rls.context";
 
 @Injectable()
 export class PrismaService
@@ -24,10 +25,46 @@ export class PrismaService
     });
   }
 
+  private applyRlsExtension() {
+    if (process.env.ENABLE_RLS !== "true") {
+      return;
+    }
+    const base = this as unknown as PrismaClient;
+    const extended = base.$extends({
+      query: {
+        $allModels: {
+          async $allOperations({ args, query }) {
+            const ctx = RlsContext.get();
+            const tenant = ctx?.tenantId;
+            const bypass = ctx?.bypass === true || !tenant;
+            if (tenant) {
+              const [, , result] = await base.$transaction([
+                base.$executeRawUnsafe(
+                  `SET LOCAL app.current_tenant_id = '${tenant}'`,
+                ),
+                base.$executeRawUnsafe(`SET LOCAL app.rls_bypass = 'false'`),
+                query(args) as Prisma.PrismaPromise<unknown>,
+              ]);
+              return result;
+            }
+            const [, result] = await base.$transaction([
+              base.$executeRawUnsafe(`SET LOCAL app.rls_bypass = 'true'`),
+              query(args) as Prisma.PrismaPromise<unknown>,
+            ]);
+            return result;
+          },
+        },
+      },
+    });
+    Object.assign(this, extended);
+    this.logger.log("Row-Level Security Prisma extension enabled.");
+  }
+
   async onModuleInit() {
     for (let attempt = 1; attempt <= 5; attempt++) {
       try {
         await this.$connect();
+        this.applyRlsExtension();
         this.logger.log("Database connected successfully");
         return;
       } catch (err) {

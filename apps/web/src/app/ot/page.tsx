@@ -147,7 +147,7 @@ export default function OtPage() {
   const [selectedSurgery, setSelectedSurgery] = useState('');
 
   useEffect(() => {
-    api('/ot/cases?limit=100')
+    api('/ot?limit=100')
       .then((r) => {
         const data = unwrap(r);
         setCases(Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []);
@@ -158,7 +158,7 @@ export default function OtPage() {
 
   useEffect(() => {
     if (tab !== 'analytics') return;
-    api('/ot/cases?limit=200')
+    api('/ot?limit=200')
       .then((r) => {
         const data = unwrap(r);
         setCases(Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []);
@@ -185,7 +185,7 @@ export default function OtPage() {
     if (busyId) return;
     setBusyId(c.id);
     try {
-      await api(`/ot/cases/${c.id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      await api(`/ot/${c.id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
       setCases((prev) => prev.map((x) => (x.id === c.id ? { ...x, status } : x)));
     } catch {}
     setBusyId(null);

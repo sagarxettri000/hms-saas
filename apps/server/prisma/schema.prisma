@@ -631,6 +631,10 @@ model Tenant {
   apiKeys                 ApiKey[]
   adverseEvents           AdverseEvent[]
   documentSignatures      DocumentSignature[]
+  ambulanceVehicles       AmbulanceVehicle[]
+  ambulanceCalls          AmbulanceCall[]
+  equipmentItems          EquipmentItem[]
+  equipmentLogs           EquipmentLog[]
 
   @@index([status])
   @@index([createdAt])
@@ -3237,4 +3241,83 @@ model AdverseEvent {
   @@index([tenantId, status])
   @@map("adverse_events")
   @@index([patientId])
+}
+
+model AmbulanceVehicle {
+  id              String        @id @default(cuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  callSign        String
+  type            String        @default("BASIC") // BASIC, ADVANCED, ICU
+  status          String        @default("AVAILABLE") // AVAILABLE, IN_SERVICE, MAINTENANCE
+  driverName      String
+  currentLocation String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  calls           AmbulanceCall[]
+
+  @@index([tenantId, status])
+  @@map("ambulance_vehicles")
+}
+
+model AmbulanceCall {
+  id           String            @id @default(cuid())
+  tenantId     String
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  callerName   String
+  callerPhone  String
+  patientName  String
+  location     String
+  complaint    String?
+  priority     String            @default("URGENT") // EMERGENCY, URGENT, NON_URGENT
+  status       String            @default("PENDING") // PENDING, DISPATCHED, EN_ROUTE, ARRIVED, COMPLETED, CANCELLED
+  dispatchedAt DateTime?
+  vehicleId    String?
+  vehicle      AmbulanceVehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  history      Json?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([tenantId, status])
+  @@index([tenantId, vehicleId])
+  @@map("ambulance_calls")
+}
+
+model EquipmentItem {
+  id              String           @id @default(cuid())
+  tenantId        String
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name            String
+  department      String?
+  model           String?
+  serialNumber    String?
+  manufacturer    String?
+  purchaseDate    DateTime?
+  warrantyExpiry  DateTime?
+  status          String           @default("OPERATIONAL") // OPERATIONAL, MAINTENANCE, OUT_OF_SERVICE
+  location        String?
+  lastServiceDate DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  logs            EquipmentLog[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, department])
+  @@map("equipment_items")
+}
+
+model EquipmentLog {
+  id           String        @id @default(cuid())
+  tenantId     String
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  equipmentId  String
+  equipment    EquipmentItem @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  date         DateTime      @default(now())
+  type         String // Preventive, Corrective, Inspection, Calibration
+  notes        String?
+  performedBy  String?
+  createdAt    DateTime      @default(now())
+
+  @@index([tenantId, equipmentId])
+  @@map("equipment_logs")
 }

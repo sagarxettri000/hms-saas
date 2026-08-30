@@ -1,8 +1,11 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import * as bcrypt from "bcryptjs";
+import { UserRole } from "@hms/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 
 export interface CreateShiftDto {
@@ -26,6 +29,17 @@ export interface CreateLeaveDto {
   endDate: Date | string;
   days: number;
   reason?: string;
+}
+
+export interface CreateStaffDto {
+  firstName: string;
+  lastName?: string;
+  email: string;
+  role: UserRole;
+  departmentId?: string;
+  employeeCode?: string;
+  designation?: string;
+  password?: string;
 }
 
 @Injectable()
@@ -174,5 +188,130 @@ export class HrService {
     if (body.status === "REJECTED") data.rejectionReason = body.rejectionReason;
 
     return this.prisma.leave.update({ where: { id }, data });
+  }
+
+  // ---------- Staff ----------
+
+  async listStaff(
+    tenantId: string,
+    query: { search?: string; departmentId?: string; active?: string; page?: number; limit?: number },
+  ) {
+    const { search, departmentId, page = 1, limit = 50 } = query;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Number(limit) || 50);
+    const where: any = { tenantId };
+    if (departmentId) where.departmentId = departmentId;
+    if (search)
+      where.user = {
+        OR: [
+          { firstName: { contains: search, mode: "insensitive" } },
+          { lastName: { contains: search, mode: "insensitive" } },
+          { email: { contains: search, mode: "insensitive" } },
+        ],
+      };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.staffProfile.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              role: true,
+              status: true,
+            },
+          },
+          department: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
+      }),
+      this.prisma.staffProfile.count({ where }),
+    ]);
+
+    const data = rows.map((s) => ({
+      ...s,
+      firstName: s.user.firstName,
+      lastName: s.user.lastName,
+      email: s.user.email,
+      role: s.user.role,
+      isActive: s.user.status !== "INACTIVE" && s.employmentStatus !== "TERMINATED",
+    }));
+
+    return { data, total, page: pageNum, limit: limitNum };
+  }
+
+  async createStaff(tenantId: string, dto: CreateStaffDto) {
+    if (!dto.email || !String(dto.email).trim())
+      throw new BadRequestException("Email is required");
+    if (!dto.firstName || !String(dto.firstName).trim())
+      throw new BadRequestException("First name is required");
+    if (!dto.role) throw new BadRequestException("Role is required");
+    const validRoles = Object.values(UserRole) as string[];
+    if (!validRoles.includes(dto.role))
+      throw new BadRequestException("Invalid role provided");
+
+    if (dto.departmentId) {
+      const department = await this.prisma.department.findFirst({
+        where: { id: dto.departmentId, tenantId },
+        select: { id: true },
+      });
+      if (!department)
+        throw new BadRequestException("Invalid department for this tenant");
+    }
+
+    const existing = await this.prisma.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
+      select: { id: true },
+    });
+    if (existing) throw new ConflictException("Email already in use");
+
+    const passwordHash = await bcrypt.hash(dto.password || "Staff@123", 12);
+
+    const user = await this.prisma.user.create({
+      data: {
+        tenantId,
+        email: dto.email.toLowerCase(),
+        passwordHash,
+        firstName: dto.firstName,
+        lastName: dto.lastName || "",
+        role: dto.role,
+        status: "ACTIVE",
+        emailVerifiedAt: new Date(),
+        mustChangePassword: true,
+      },
+    });
+
+    const staff = await this.prisma.staffProfile.create({
+      data: {
+        tenantId,
+        userId: user.id,
+        departmentId: dto.departmentId,
+        employeeCode: dto.employeeCode,
+        designation: dto.designation,
+        employmentStatus: "ACTIVE",
+      },
+    });
+
+    return this.prisma.staffProfile.findUnique({
+      where: { id: staff.id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+            status: true,
+          },
+        },
+        department: { select: { id: true, name: true } },
+      },
+    });
   }
 }

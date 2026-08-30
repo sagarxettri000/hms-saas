@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AppShell from '@/components/AppShell';
+import { api } from '@/lib/api';
 
 interface Equipment {
   id: string;
@@ -41,20 +42,8 @@ const EMPTY_FORM = {
   location: '',
 };
 
-function uid() {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `eq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function shiftDays(days: number) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
 }
 
 function addDays(dateStr: string, days: number) {
@@ -67,19 +56,35 @@ function daysBetween(from: string, to: string) {
   return Math.floor((new Date(to).getTime() - new Date(from).getTime()) / 86400000);
 }
 
-function seedEquipment(): Equipment[] {
-  return [
-    { id: uid(), name: 'Ventilator', department: 'ICU', model: 'V60 Plus', serialNumber: 'VN-44821', manufacturer: 'Philips', purchaseDate: '2023-02-14', warrantyExpiry: shiftDays(22), status: 'OPERATIONAL', location: 'ICU Bay 2', lastServiceDate: shiftDays(-41) },
-    { id: uid(), name: 'CT Scanner', department: 'Radiology', model: 'Revolution Evo 128', serialNumber: 'CT-77120', manufacturer: 'GE Healthcare', purchaseDate: '2022-08-09', warrantyExpiry: shiftDays(74), status: 'OPERATIONAL', location: 'Radiology Suite 1', lastServiceDate: shiftDays(-28) },
-    { id: uid(), name: 'X-Ray Machine', department: 'Radiology', model: 'DRX-Revolution', serialNumber: 'XR-33017', manufacturer: 'Canon', purchaseDate: '2021-05-21', warrantyExpiry: shiftDays(-12), status: 'MAINTENANCE', location: 'Radiology Suite 2', lastServiceDate: shiftDays(-118) },
-    { id: uid(), name: 'Ultrasound', department: 'Cardiology', model: 'EPIQ 7', serialNumber: 'US-90211', manufacturer: 'Philips', purchaseDate: '2023-06-30', warrantyExpiry: shiftDays(52), status: 'OPERATIONAL', location: 'Echo Lab', lastServiceDate: shiftDays(-96) },
-    { id: uid(), name: 'Anesthesia Machine', department: 'OT', model: 'Aisys Carestation', serialNumber: 'AN-11873', manufacturer: 'GE Healthcare', purchaseDate: '2022-11-05', warrantyExpiry: shiftDays(190), status: 'OPERATIONAL', location: 'OT Theatre 3', lastServiceDate: shiftDays(-14) },
-    { id: uid(), name: 'Pulse Oximeter', department: 'Emergency', model: 'Nellcor PM1000N', serialNumber: 'PO-56204', manufacturer: 'Medtronic', purchaseDate: '2020-09-18', warrantyExpiry: shiftDays(-63), status: 'OUT_OF_SERVICE', location: 'Triage Counter', lastServiceDate: shiftDays(-204) },
-    { id: uid(), name: 'Defibrillator', department: 'Emergency', model: 'LIFEPAK 20e', serialNumber: 'DF-24568', manufacturer: 'Stryker', purchaseDate: '2023-01-27', warrantyExpiry: shiftDays(86), status: 'OPERATIONAL', location: 'Resus Bay 1', lastServiceDate: shiftDays(-67) },
-    { id: uid(), name: 'Infusion Pump', department: 'ICU', model: 'Plum 360', serialNumber: 'IP-68033', manufacturer: 'ICU Medical', purchaseDate: '2022-04-11', warrantyExpiry: shiftDays(44), status: 'MAINTENANCE', location: 'ICU Bay 5', lastServiceDate: shiftDays(-104) },
-    { id: uid(), name: 'ECG Machine', department: 'Cardiology', model: 'MAC 5500 HD', serialNumber: 'EG-40192', manufacturer: 'GE Healthcare', purchaseDate: '2023-03-08', warrantyExpiry: shiftDays(148), status: 'OPERATIONAL', location: 'OPD Room 12', lastServiceDate: shiftDays(-24) },
-    { id: uid(), name: 'Centrifuge', department: 'Laboratory', model: 'Avanti J-15', serialNumber: 'CF-88250', manufacturer: 'Beckman Coulter', purchaseDate: '2023-07-19', warrantyExpiry: shiftDays(260), status: 'OPERATIONAL', location: 'Lab Bench 4', lastServiceDate: shiftDays(-9) },
-  ];
+function toDateStr(value: string | null | undefined) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
+async function loadEquipment(): Promise<Equipment[]> {
+  const res = await api('/equipment?limit=500');
+  const list = res.data?.data ?? res.data ?? [];
+  return (list as any[]).map((x) => ({
+    ...x,
+    purchaseDate: toDateStr(x.purchaseDate),
+    warrantyExpiry: toDateStr(x.warrantyExpiry),
+    lastServiceDate: toDateStr(x.lastServiceDate),
+  }));
+}
+
+async function loadLogs(): Promise<LogEntry[]> {
+  const res = await api('/equipment/logs?limit=500');
+  const list = res.data?.data ?? res.data ?? [];
+  return (list as any[]).map((x) => ({
+    id: x.id,
+    equipmentId: x.equipmentId,
+    date: toDateStr(x.date),
+    type: x.type,
+    notes: x.notes,
+    performedBy: x.performedBy,
+  }));
 }
 
 function statusBadge(status: string) {
@@ -103,36 +108,21 @@ export default function EquipmentPage() {
   const [serviceForm, setServiceForm] = useState({ type: 'Preventive', performedBy: '', notes: '' });
 
   useEffect(() => {
-    let eq: Equipment[] = [];
-    try {
-      eq = JSON.parse(localStorage.getItem('hospital_equipment') || '[]');
-    } catch {
-      eq = [];
-    }
-    if (!Array.isArray(eq) || eq.length === 0) {
-      eq = seedEquipment();
-      localStorage.setItem('hospital_equipment', JSON.stringify(eq));
-    }
-    setEquipment(eq);
-    let lg: LogEntry[] = [];
-    try {
-      lg = JSON.parse(localStorage.getItem('maintenance_log') || '[]');
-    } catch {
-      lg = [];
-    }
-    if (!Array.isArray(lg)) lg = [];
-    setLog(lg);
-    setLoaded(true);
+    (async () => {
+      try {
+        const [eq, lg] = await Promise.all([loadEquipment(), loadLogs()]);
+        setEquipment(eq);
+        setLog(lg);
+      } finally {
+        setLoaded(true);
+      }
+    })();
   }, []);
 
-  function persistEquipment(next: Equipment[]) {
-    setEquipment(next);
-    localStorage.setItem('hospital_equipment', JSON.stringify(next));
-  }
-
-  function persistLog(next: LogEntry[]) {
-    setLog(next);
-    localStorage.setItem('maintenance_log', JSON.stringify(next));
+  async function refresh() {
+    const [eq, lg] = await Promise.all([loadEquipment(), loadLogs()]);
+    setEquipment(eq);
+    setLog(lg);
   }
 
   function openAdd() {
@@ -157,41 +147,51 @@ export default function EquipmentPage() {
     setFormOpen(true);
   }
 
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) return;
-    if (editingId) {
-      persistEquipment(equipment.map((x) => (x.id === editingId ? { ...x, ...form } : x)));
-    } else {
-      persistEquipment([{ id: uid(), ...form, lastServiceDate: '' }, ...equipment]);
+    try {
+      if (editingId) {
+        await api(`/equipment/${editingId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(form),
+        });
+      } else {
+        await api('/equipment', {
+          method: 'POST',
+          body: JSON.stringify(form),
+        });
+      }
+      await refresh();
+    } catch (err: any) {
+      window.alert(err.message);
     }
     setFormOpen(false);
     setEditingId(null);
   }
 
-  function handleDelete(item: Equipment) {
+  async function handleDelete(item: Equipment) {
     if (!window.confirm(`Delete ${item.name} (${item.serialNumber})?`)) return;
-    persistEquipment(equipment.filter((x) => x.id !== item.id));
+    try {
+      await api(`/equipment/${item.id}`, { method: 'DELETE' });
+      await refresh();
+    } catch (err: any) {
+      window.alert(err.message);
+    }
   }
 
-  function handleServiced(e: React.FormEvent) {
+  async function handleServiced(e: React.FormEvent) {
     e.preventDefault();
     if (!serviceTarget) return;
-    const day = todayISO();
-    persistEquipment(
-      equipment.map((x) => (x.id === serviceTarget.id ? { ...x, lastServiceDate: day, status: 'OPERATIONAL' } : x))
-    );
-    persistLog([
-      {
-        id: uid(),
-        equipmentId: serviceTarget.id,
-        date: day,
-        type: serviceForm.type,
-        notes: serviceForm.notes,
-        performedBy: serviceForm.performedBy || 'Biomedical Engineer',
-      },
-      ...log,
-    ]);
+    try {
+      await api(`/equipment/${serviceTarget.id}/serviced`, {
+        method: 'POST',
+        body: JSON.stringify(serviceForm),
+      });
+      await refresh();
+    } catch (err: any) {
+      window.alert(err.message);
+    }
     setServiceTarget(null);
     setServiceForm({ type: 'Preventive', performedBy: '', notes: '' });
   }

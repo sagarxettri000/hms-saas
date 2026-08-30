@@ -764,6 +764,66 @@ export class EncountersService {
     });
   }
 
+  async getPrescriptions(
+    tenantId: string,
+    query: {
+      patientId?: string;
+      doctorId?: string;
+      status?: string;
+      search?: string;
+      page?: number;
+      limit?: number;
+    },
+  ) {
+    const { patientId, doctorId, status, search, page = 1, limit = 50 } = query;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Number(limit) || 50);
+    const where: any = { tenantId };
+    if (patientId) where.patientId = patientId;
+    if (doctorId) where.doctorId = doctorId;
+    if (status)
+      where.status = String(status).toUpperCase().replace(/\-/g, "_");
+    if (search)
+      where.OR = [
+        { advice: { contains: search, mode: "insensitive" } },
+        {
+          patient: {
+            OR: [
+              { firstName: { contains: search, mode: "insensitive" } },
+              { lastName: { contains: search, mode: "insensitive" } },
+              { mrn: { contains: search, mode: "insensitive" } },
+            ],
+          },
+        },
+      ];
+
+    const [rows, total] = await Promise.all([
+      this.prisma.prescription.findMany({
+        where,
+        include: {
+          items: true,
+          patient: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              mrn: true,
+            },
+          },
+          doctor: {
+            include: { user: { select: { firstName: true, lastName: true } } },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
+      }),
+      this.prisma.prescription.count({ where }),
+    ]);
+
+    return { data: rows, total, page: pageNum, limit: limitNum };
+  }
+
   async getDoctorEncounters(tenantId: string, doctorId: string, date?: string) {
     const where: any = { tenantId, doctorId };
     if (date) {

@@ -77,6 +77,16 @@ export class EncountersController {
     );
   }
 
+  @Get("prescriptions")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List prescriptions" })
+  listPrescriptions(@Query() query: any, @Req() req: any) {
+    return this.encountersService.getPrescriptions(
+      req.user.tenantId,
+      query,
+    );
+  }
+
   @Get("prescriptions/patient/:patientId")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Get patient prescriptions" })

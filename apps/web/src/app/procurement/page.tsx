@@ -69,7 +69,7 @@ export default function ProcurementPage() {
   useEffect(() => {
     if (tab !== 'expiry') return;
     setLoadingExpiry(true);
-    api('/procurement/inventory-items?limit=200')
+    api('/pharmacy/inventory?limit=200')
       .then((r) => {
         const data = unwrap(r);
         setExpiryItems(Array.isArray(data) ? data : []);
@@ -208,25 +208,28 @@ export default function ProcurementPage() {
         <ModulePage
           title="Inventory Items"
           subtitle="Manage procurement catalog and stock"
-          endpoint="/procurement/inventory-items"
+          endpoint="/pharmacy/inventory"
           createLabel="Add item"
           columns={[
             { key: 'name', label: 'Name' },
             { key: 'sku', label: 'SKU', render: (r) => <span className="mono">{r.sku || r.code || '—'}</span> },
-            { key: 'category', label: 'Category', render: (r) => r.category || '—' },
-            { key: 'unitPrice', label: 'Unit Price', render: (r) => formatMoney(r.unitPrice) },
-            { key: 'quantity', label: 'Qty', render: (r) => r.quantity ?? r.stockQuantity ?? '—' },
+            { key: 'itemType', label: 'Type', render: (r) => r.itemType || '—' },
+            { key: 'store', label: 'Store', render: (r) => r.store?.name || '—' },
+            { key: 'currentStock', label: 'Qty', render: (r) => r.currentStock ?? r.quantity ?? '—' },
+            { key: 'purchaseRate', label: 'Unit Price', render: (r) => formatMoney(r.purchaseRate ?? r.unitPrice) },
+            { key: 'reorderLevel', label: 'Reorder', render: (r) => r.reorderLevel ?? '—' },
             { key: 'isActive', label: 'Status', badge: true },
           ]}
           fields={[
             { name: 'name', label: 'Name', required: true },
+            { name: 'storeId', label: 'Store', required: true, type: 'select', optionsFrom: { endpoint: '/pharmacy/stores', valueKey: 'id', labelKeys: ['name'] } },
+            { name: 'itemType', label: 'Type', type: 'select', options: [{ value: 'MEDICINE', label: 'MEDICINE' }, { value: 'SUPPLIES', label: 'SUPPLIES' }, { value: 'EQUIPMENT', label: 'EQUIPMENT' }, { value: 'CONSUMABLE', label: 'CONSUMABLE' }, { value: 'OTHER', label: 'OTHER' }] },
             { name: 'sku', label: 'SKU / Code' },
-            { name: 'category', label: 'Category' },
             { name: 'unit', label: 'Unit' },
-            { name: 'unitPrice', label: 'Unit Price', type: 'number' },
-            { name: 'quantity', label: 'Quantity', type: 'number' },
+            { name: 'currentStock', label: 'Quantity', type: 'number' },
+            { name: 'purchaseRate', label: 'Unit Price', type: 'number' },
             { name: 'reorderLevel', label: 'Reorder Level', type: 'number' },
-            { name: 'description', label: 'Description', type: 'textarea', full: true },
+            { name: 'location', label: 'Location' },
           ]}
         />
       )}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AppShell from '@/components/AppShell';
+import { api } from '@/lib/api';
 
 interface CallEvent {
   status: string;
@@ -19,6 +20,7 @@ interface AmbulanceCall {
   status: string;
   dispatchedAt: string | null;
   vehicleId: string | null;
+  vehicle?: { id: string; callSign: string } | null;
   history: CallEvent[];
 }
 
@@ -48,32 +50,6 @@ const EMPTY_VEHICLE = {
 };
 
 const HANDOVER_CHECKS = ['Patient name confirmed', 'Vitals recorded', 'Medications listed', 'Allergies noted'];
-
-function uid(prefix: string) {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function seedVehicles(): Vehicle[] {
-  return [
-    { id: 'veh-1', callSign: 'AMB-101', type: 'BASIC', status: 'IN_SERVICE', driverName: 'Ram Bahadur', currentLocation: 'Dispatched to Thamel' },
-    { id: 'veh-2', callSign: 'AMB-102', type: 'ADVANCED', status: 'AVAILABLE', driverName: 'Sita Sharma', currentLocation: 'Hospital Bay 1' },
-    { id: 'veh-3', callSign: 'AMB-103', type: 'ICU', status: 'MAINTENANCE', driverName: 'Hari Thapa', currentLocation: 'Workshop' },
-  ];
-}
-
-function seedCalls(): AmbulanceCall[] {
-  const now = Date.now();
-  const iso = (minsAgo: number) => new Date(now - minsAgo * 60000).toISOString();
-  return [
-    { id: 'call-1', callerName: 'Anita Rana', callerPhone: '9841000111', patientName: 'Kiran Rana', location: 'Baneshwor, Shanti Nagar', complaint: 'Chest pain, sweating', priority: 'EMERGENCY', status: 'PENDING', dispatchedAt: null, vehicleId: null, history: [{ status: 'PENDING', at: iso(6) }] },
-    { id: 'call-2', callerName: 'Bikash Tamang', callerPhone: '9812222333', patientName: 'Mina Tamang', location: 'Kalanki Chowk', complaint: 'Road accident, leg injury', priority: 'URGENT', status: 'PENDING', dispatchedAt: null, vehicleId: null, history: [{ status: 'PENDING', at: iso(14) }] },
-    { id: 'call-3', callerName: 'Prakash Joshi', callerPhone: '9855555666', patientName: 'Gita Joshi', location: 'Patan Hospital Gate', complaint: 'High fever, weakness', priority: 'NON_URGENT', status: 'PENDING', dispatchedAt: null, vehicleId: null, history: [{ status: 'PENDING', at: iso(32) }] },
-    { id: 'call-4', callerName: 'Sunita Karki', callerPhone: '9861111222', patientName: 'Dipak Karki', location: 'Thamel, Chaksibari Marg', complaint: 'Difficulty breathing', priority: 'EMERGENCY', status: 'DISPATCHED', dispatchedAt: iso(11), vehicleId: 'veh-1', history: [{ status: 'PENDING', at: iso(16) }, { status: 'DISPATCHED', at: iso(11) }] },
-    { id: 'call-5', callerName: 'Ramesh Shrestha', callerPhone: '9803333444', patientName: 'Nirmala Shrestha', location: 'Koteshwor', complaint: 'Routine transfer request', priority: 'URGENT', status: 'CANCELLED', dispatchedAt: null, vehicleId: null, history: [{ status: 'PENDING', at: iso(58) }, { status: 'CANCELLED', at: iso(50) }] },
-  ];
-}
 
 function priorityBadge(priority: string) {
   const tone =
@@ -123,6 +99,16 @@ function timeSince(iso: string | null) {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
+async function loadCalls(): Promise<AmbulanceCall[]> {
+  const res = await api('/ambulance/calls?limit=500');
+  return res.data?.data ?? res.data ?? [];
+}
+
+async function loadVehicles(): Promise<Vehicle[]> {
+  const res = await api('/ambulance/vehicles?limit=500');
+  return res.data?.data ?? res.data ?? [];
+}
+
 export default function AmbulancePage() {
   const [tab, setTab] = useState('dispatch');
   const [loaded, setLoaded] = useState(false);
@@ -137,140 +123,122 @@ export default function AmbulancePage() {
   const [checks, setChecks] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    let c: AmbulanceCall[] = [];
-    try {
-      c = JSON.parse(localStorage.getItem('ambulance_calls') || '[]');
-    } catch {
-      c = [];
-    }
-    if (!Array.isArray(c) || c.length === 0) {
-      c = seedCalls();
-      localStorage.setItem('ambulance_calls', JSON.stringify(c));
-    }
-    setCalls(c);
-    let v: Vehicle[] = [];
-    try {
-      v = JSON.parse(localStorage.getItem('ambulance_vehicles') || '[]');
-    } catch {
-      v = [];
-    }
-    if (!Array.isArray(v) || v.length === 0) {
-      v = seedVehicles();
-      localStorage.setItem('ambulance_vehicles', JSON.stringify(v));
-    }
-    setVehicles(v);
-    setLoaded(true);
+    (async () => {
+      try {
+        const [c, v] = await Promise.all([loadCalls(), loadVehicles()]);
+        setCalls(c);
+        setVehicles(v);
+      } finally {
+        setLoaded(true);
+      }
+    })();
   }, []);
 
-  function persistCalls(next: AmbulanceCall[]) {
-    setCalls(next);
-    localStorage.setItem('ambulance_calls', JSON.stringify(next));
+  async function refreshVehicles() {
+    setVehicles(await loadVehicles());
   }
 
-  function persistVehicles(next: Vehicle[]) {
-    setVehicles(next);
-    localStorage.setItem('ambulance_vehicles', JSON.stringify(next));
+  async function refresh() {
+    const [c, v] = await Promise.all([loadCalls(), loadVehicles()]);
+    setCalls(c);
+    setVehicles(v);
   }
 
-  function patchCall(id: string, patch: Partial<AmbulanceCall>, event?: string) {
-    persistCalls(
-      calls.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              ...patch,
-              history:
-                event && c.history[c.history.length - 1]?.status !== event
-                  ? [...c.history, { status: event, at: new Date().toISOString() }]
-                  : c.history,
-            }
-          : c
-      )
-    );
-  }
-
-  function createCall(e: React.FormEvent) {
+  async function createCall(e: React.FormEvent) {
     e.preventDefault();
     if (!callForm.patientName.trim() || !callForm.location.trim()) return;
-    const entry: AmbulanceCall = {
-      id: uid('call'),
-      ...callForm,
-      status: 'PENDING',
-      dispatchedAt: null,
-      vehicleId: null,
-      history: [{ status: 'PENDING', at: new Date().toISOString() }],
-    };
-    persistCalls([entry, ...calls]);
-    setCallForm({ ...EMPTY_CALL });
-    setNewCallOpen(false);
+    try {
+      await api('/ambulance/calls', {
+        method: 'POST',
+        body: JSON.stringify(callForm),
+      });
+      await refresh();
+      setCallForm({ ...EMPTY_CALL });
+      setNewCallOpen(false);
+    } catch (err: any) {
+      window.alert(err.message);
+    }
   }
 
-  function dispatch(call: AmbulanceCall) {
-    const veh = vehicles.find((v) => v.status === 'AVAILABLE');
-    if (!veh) {
-      window.alert('No ambulances available. Free a vehicle first.');
+  async function dispatch(call: AmbulanceCall) {
+    try {
+      await api(`/ambulance/calls/${call.id}/dispatch`, { method: 'PATCH' });
+    } catch (err: any) {
+      window.alert(err.message);
       return;
     }
-    const at = new Date().toISOString();
-    patchCall(call.id, { status: 'DISPATCHED', dispatchedAt: at, vehicleId: veh.id }, 'DISPATCHED');
-    persistVehicles(
-      vehicles.map((v) => (v.id === veh.id ? { ...v, status: 'IN_SERVICE', currentLocation: `Dispatched to ${call.location}` } : v))
-    );
+    await refresh();
   }
 
-  function cancelCall(call: AmbulanceCall) {
+  async function cancelCall(call: AmbulanceCall) {
     if (!window.confirm(`Cancel call for ${call.patientName}?`)) return;
-    patchCall(call.id, { status: 'CANCELLED' }, 'CANCELLED');
-  }
-
-  function markEnRoute(call: AmbulanceCall) {
-    patchCall(call.id, { status: 'EN_ROUTE' }, 'EN_ROUTE');
-  }
-
-  function markArrived(call: AmbulanceCall) {
-    patchCall(
-      call.id,
-      { status: 'ARRIVED' },
-      'ARRIVED'
-    );
-    if (call.vehicleId) {
-      persistVehicles(
-        vehicles.map((v) => (v.id === call.vehicleId ? { ...v, currentLocation: `On scene: ${call.location}` } : v))
-      );
+    try {
+      await api(`/ambulance/calls/${call.id}/cancel`, { method: 'PATCH' });
+      await refresh();
+    } catch (err: any) {
+      window.alert(err.message);
     }
   }
 
-  function completeHandover(e: React.FormEvent) {
+  async function advanceCall(call: AmbulanceCall, status: 'EN_ROUTE' | 'ARRIVED' | 'COMPLETED') {
+    try {
+      await api(`/ambulance/calls/${call.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+      await refresh();
+    } catch (err: any) {
+      window.alert(err.message);
+    }
+  }
+
+  async function completeHandover(e: React.FormEvent) {
     e.preventDefault();
     if (!handoverTarget) return;
     if (!HANDOVER_CHECKS.every((c) => checks[c])) return;
-    patchCall(handoverTarget.id, { status: 'COMPLETED' }, 'COMPLETED');
-    if (handoverTarget.vehicleId) {
-      persistVehicles(
-        vehicles.map((v) =>
-          v.id === handoverTarget.vehicleId ? { ...v, status: 'AVAILABLE', currentLocation: 'Hospital Bay 1' } : v
-        )
-      );
+    try {
+      await api(`/ambulance/calls/${handoverTarget.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'COMPLETED' }),
+      });
+      await refresh();
+    } catch (err: any) {
+      window.alert(err.message);
     }
     setHandoverTarget(null);
     setChecks({});
   }
 
-  function toggleVehicle(v: Vehicle) {
+  async function toggleVehicle(v: Vehicle) {
     if (v.status === 'IN_SERVICE') return;
     const next = v.status === 'AVAILABLE'
       ? { status: 'MAINTENANCE', currentLocation: 'Workshop' }
       : { status: 'AVAILABLE', currentLocation: 'Hospital Bay 2' };
-    persistVehicles(vehicles.map((x) => (x.id === v.id ? { ...x, ...next } : x)));
+    try {
+      await api(`/ambulance/vehicles/${v.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify(next),
+      });
+      await refreshVehicles();
+    } catch (err: any) {
+      window.alert(err.message);
+    }
   }
 
-  function addVehicle(e: React.FormEvent) {
+  async function addVehicle(e: React.FormEvent) {
     e.preventDefault();
     if (!vehicleForm.callSign.trim() || !vehicleForm.driverName.trim()) return;
-    const entry: Vehicle = { id: uid('veh'), ...vehicleForm, status: 'AVAILABLE', currentLocation: vehicleForm.currentLocation || 'Hospital Bay 2' };
-    persistVehicles([...vehicles, entry]);
-    setVehicleForm({ ...EMPTY_VEHICLE });
-    setAddVehicleOpen(false);
+    try {
+      await api('/ambulance/vehicles', {
+        method: 'POST',
+        body: JSON.stringify({ ...vehicleForm, currentLocation: vehicleForm.currentLocation || 'Hospital Bay 2' }),
+      });
+      await refreshVehicles();
+      setVehicleForm({ ...EMPTY_VEHICLE });
+      setAddVehicleOpen(false);
+    } catch (err: any) {
+      window.alert(err.message);
+    }
   }
 
   const q = search.trim().toLowerCase();
@@ -281,13 +249,17 @@ export default function AmbulancePage() {
         [c.patientName, c.callerName, c.callerPhone, c.location, c.complaint].join(' ').toLowerCase().includes(q)
     )
     .slice()
-    .sort((a, b) => (b.dispatchedAt || b.history[0]?.at || '').localeCompare(a.dispatchedAt || a.history[0]?.at || ''));
+    .sort((a, b) => (b.dispatchedAt || b.history?.[0]?.at || '').localeCompare(a.dispatchedAt || a.history?.[0]?.at || ''));
 
   const activeCases = calls
     .filter((c) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(c.status))
     .sort((a, b) => (b.dispatchedAt || '').localeCompare(a.dispatchedAt || ''));
 
   const availableCount = vehicles.filter((v) => v.status === 'AVAILABLE').length;
+
+  function callSignOf(call: AmbulanceCall) {
+    return call.vehicle?.callSign || vehicles.find((v) => v.id === call.vehicleId)?.callSign || call.vehicleId;
+  }
 
   function actionFor(call: AmbulanceCall) {
     if (call.status === 'PENDING') {
@@ -299,10 +271,10 @@ export default function AmbulancePage() {
       );
     }
     if (call.status === 'DISPATCHED') {
-      return <button className="btn btn-sm" onClick={() => markEnRoute(call)}>Mark En Route</button>;
+      return <button className="btn btn-sm" onClick={() => advanceCall(call, 'EN_ROUTE')}>Mark En Route</button>;
     }
     if (call.status === 'EN_ROUTE') {
-      return <button className="btn btn-sm" onClick={() => markArrived(call)}>Mark Arrived</button>;
+      return <button className="btn btn-sm" onClick={() => advanceCall(call, 'ARRIVED')}>Mark Arrived</button>;
     }
     if (call.status === 'ARRIVED') {
       return (
@@ -321,11 +293,12 @@ export default function AmbulancePage() {
   }
 
   function timeline(history: CallEvent[]) {
+    const items = Array.isArray(history) ? history : [];
     return (
       <div style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'grid', gap: 6 }}>
-        {history.map((h, i) => (
+        {items.map((h, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: i === history.length - 1 ? '#2563eb' : '#cbd5e1', flexShrink: 0 }} />
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: i === items.length - 1 ? '#2563eb' : '#cbd5e1', flexShrink: 0 }} />
             <span style={{ fontWeight: 600 }}>{h.status.replace(/_/g, ' ')}</span>
             <span style={{ color: 'var(--text-muted)' }}>{fmtDateTime(h.at)}</span>
           </div>
@@ -403,7 +376,7 @@ export default function AmbulancePage() {
                       <span>Complaint: {c.complaint}</span>
                       {c.vehicleId && (
                         <span>
-                          Vehicle: <strong>{vehicles.find((v) => v.id === c.vehicleId)?.callSign || c.vehicleId}</strong>
+                          Vehicle: <strong>{callSignOf(c)}</strong>
                           {c.status !== 'PENDING' && <> · dispatched {timeSince(c.dispatchedAt)} ago</>}
                         </span>
                       )}
@@ -431,16 +404,16 @@ export default function AmbulancePage() {
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', display: 'grid', gap: 3 }}>
                     <span>From: {c.location}</span>
                     <span>Priority: {priorityBadge(c.priority)}</span>
-                    <span>Vehicle: {vehicles.find((v) => v.id === c.vehicleId)?.callSign || '—'}</span>
+                    <span>Vehicle: {callSignOf(c) || '—'}</span>
                     <span>Dispatched {timeSince(c.dispatchedAt)} ago · {fmtDateTime(c.dispatchedAt)}</span>
                   </div>
                   {c.status === 'DISPATCHED' && (
-                    <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => markEnRoute(c)}>
+                    <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => advanceCall(c, 'EN_ROUTE')}>
                       Mark En Route
                     </button>
                   )}
                   {c.status === 'EN_ROUTE' && (
-                    <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => markArrived(c)}>
+                    <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => advanceCall(c, 'ARRIVED')}>
                       Mark Arrived
                     </button>
                   )}
@@ -490,7 +463,7 @@ export default function AmbulancePage() {
                         <td>{typeBadge(v.type)}</td>
                         <td>{vehicleStatusBadge(v.status)}</td>
                         <td>{v.driverName}</td>
-                        <td>{v.currentLocation}</td>
+                        <td>{v.currentLocation || '—'}</td>
                         <td>
                           {v.status === 'IN_SERVICE' ? (
                             <span className="note">On duty</span>

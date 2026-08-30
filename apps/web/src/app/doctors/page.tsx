@@ -148,7 +148,7 @@ export default function DoctorsPage() {
   const loadSchedules = useCallback(async () => {
     setLoadingSchedules(true);
     try {
-      setSchedules(toList(await api('/doctor-schedules?limit=200')).filter((s: any) => s.isActive !== false));
+      setSchedules(toList(await api('/doctors/schedules')).filter((s: any) => s.isActive !== false));
     } catch {
       setSchedules([]);
     }
@@ -168,7 +168,7 @@ export default function DoctorsPage() {
     }
     if (tab === 'alerts') {
       setLoadingAlerts(true);
-      Promise.allSettled([api('/prescriptions?limit=50'), api('/lab/orders?limit=50')])
+      Promise.allSettled([api('/encounters/prescriptions?limit=50'), api('/lab/orders?limit=50')])
         .then(([rx, labs]) => {
           setPrescriptions(rx.status === 'fulfilled' ? toList(rx.value) : []);
           setLabOrders(labs.status === 'fulfilled' ? toList(labs.value) : []);

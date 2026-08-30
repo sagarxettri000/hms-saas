@@ -15,6 +15,7 @@ import {
   CreateShiftDto,
   CreateRosterDto,
   CreateLeaveDto,
+  CreateStaffDto,
 } from "./hr.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
@@ -32,6 +33,20 @@ import { PermissionAction } from "@hms/shared";
 @ApiBearerAuth()
 export class HrController {
   constructor(private readonly hrService: HrService) {}
+
+  @Get("staff")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List staff members" })
+  listStaff(@Query() query: any, @Req() req: any) {
+    return this.hrService.listStaff(req.user.tenantId, query);
+  }
+
+  @Post("staff")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Create a staff member (creates linked user account)" })
+  createStaff(@Body() dto: CreateStaffDto, @Req() req: any) {
+    return this.hrService.createStaff(req.user.tenantId, dto);
+  }
 
   @Get("shifts")
   @Permissions(PermissionAction.VIEW)

@@ -44,6 +44,8 @@ import { CatalogModule } from "./modules/catalog/catalog.module";
 import { StorageModule } from "./modules/storage/storage.module";
 import { PortalModule } from "./modules/portal/portal.module";
 import { BedManagementModule } from "./modules/bed-management/bed-management.module";
+import { AmbulanceModule } from "./modules/ambulance/ambulance.module";
+import { EquipmentModule } from "./modules/equipment/equipment.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "./common/guards/permissions.guard";
 import { TenantGuard } from "./common/guards/tenant.guard";
@@ -110,6 +112,8 @@ import { AppController } from "./app.controller";
     StorageModule,
     PortalModule,
     BedManagementModule,
+    AmbulanceModule,
+    EquipmentModule,
   ],
   providers: [
     {

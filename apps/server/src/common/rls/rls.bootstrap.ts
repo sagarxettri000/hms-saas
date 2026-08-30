@@ -22,6 +22,10 @@ const CORE_CLINICAL_TABLES = [
   "medication_administrations",
   "radiology_orders",
   "procedures",
+  "ambulance_vehicles",
+  "ambulance_calls",
+  "equipment_items",
+  "equipment_logs",
 ];
 
 @Injectable()

@@ -5,6 +5,11 @@ import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/hooks';
 
+interface ApprovalAction {
+  path: string;
+  method: 'PATCH' | 'POST';
+}
+
 interface ApprovalItem {
   id: string;
   type: string;
@@ -13,7 +18,39 @@ interface ApprovalItem {
   requestedBy: string;
   date: string;
   status: string;
+  actionFor: (id: string, status: 'APPROVED' | 'REJECTED') => ApprovalAction | null;
 }
+
+interface ApprovalSource {
+  type: string;
+  listPath: string;
+  actionFor: (id: string, status: 'APPROVED' | 'REJECTED') => ApprovalAction | null;
+}
+
+const SOURCES: ApprovalSource[] = [
+  {
+    type: 'Lab Order',
+    listPath: '/lab/orders',
+    actionFor: (id) => ({ path: `/lab/orders/${id}/status`, method: 'PATCH' }),
+  },
+  {
+    type: 'Radiology Order',
+    listPath: '/radiology/orders',
+    actionFor: (id) => ({ path: `/radiology/orders/${id}/status`, method: 'PATCH' }),
+  },
+  {
+    type: 'Prescription',
+    listPath: '/encounters/prescriptions',
+    actionFor: (id, status) =>
+      status === 'APPROVED' ? { path: `/encounters/prescriptions/${id}/approve`, method: 'PATCH' } : null,
+  },
+  {
+    type: 'Discharge Request',
+    listPath: '/admissions',
+    actionFor: (id, status) =>
+      status === 'APPROVED' ? { path: `/admissions/${id}/discharge`, method: 'POST' } : null,
+  },
+];
 
 type Tab = 'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL';
 
@@ -61,13 +98,7 @@ export default function ApprovalsPage() {
     setLoading(true);
     setError(null);
     try {
-      const sources: { type: string; endpoint: string; path: string }[] = [
-        { type: 'Lab Order', endpoint: '/laboratory', path: '/laboratory?limit=50' },
-        { type: 'Radiology Order', endpoint: '/radiology', path: '/radiology?limit=50' },
-        { type: 'Prescription', endpoint: '/prescriptions', path: '/prescriptions?limit=50' },
-        { type: 'Discharge Request', endpoint: '/admissions', path: '/admissions?limit=50' },
-      ];
-      const results = await Promise.allSettled(sources.map((s) => api(s.path)));
+      const results = await Promise.allSettled(SOURCES.map((s) => api(`${s.listPath}?limit=50`)));
       const rows: ApprovalItem[] = [];
       results.forEach((res, i) => {
         if (res.status !== 'fulfilled') return;
@@ -77,12 +108,13 @@ export default function ApprovalsPage() {
           if (!r?.id) return;
           rows.push({
             id: r.id,
-            type: sources[i].type,
-            endpoint: sources[i].endpoint,
+            type: SOURCES[i].type,
+            endpoint: SOURCES[i].listPath,
             patient: r.patient ? personName(r.patient) : r.admission?.patient ? personName(r.admission.patient) : r.patientId || '—',
             requestedBy: personName(pick(r, ['doctor', 'prescribedBy', 'requestedBy']) || r.doctor || r.encounter?.doctor),
             date: r.createdAt || r.orderedAt || r.prescribedAt || r.admittedAt || r.updatedAt || '',
             status: String(pick(r, ['status', 'approvalStatus', 'dischargeStatus']) ?? 'PENDING').toUpperCase(),
+            actionFor: SOURCES[i].actionFor,
           });
         });
       });
@@ -116,6 +148,8 @@ export default function ApprovalsPage() {
 
   const decide = async (item: ApprovalItem, status: 'APPROVED' | 'REJECTED') => {
     if (busyId) return;
+    const action = item.actionFor(item.id, status);
+    if (!action) return;
     const body: Record<string, unknown> = { status };
     if (status === 'REJECTED') {
       const reason = prompt('Rejection reason:');
@@ -124,7 +158,7 @@ export default function ApprovalsPage() {
     }
     setBusyId(item.id);
     try {
-      await api(`${item.endpoint}/${item.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      await api(action.path, { method: action.method, body: JSON.stringify(body) });
       await load();
     } catch {}
     setBusyId(null);

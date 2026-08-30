@@ -298,9 +298,10 @@ export class DoctorsService {
     });
     if (!schedule) throw new NotFoundException("Schedule not found");
 
+    const { tenantId: _t, doctorId: _d, ...fields } = dto as any;
     return this.prisma.doctorSchedule.update({
       where: { id: scheduleId },
-      data: dto,
+      data: fields,
     });
   }
 

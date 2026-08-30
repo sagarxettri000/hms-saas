@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
+import * as crypto from "crypto";
 import { UserRole } from "@hms/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 
@@ -270,7 +271,9 @@ export class HrService {
     });
     if (existing) throw new ConflictException("Email already in use");
 
-    const passwordHash = await bcrypt.hash(dto.password || "Staff@123", 12);
+    const tempPassword = crypto.randomBytes(9).toString("base64url");
+
+    const passwordHash = await bcrypt.hash(dto.password || tempPassword, 12);
 
     const user = await this.prisma.user.create({
       data: {
@@ -297,21 +300,24 @@ export class HrService {
       },
     });
 
-    return this.prisma.staffProfile.findUnique({
-      where: { id: staff.id },
-      include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            role: true,
-            status: true,
+      return {
+        ...(await this.prisma.staffProfile.findUnique({
+          where: { id: staff.id },
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                role: true,
+                status: true,
+              },
+            },
+            department: { select: { id: true, name: true } },
           },
-        },
-        department: { select: { id: true, name: true } },
-      },
-    });
+        })),
+        tempPassword: dto.password ? undefined : tempPassword,
+      };
+    }
   }
-}

@@ -77,10 +77,11 @@ export class BloodBankService {
       where: { id, tenantId },
     });
     if (!donor) throw new NotFoundException("Donor not found");
+    const { tenantId: _t, ...fields } = dto as any;
     return this.prisma.bloodDonor.update({
       where: { id },
       data: {
-        ...dto,
+        ...fields,
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
         bloodGroup: dto.bloodGroup as any,
         gender: dto.gender as any,

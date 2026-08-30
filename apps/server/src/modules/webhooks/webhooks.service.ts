@@ -44,9 +44,10 @@ export class WebhooksService {
       where: { id, tenantId },
     });
     if (!hook) throw new NotFoundException("Webhook not found");
+    const { tenantId: _omitted, ...fields } = dto as any;
     return this.prisma.webhook.update({
       where: { id },
-      data: { ...dto, events: dto.events as any },
+      data: { ...fields, events: dto.events as any },
     });
   }
 

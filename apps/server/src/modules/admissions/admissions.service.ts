@@ -235,9 +235,10 @@ export class AdmissionsService {
     });
     if (!admission) throw new NotFoundException("Admission not found");
 
+    const { tenantId: _t, admissionNumber: _a, patientId: _p, ...fields } = dto as any;
     return this.prisma.admission.update({
       where: { id },
-      data: { ...dto, updatedBy: userId },
+      data: { ...fields, updatedBy: userId },
     });
   }
 

@@ -216,9 +216,10 @@ export class PharmacyService {
       where: { id, tenantId },
     });
     if (!store) throw new NotFoundException("Store not found");
+    const { tenantId: _t, ...clean } = dto as any;
     return this.prisma.store.update({
       where: { id },
-      data: { ...(dto as any) },
+      data: { ...clean },
     });
   }
 

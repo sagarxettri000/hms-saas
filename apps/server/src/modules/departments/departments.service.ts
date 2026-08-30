@@ -88,9 +88,10 @@ export class DepartmentsService {
     });
     if (!department) throw new NotFoundException("Department not found");
 
+    const { tenantId: _t, ...fields } = dto as any;
     return this.prisma.department.update({
       where: { id },
-      data: dto,
+      data: fields,
     });
   }
 

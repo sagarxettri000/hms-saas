@@ -367,9 +367,10 @@ export class BedManagementService {
       where: { id, tenantId, isActive: true },
     });
     if (!existing) throw new NotFoundException("Ward not found");
+    const { tenantId: _t, departmentId: _d, ...fields } = dto as any;
     return this.prisma.ward.update({
       where: { id },
-      data: { ...dto },
+      data: { ...fields },
       include: { department: { select: { id: true, name: true } } },
     });
   }
@@ -452,9 +453,10 @@ export class BedManagementService {
       where: { id, tenantId, isActive: true },
     });
     if (!existing) throw new NotFoundException("Room not found");
+    const { tenantId: _t, wardId: _w, ...fields } = dto as any;
     return this.prisma.room.update({
       where: { id },
-      data: { ...dto } as any,
+      data: { ...fields } as any,
     });
   }
 
@@ -576,9 +578,10 @@ export class BedManagementService {
       where: { id, tenantId, isActive: true },
     });
     if (!existing) throw new NotFoundException("Bed not found");
+    const { tenantId: _t, wardId: _w, roomId: _r, ...fields } = dto as any;
     return this.prisma.bed.update({
       where: { id },
-      data: { ...dto } as any,
+      data: { ...fields } as any,
       include: {
         ward: { select: { id: true, name: true } },
         room: { select: { id: true, name: true } },

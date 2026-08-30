@@ -203,12 +203,14 @@ export default function ReceptionPage() {
     try {
       const now = new Date();
       const timeValue = walkIn.time || `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const nameParts = walkIn.patientName.trim().split(/\s+/);
       await api('/appointments', {
         method: 'POST',
         body: JSON.stringify({
           isWalkIn: true,
-          patientName: walkIn.patientName,
-          phone: walkIn.phone || undefined,
+          patientFirstName: nameParts[0],
+          patientLastName: nameParts.slice(1).join(' ') || nameParts[0],
+          patientMobile: walkIn.phone || undefined,
           doctorId: walkIn.doctorId || undefined,
           appointmentDate: todayKey,
           startTime: timeValue,

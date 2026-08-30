@@ -667,7 +667,6 @@ export default function BedManagementPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterType, setFilterType] = useState('');
   const [searchBeds, setSearchBeds] = useState('');
-  const [selectedWard, setSelectedWard] = useState<any>(null);
 
   const [showAllocate, setShowAllocate] = useState<any>(null);
   const [showTransfer, setShowTransfer] = useState<any>(null);
@@ -1039,7 +1038,7 @@ export default function BedManagementPage() {
                   </thead>
                   <tbody>
                     {wards.map((w: any) => (
-                      <tr key={w.id} className="row-clickable" onClick={() => { setSelectedWard(w); setTab('beds'); setFilterWard(w.id); }}>
+                      <tr key={w.id} className="row-clickable" onClick={() => { setTab('beds'); setFilterWard(w.id); }}>
                         <td style={{ fontWeight: 600 }}>{w.name}</td>
                         <td className="mono">{w.code || '—'}</td>
                         <td>{w.floor ?? '—'}</td>

@@ -172,21 +172,23 @@ export default function QualityPage() {
   const createIncident = async () => {
     if (!form.title.trim() || !form.description.trim()) return;
     setSaving(true);
+    setError(null);
     try {
       await api('/adverse-events', {
         method: 'POST',
         body: JSON.stringify({
-          type: form.title,
-          description: form.description,
+          type: form.title.trim(),
+          description: form.description.trim(),
           severity: form.severity,
           patientId: form.patientId || undefined,
-          status: 'OPEN',
         }),
       });
       setShowCreate(false);
       setForm({ title: '', description: '', severity: 'MEDIUM', patientId: '' });
       await loadIncidents();
-    } catch {}
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create incident');
+    }
     setSaving(false);
   };
 

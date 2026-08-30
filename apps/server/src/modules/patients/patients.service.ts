@@ -390,16 +390,33 @@ export class PatientsService {
     });
     if (!patient) throw new NotFoundException("Patient not found");
 
-    const { allergies, chronicConditions, ...updateData } = dto as any;
+    const { allergies, chronicConditions } = dto as any;
+
+    const allowedFields = [
+      "firstName", "middleName", "lastName", "dateOfBirth", "age", "gender",
+      "bloodGroup", "nationality", "religion", "phone", "mobile", "email",
+      "addressLine1", "addressLine2", "city", "district", "province", "country",
+      "postalCode", "emergencyContactName", "emergencyContactRelationship",
+      "emergencyContactPhone", "emergencyContactMobile", "guardianName",
+      "guardianRelationship", "guardianPhone", "guardianEmail", "guardianIdType",
+      "guardianIdNumber", "occupation", "education", "maritalStatus", "nationalId",
+      "passportNumber", "patientType", "isForeign", "isStaff", "consentGiven",
+      "consentNotes",
+    ] as const;
+
+    const updateData: Record<string, unknown> = {};
+    for (const key of allowedFields) {
+      if ((dto as any)[key] !== undefined) updateData[key] = (dto as any)[key];
+    }
+    if (updateData.email !== undefined) updateData.email = String(updateData.email).toLowerCase();
     if (updateData.dateOfBirth)
-      updateData.dateOfBirth = this.normalizeDate(updateData.dateOfBirth);
+      updateData.dateOfBirth = this.normalizeDate(updateData.dateOfBirth as any);
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const result = await tx.patient.update({
         where: { id },
         data: {
           ...updateData,
-          email: updateData.email?.toLowerCase(),
           updatedBy: userId,
         },
       });

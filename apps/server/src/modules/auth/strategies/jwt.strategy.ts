@@ -14,13 +14,21 @@ interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
+  static secretOrKey(): string {
+    const secret = process.env.JWT_ACCESS_SECRET;
+    if (!secret) {
+      throw new Error(
+        "JWT_ACCESS_SECRET environment variable is required (was previously falling back to a hardcoded default). Set a strong random secret before starting the server.",
+      );
+    }
+    return secret;
+  }
+
   constructor(private readonly prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey:
-        process.env.JWT_ACCESS_SECRET ||
-        "hms-saas-access-secret-change-in-production-2026",
+      secretOrKey: JwtStrategy.secretOrKey(),
     });
   }
 

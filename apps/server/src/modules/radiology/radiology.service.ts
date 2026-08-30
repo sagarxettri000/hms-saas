@@ -253,9 +253,14 @@ export class RadiologyService {
     });
     if (!order) throw new NotFoundException("Radiology order not found");
 
+    const reportData: Record<string, unknown> = {};
+    if (dto.findings !== undefined) reportData.findings = dto.findings;
+    if (dto.impression !== undefined) reportData.impression = dto.impression;
+    if (dto.report !== undefined) reportData.report = dto.report;
+
     const updated = await this.prisma.radiologyOrder.update({
       where: { id },
-      data: { ...dto, status: "REPORTED", reportedAt: new Date() },
+      data: { ...reportData, status: "REPORTED", reportedAt: new Date() },
     });
 
     await this.logAudit(tenantId, userId, "UPDATE", "RadiologyOrder", id, {

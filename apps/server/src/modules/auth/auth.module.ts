@@ -12,9 +12,7 @@ import { TwoFactorService } from "./two-factor.service";
     PassportModule.register({ defaultStrategy: "jwt" }),
     JwtModule.register({
       global: true,
-      secret:
-        process.env.JWT_ACCESS_SECRET ||
-        "hms-saas-access-secret-change-in-production-2026",
+      secret: JwtStrategy.secretOrKey(),
       signOptions: { expiresIn: "15m" },
     }),
   ],

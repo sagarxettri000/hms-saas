@@ -444,11 +444,12 @@ export class AppointmentsService {
     if (!appointment) throw new NotFoundException("Appointment not found");
 
     const { status, ...rest } = dto;
+    const { tenantId: _t, patientId: _p, doctorId: _doc, ...allowed } = rest as any;
 
     const result = await this.prisma.appointment.update({
       where: { id },
       data: {
-        ...rest,
+        ...allowed,
         status: status as any,
         updatedBy: userId,
       } as Prisma.AppointmentUncheckedUpdateInput,

@@ -14,6 +14,7 @@ import { UserRole, getRolePermissions } from "@hms/shared";
 import { LoginDto, RegisterDto, ResetPasswordDto, ChangePasswordDto, EnableTwoFactorDto, DisableTwoFactorDto } from "./dto/auth.dto";
 import { MailService } from "./mail.service";
 import { TwoFactorService } from "./two-factor.service";
+import { JwtStrategy } from "./strategies/jwt.strategy";
 
 export interface AuthUser {
   id: string;
@@ -184,7 +185,7 @@ export class AuthService {
         mustChangePassword: user.mustChangePassword,
         sid: session.id,
       },
-      { secret: process.env.JWT_ACCESS_SECRET, expiresIn: "15m" },
+      { secret: JwtStrategy.secretOrKey(), expiresIn: "15m" },
     );
 
     await this.prisma.session.update({
@@ -267,7 +268,7 @@ export class AuthService {
         mustChangePassword: user.mustChangePassword,
         sid: session.id,
       },
-      { secret: process.env.JWT_ACCESS_SECRET, expiresIn: "15m" },
+      { secret: JwtStrategy.secretOrKey(), expiresIn: "15m" },
     );
 
     await this.prisma.session.update({

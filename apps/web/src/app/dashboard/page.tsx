@@ -655,17 +655,30 @@ export default function DashboardPage() {
   }
 
   async function loadDeptData() {
-    const [patientsR, encountersR, doctorsR, approvalsR, recentEncR] = await Promise.all([
+    const [patientsR, encountersR, doctorsR, recentEncR, labR, radR, rxR, admR] = await Promise.all([
       safe(api('/patients?limit=1')),
       safe(api('/encounters?limit=1')),
       safe(api('/doctors?limit=1')),
-      safe(api('/lab/orders?limit=1&status=ORDERED')),
       safe(api('/encounters?limit=8')),
+      safe(api('/lab/orders?limit=50')),
+      safe(api('/radiology/orders?limit=50')),
+      safe(api('/encounters/prescriptions?limit=50')),
+      safe(api('/admissions?limit=50')),
     ]);
+
+    const pendingStatus = (v: any) => {
+      const s = String(v?.status ?? v?.approvalStatus ?? '').toUpperCase();
+      return s === 'PENDING' || s === 'ORDERED' || s === 'DRAFT' || s === 'REQUESTED';
+    };
+    const pendingApprovals =
+      listOf(labR).filter((o: any) => pendingStatus(o)).length +
+      listOf(radR).filter((o: any) => pendingStatus(o)).length +
+      listOf(rxR).filter((o: any) => o.status === 'DRAFT' || o.status === 'APPROVED').length +
+      listOf(admR).filter((a: any) => pendingStatus(a) || a.dischargeStatus === 'PENDING').length;
 
     setStats([
       { label: 'Department patients', value: countOf(patientsR), tone: 'blue', icon: '👤' },
-      { label: 'Pending approvals', value: countOf(approvalsR), tone: (countOf(approvalsR)) > 0 ? 'amber' : 'green', icon: '✓' },
+      { label: 'Pending approvals', value: pendingApprovals, tone: pendingApprovals > 0 ? 'amber' : 'green', icon: '✓' },
       { label: 'Department encounters', value: countOf(encountersR), tone: 'purple', icon: '🩺' },
       { label: 'Department doctors', value: countOf(doctorsR), tone: 'green', icon: '✚' },
     ]);

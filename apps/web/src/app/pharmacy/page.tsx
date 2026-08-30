@@ -9,7 +9,6 @@ import ReceiptModal from '@/components/ReceiptModal';
 import PatientPrescriptions from '@/components/PatientPrescriptions';
 
 const REMOVED_KEY = 'pharmacy_expiry_removed';
-const CONTROLLED_LOG_KEY = 'controlled_substance_log';
 
 const VALID_TABS = ['medicines', 'dispensing', 'sales', 'stores', 'alerts', 'expiry'];
 
@@ -1178,36 +1177,42 @@ function AlertsTab() {
       .finally(() => setLoading(false));
   }, []);
 
+  const loadLog = useCallback(() => {
+    api('/pharmacy/controlled-substances?limit=200')
+      .then((res: any) => {
+        setLog(toList(res).map((row: any) => ({
+          id: row.id,
+          drug: row.drug,
+          quantity: Number(row.quantity),
+          patient: row.patient,
+          notes: row.notes,
+          at: row.loggedAt,
+          by: row.loggedBy,
+        })));
+      })
+      .catch(() => setLog([]));
+  }, []);
+
   useEffect(() => {
     load();
-    try {
-      const raw = localStorage.getItem(CONTROLLED_LOG_KEY);
-      if (raw) setLog(JSON.parse(raw));
-    } catch {
-      setLog([]);
-    }
-  }, [load]);
+    loadLog();
+  }, [load, loadLog]);
 
-  function saveLog(next: any[]) {
-    setLog(next);
-    try {
-      localStorage.setItem(CONTROLLED_LOG_KEY, JSON.stringify(next));
-    } catch {}
-  }
-
-  function addUsage() {
+  async function addUsage() {
     if (qty <= 0) return;
-    saveLog([
-      { id: `${Date.now()}`, drug, quantity: qty, patient: patient.trim(), notes: notes.trim(), at: new Date().toISOString(), by: localStorage.getItem('userName') || '' },
-      ...log,
-    ]);
+    await api('/pharmacy/controlled-substances', {
+      method: 'POST',
+      body: JSON.stringify({ drug, quantity: qty, patient: patient.trim(), notes: notes.trim() }),
+    });
+    await loadLog();
     setQty(1);
     setPatient('');
     setNotes('');
   }
 
-  function deleteEntry(id: string) {
-    saveLog(log.filter((l) => l.id !== id));
+  async function deleteEntry(id: string) {
+    await api(`/pharmacy/controlled-substances/${id}`, { method: 'DELETE' });
+    await loadLog();
   }
 
   const lowStockCount = alerts?.summary?.lowStockCount || alerts?.lowStock?.length || 0;

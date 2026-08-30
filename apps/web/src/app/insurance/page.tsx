@@ -92,23 +92,22 @@ function uid(prefix: string): string {
     : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function loadPreAuths(): PreAuth[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem('insurance_preauths') || '[]');
-    const rows: PreAuth[] = Array.isArray(raw) ? raw : [];
-    const cutoff = Date.now() - 14 * 86400000;
-    return rows.map((r) =>
-      r.status === 'PENDING' && new Date(r.requestedDate).getTime() < cutoff
-        ? { ...r, status: 'EXPIRED' as const }
-        : r,
-    );
-  } catch {
-    return [];
+function mapPreAuth(r: any): PreAuth {
+  const row: PreAuth = {
+    id: r.id,
+    patientName: r.patientName || r.patientId || '—',
+    providerName: r.providerName || '—',
+    treatment: r.treatment,
+    estimatedCost: num(r.estimatedCost),
+    status: r.status || 'PENDING',
+    requestedDate: r.requestedDate || new Date().toISOString(),
+    approvedAmount: r.approvedAmount != null ? num(r.approvedAmount) : null,
+  };
+  const cutoff = Date.now() - 14 * 86400000;
+  if (row.status === 'PENDING' && new Date(row.requestedDate).getTime() < cutoff) {
+    row.status = 'EXPIRED';
   }
-}
-
-function savePreAuths(rows: PreAuth[]) {
-  localStorage.setItem('insurance_preauths', JSON.stringify(rows));
+  return row;
 }
 
 function trackerTone(step: string, status: string): { bg: string; border: string; fg: string } {
@@ -205,17 +204,18 @@ export default function InsurancePage() {
 
   const loadCore = useCallback(async () => {
     setLoading(true);
-    const [claimsR, patientsR, providersR, policiesR] = await Promise.all([
+    const [claimsR, patientsR, providersR, policiesR, preauthsR] = await Promise.all([
       safe(api('/insurance/claims')),
       safe(api('/patients?limit=500')),
       safe(api('/insurance/providers?limit=500')),
       safe(api('/insurance/policies')),
+      safe(api('/insurance/preauthorizations?limit=200')),
     ]);
     setClaims(listOf(claimsR));
     setPatients(listOf(patientsR));
     setProviders(listOf(providersR));
     setPolicies(listOf(policiesR));
-    setPreAuths(loadPreAuths());
+    setPreAuths(listOf(preauthsR).map((r: any) => mapPreAuth(r)));
     setLoading(false);
   }, []);
 
@@ -273,43 +273,54 @@ export default function InsurancePage() {
     }
   }
 
-  function persistPreAuths(rows: PreAuth[]) {
-    setPreAuths(rows);
-    savePreAuths(rows);
-  }
-
-  function submitPreAuth(e: React.FormEvent) {
+  async function submitPreAuth(e: React.FormEvent) {
     e.preventDefault();
     if (!preAuthForm.patientName.trim() || !preAuthForm.providerName.trim() || !preAuthForm.treatment.trim() || !num(preAuthForm.estimatedCost)) {
       window.alert('Patient, provider, treatment and estimated cost are required');
       return;
     }
-    const entry: PreAuth = {
-      id: uid('pa'),
-      patientName: preAuthForm.patientName.trim(),
-      providerName: preAuthForm.providerName.trim(),
-      treatment: preAuthForm.treatment.trim(),
-      estimatedCost: num(preAuthForm.estimatedCost),
-      status: 'PENDING',
-      requestedDate: new Date().toISOString(),
-      approvedAmount: null,
-    };
-    persistPreAuths([entry, ...preAuths]);
-    setPreAuthOpen(false);
-    setPreAuthForm({ patientName: '', providerName: '', treatment: '', estimatedCost: '' });
+    try {
+      await api('/insurance/preauthorizations', {
+        method: 'POST',
+        body: JSON.stringify({
+          patientName: preAuthForm.patientName.trim(),
+          providerName: preAuthForm.providerName.trim(),
+          treatment: preAuthForm.treatment.trim(),
+          estimatedCost: num(preAuthForm.estimatedCost),
+        }),
+      });
+      setPreAuthOpen(false);
+      setPreAuthForm({ patientName: '', providerName: '', treatment: '', estimatedCost: '' });
+      await loadCore();
+    } catch {
+      window.alert('Could not create pre-authorization request');
+    }
   }
 
-  function approvePreAuth(row: PreAuth) {
+  async function approvePreAuth(row: PreAuth) {
     const amt = window.prompt('Approved amount:', String(row.estimatedCost));
     if (!amt) return;
-    persistPreAuths(
-      preAuths.map((r) => (r.id === row.id ? { ...r, status: 'APPROVED' as const, approvedAmount: num(amt) } : r)),
-    );
+    try {
+      await api(`/insurance/preauthorizations/${row.id}/decision`, {
+        method: 'PATCH',
+        body: JSON.stringify({ decision: 'APPROVED', approvedAmount: num(amt) }),
+      });
+      await loadCore();
+    } catch {
+      window.alert('Could not approve pre-authorization');
+    }
   }
 
-  function denyPreAuth(row: PreAuth) {
-    if (window.confirm(`Deny pre-authorization for ${row.patientName}?`)) {
-      persistPreAuths(preAuths.map((r) => (r.id === row.id ? { ...r, status: 'DENIED' as const, approvedAmount: null } : r)));
+  async function denyPreAuth(row: PreAuth) {
+    if (!window.confirm(`Deny pre-authorization for ${row.patientName}?`)) return;
+    try {
+      await api(`/insurance/preauthorizations/${row.id}/decision`, {
+        method: 'PATCH',
+        body: JSON.stringify({ decision: 'DENIED' }),
+      });
+      await loadCore();
+    } catch {
+      window.alert('Could not deny pre-authorization');
     }
   }
 

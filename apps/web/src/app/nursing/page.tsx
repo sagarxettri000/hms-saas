@@ -159,10 +159,21 @@ export default function NursingPage() {
 
   useEffect(() => {
     loadCore();
-    try {
-      const raw = localStorage.getItem('shift_handovers');
-      if (raw) setHandovers(JSON.parse(raw));
-    } catch {}
+    api('/nursing-handovers?limit=200')
+      .then((r) => {
+        const rows = toList(r);
+        setHandovers(
+          rows.map((row: any) => ({
+            id: row.id,
+            wardId: row.wardId,
+            wardName: row.wardName,
+            shiftDate: row.shiftDate,
+            notes: row.notes,
+            savedAt: row.createdAt,
+          })),
+        );
+      })
+      .catch(() => {});
   }, [loadCore]);
 
   const wardOf = useCallback(
@@ -328,19 +339,28 @@ export default function NursingPage() {
     loadMeds(marAdmissionId);
   };
 
-  const saveHandover = () => {
+  const saveHandover = async () => {
     const wardName = wards.find((w) => w.id === handoverWardId)?.name || '';
-    const entry = {
-      id: `${Date.now()}`,
-      wardId: handoverWardId,
-      wardName,
-      shiftDate,
-      notes: handoverNotes,
-      savedAt: new Date().toISOString(),
-    };
-    const next = [...handovers, entry];
-    setHandovers(next);
-    localStorage.setItem('shift_handovers', JSON.stringify(next));
+    await api('/nursing-handovers', {
+      method: 'POST',
+      body: JSON.stringify({
+        wardId: handoverWardId,
+        wardName,
+        shiftDate,
+        notes: handoverNotes,
+      }),
+    }).catch(() => {});
+    const rows = toList(await api('/nursing-handovers?limit=200').catch(() => []));
+    setHandovers(
+      rows.map((row: any) => ({
+        id: row.id,
+        wardId: row.wardId,
+        wardName: row.wardName,
+        shiftDate: row.shiftDate,
+        notes: row.notes,
+        savedAt: row.createdAt,
+      })),
+    );
     setHandoverNotes('');
     setHandoverSavedMsg(`Handover saved for ${wardName} (${shiftDate}).`);
     setTimeout(() => setHandoverSavedMsg(''), 4000);

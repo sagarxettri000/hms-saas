@@ -43,21 +43,6 @@ function unwrap(r: any): any {
   return r?.data?.data ?? r?.data ?? r;
 }
 
-function readLS<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeLS(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {}
-}
-
 function fullName(u: any): string {
   if (!u) return '—';
   return [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || u.email || '—';
@@ -125,9 +110,47 @@ export default function HrPage() {
     setLoadingLeaves(false);
   };
 
+  const loadAttendance = async () => {
+    try {
+      const data = unwrap(await api('/hr/attendance?limit=200'));
+      setAttendance(
+        Array.isArray(data)
+          ? data.map((r: any) => ({
+              id: r.id,
+              staffName: r.staffName,
+              date: r.date,
+              clockIn: r.clockIn,
+              clockOut: r.clockOut,
+            }))
+          : [],
+      );
+    } catch {
+      setAttendance([]);
+    }
+  };
+
+  const loadTraining = async () => {
+    try {
+      const data = unwrap(await api('/hr/training?limit=200'));
+      setTraining(
+        Array.isArray(data)
+          ? data.map((r: any) => ({
+              id: r.id,
+              program: r.program,
+              enrolledAt: r.enrolledAt,
+              completedAt: r.completedAt,
+              certificateDate: r.certificateDate,
+            }))
+          : [],
+      );
+    } catch {
+      setTraining([]);
+    }
+  };
+
   useEffect(() => {
-    setAttendance(readLS<AttendanceRecord[]>('attendance_records', []));
-    setTraining(readLS<TrainingRecord[]>('training_records', []));
+    loadAttendance();
+    loadTraining();
     loadDepts();
   }, []);
 
@@ -167,56 +190,79 @@ export default function HrPage() {
     setLeaveBusy(null);
   };
 
-  const clockIn = () => {
+  const clockIn = async () => {
     const d = todayStr();
     if (attendance.some((r) => r.date === d && !r.clockOut)) return;
-    const rec: AttendanceRecord = {
-      id: `${Date.now()}`,
-      staffName: localStorage.getItem('userName') || 'Current User',
-      date: d,
-      clockIn: new Date().toISOString(),
-      clockOut: null,
-    };
-    const next = [...attendance, rec];
-    setAttendance(next);
-    writeLS('attendance_records', next);
+    try {
+      const rec = unwrap(
+        await api('/hr/attendance/clock-in', {
+          method: 'POST',
+          body: JSON.stringify({ staffName: localStorage.getItem('userName') || 'Current User' }),
+        }),
+      );
+      if (rec && rec.id) {
+        setAttendance((prev) => [
+          ...prev,
+          { id: rec.id, staffName: rec.staffName, date: rec.date, clockIn: rec.clockIn, clockOut: rec.clockOut },
+        ]);
+      }
+    } catch {}
   };
 
-  const clockOut = () => {
-    const d = todayStr();
-    const next = attendance.map((r) =>
-      r.date === d && !r.clockOut ? { ...r, clockOut: new Date().toISOString() } : r,
-    );
-    setAttendance(next);
-    writeLS('attendance_records', next);
+  const clockOut = async () => {
+    try {
+      const rec = unwrap(await api('/hr/attendance/clock-out', { method: 'POST' }));
+      if (rec && rec.id) {
+        setAttendance((prev) => prev.map((r) => (r.id === rec.id ? { ...r, clockOut: rec.clockOut } : r)));
+      }
+    } catch {}
   };
 
-  const enroll = (program: string) => {
+  const enroll = async (program: string) => {
     if (training.some((t) => t.program === program)) return;
-    const rec: TrainingRecord = {
-      id: `${Date.now()}`,
-      program,
-      enrolledAt: new Date().toISOString(),
-      completedAt: null,
-      certificateDate: '',
-    };
-    const next = [...training, rec];
-    setTraining(next);
-    writeLS('training_records', next);
+    try {
+      const rec = unwrap(
+        await api('/hr/training', {
+          method: 'POST',
+          body: JSON.stringify({ program, staffName: localStorage.getItem('userName') || 'Current User' }),
+        }),
+      );
+      if (rec && rec.id) {
+        setTraining((prev) => [
+          ...prev,
+          {
+            id: rec.id,
+            program: rec.program,
+            enrolledAt: rec.enrolledAt,
+            completedAt: rec.completedAt,
+            certificateDate: rec.certificateDate,
+          },
+        ]);
+      }
+    } catch {}
   };
 
-  const toggleComplete = (id: string) => {
-    const next = training.map((r) =>
-      r.id === id ? { ...r, completedAt: r.completedAt ? null : new Date().toISOString() } : r,
-    );
-    setTraining(next);
-    writeLS('training_records', next);
+  const toggleComplete = async (id: string) => {
+    try {
+      const rec = unwrap(await api(`/hr/training/${id}/complete`, { method: 'PATCH' }));
+      if (rec && rec.id) {
+        setTraining((prev) => prev.map((r) => (r.id === rec.id ? { ...r, completedAt: rec.completedAt } : r)));
+      }
+    } catch {}
   };
 
-  const setCertificateDate = (id: string, value: string) => {
-    const next = training.map((r) => (r.id === id ? { ...r, certificateDate: value } : r));
-    setTraining(next);
-    writeLS('training_records', next);
+  const setCertificateDate = async (id: string, value: string) => {
+    try {
+      const rec = unwrap(
+        await api(`/hr/training/${id}/certificate`, {
+          method: 'PATCH',
+          body: JSON.stringify({ certificateDate: value }),
+        }),
+      );
+      if (rec && rec.id) {
+        setTraining((prev) => prev.map((r) => (r.id === rec.id ? { ...r, certificateDate: rec.certificateDate } : r)));
+      }
+    } catch {}
   };
 
   const q = search.trim().toLowerCase();

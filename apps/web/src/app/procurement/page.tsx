@@ -62,7 +62,23 @@ export default function ProcurementPage() {
         setSuppliers(Array.isArray(data) ? data : []);
       })
       .catch(() => {});
-    setTransfers(readLS<StockTransfer[]>('stock_transfers', []));
+    api('/procurement/transfers?limit=200')
+      .then((r) => {
+        const data = unwrap(r);
+        const rows = Array.isArray(data) ? data : [];
+        setTransfers(
+          rows.map((row: any) => ({
+            id: row.id,
+            date: row.transferredAt,
+            fromStore: row.fromStore,
+            toStore: row.toStore,
+            item: row.itemName,
+            quantity: Number(row.quantity) || 0,
+            status: row.status,
+          }))
+        );
+      })
+      .catch(() => setTransfers([]));
     setExpiryMap(readLS<Record<string, ExpiryEntry>>('item_expiry_dates', {}));
   }, []);
 
@@ -80,19 +96,34 @@ export default function ProcurementPage() {
 
   const addTransfer = () => {
     if (!transferForm.fromStore.trim() || !transferForm.toStore.trim() || !transferForm.item.trim()) return;
-    const rec: StockTransfer = {
-      id: `${Date.now()}`,
-      date: new Date().toISOString(),
-      fromStore: transferForm.fromStore,
-      toStore: transferForm.toStore,
-      item: transferForm.item,
-      quantity: Number(transferForm.quantity) || 0,
-      status: 'COMPLETED',
-    };
-    const next = [...transfers, rec];
-    setTransfers(next);
-    writeLS('stock_transfers', next);
-    setTransferForm({ fromStore: '', toStore: '', item: '', quantity: '' });
+    api('/procurement/transfers', {
+      method: 'POST',
+      body: JSON.stringify({
+        fromStore: transferForm.fromStore,
+        toStore: transferForm.toStore,
+        itemName: transferForm.item,
+        quantity: Number(transferForm.quantity) || 0,
+      }),
+    })
+      .then(() => {
+        setTransferForm({ fromStore: '', toStore: '', item: '', quantity: '' });
+        return api('/procurement/transfers?limit=200').then((r) => {
+          const data = unwrap(r);
+          const rows = Array.isArray(data) ? data : [];
+          setTransfers(
+            rows.map((row: any) => ({
+              id: row.id,
+              date: row.transferredAt,
+              fromStore: row.fromStore,
+              toStore: row.toStore,
+              item: row.itemName,
+              quantity: Number(row.quantity) || 0,
+              status: row.status,
+            }))
+          );
+        });
+      })
+      .catch(() => {});
   };
 
   const totalMoved = transfers.reduce((sum, t) => sum + (t.quantity || 0), 0);

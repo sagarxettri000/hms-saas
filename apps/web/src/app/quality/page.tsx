@@ -92,21 +92,6 @@ function personName(p: any): string {
   return [p.firstName, p.lastName].filter(Boolean).join(' ') || p.name || p.mrn || '—';
 }
 
-function loadChecked(category: string): string[] {
-  try {
-    const raw = localStorage.getItem(`quality-checklist-${category}`);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveChecked(category: string, checked: string[]) {
-  try {
-    localStorage.setItem(`quality-checklist-${category}`, JSON.stringify(checked));
-  } catch {}
-}
-
 export default function QualityPage() {
   const [tab, setTab] = useState<'incidents' | 'kpi' | 'checklists'>('incidents');
 
@@ -155,18 +140,31 @@ export default function QualityPage() {
   useEffect(() => {
     const map: Record<string, string[]> = {};
     CHECKLIST_CATEGORIES.forEach((c) => {
-      map[c.name] = loadChecked(c.name);
+      map[c.name] = [];
     });
-    setCheckedMap(map);
+    api('/quality/checklists')
+      .then((r) => {
+        const data = unwrap(r);
+        const rows = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+        const next = { ...map };
+        rows.forEach((row: any) => {
+          if (!row || !row.checked || !row.category) return;
+          next[row.category] = [...(next[row.category] || []), row.item];
+        });
+        setCheckedMap(next);
+      })
+      .catch(() => setCheckedMap(map));
   }, []);
 
   const toggleItem = (category: string, item: string) => {
-    setCheckedMap((prev) => {
-      const current = prev[category] || [];
-      const next = current.includes(item) ? current.filter((i) => i !== item) : [...current, item];
-      saveChecked(category, next);
-      return { ...prev, [category]: next };
-    });
+    const current = checkedMap[category] || [];
+    const nextChecked = current.includes(item);
+    const next = nextChecked ? current.filter((i) => i !== item) : [...current, item];
+    setCheckedMap((prev) => ({ ...prev, [category]: next }));
+    api('/quality/checklists/toggle', {
+      method: 'PATCH',
+      body: JSON.stringify({ category, item, checked: !nextChecked }),
+    }).catch(() => {});
   };
 
   const createIncident = async () => {

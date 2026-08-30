@@ -46,6 +46,12 @@ import { PortalModule } from "./modules/portal/portal.module";
 import { BedManagementModule } from "./modules/bed-management/bed-management.module";
 import { AmbulanceModule } from "./modules/ambulance/ambulance.module";
 import { EquipmentModule } from "./modules/equipment/equipment.module";
+import { PreauthorizationsModule } from "./modules/preauthorizations/preauthorizations.module";
+import { ControlledSubstancesModule } from "./modules/controlled-substances/controlled-substances.module";
+import { StockTransfersModule } from "./modules/stock-transfers/stock-transfers.module";
+import { AttendanceModule } from "./modules/attendance/attendance.module";
+import { QualityChecklistsModule } from "./modules/quality-checklists/quality-checklists.module";
+import { NursingHandoversModule } from "./modules/nursing-handovers/nursing-handovers.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "./common/guards/permissions.guard";
 import { TenantGuard } from "./common/guards/tenant.guard";
@@ -114,6 +120,12 @@ import { AppController } from "./app.controller";
     BedManagementModule,
     AmbulanceModule,
     EquipmentModule,
+    PreauthorizationsModule,
+    ControlledSubstancesModule,
+    StockTransfersModule,
+    AttendanceModule,
+    QualityChecklistsModule,
+    NursingHandoversModule,
   ],
   providers: [
     {

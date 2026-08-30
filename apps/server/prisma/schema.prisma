@@ -3321,3 +3321,133 @@ model EquipmentLog {
   @@index([tenantId, equipmentId])
   @@map("equipment_logs")
 }
+
+// ============================================================
+// RLS-ENABLED MULTI-TENANT FEATURE TABLES
+// ============================================================
+
+enum PreauthStatus {
+  PENDING
+  APPROVED
+  DENIED
+  EXPIRED
+}
+
+model InsurancePreauthorization {
+  id             String        @id @default(cuid())
+  tenantId       String
+  patientId      String?
+  patientName    String?
+  providerName   String?
+  policyNumber   String?
+  treatment      String
+  estimatedCost  Decimal       @db.Decimal(14, 2)
+  approvedAmount Decimal?      @db.Decimal(14, 2)
+  status         PreauthStatus @default(PENDING)
+  requestedDate  DateTime      @default(now())
+  decisionDate   DateTime?
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  createdBy      String?
+  updatedBy      String?
+
+  @@index([tenantId, status])
+  @@map("insurance_preauthorizations")
+}
+
+model ControlledSubstanceLog {
+  id         String       @id @default(cuid())
+  tenantId   String
+  drug       String
+  quantity   Decimal      @db.Decimal(10, 2)
+  patient    String?
+  notes      String?
+  loggedAt   DateTime     @default(now())
+  loggedBy   String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([tenantId, drug])
+  @@map("controlled_substance_logs")
+}
+
+model StockTransfer {
+  id            String      @id @default(cuid())
+  tenantId      String
+  fromStore     String?
+  toStore       String?
+  itemName      String?
+  quantity      Decimal     @db.Decimal(12, 3)
+  status        String      @default("COMPLETED")
+  transferredAt DateTime    @default(now())
+  createdBy     String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([tenantId, transferredAt])
+  @@map("stock_transfers")
+}
+
+model AttendanceRecord {
+  id        String      @id @default(cuid())
+  tenantId  String
+  staffName String?
+  date      DateTime
+  clockIn   DateTime
+  clockOut  DateTime?
+  hours     Decimal?    @db.Decimal(5, 2)
+  createdBy String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([tenantId, date])
+  @@map("attendance_records")
+}
+
+model StaffTraining {
+  id              String    @id @default(cuid())
+  tenantId        String
+  staffName       String?
+  program         String
+  enrolledAt      DateTime  @default(now())
+  completedAt     DateTime?
+  certificateDate DateTime?
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([tenantId, program])
+  @@map("staff_trainings")
+}
+
+model QualityChecklist {
+  id         String    @id @default(cuid())
+  tenantId   String
+  category   String
+  item       String
+  checked    Boolean   @default(false)
+  checkedBy  String?
+  checkedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([tenantId, category, item])
+  @@index([tenantId, category])
+  @@map("quality_checklists")
+}
+
+model ShiftHandover {
+  id        String    @id @default(cuid())
+  tenantId  String
+  wardId    String?
+  wardName  String?
+  shiftDate DateTime
+  notes     String?
+  savedBy   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([tenantId, shiftDate])
+  @@map("shift_handovers")
+}

@@ -38,6 +38,7 @@ interface Payment {
 
 interface DiscountRequest {
   id: string;
+  invoiceId?: string;
   patient: string;
   invoiceNo: string;
   amount: number;
@@ -96,20 +97,44 @@ function fmtMoney(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function loadDiscounts(): DiscountRequest[] {
-  try {
-    const raw = localStorage.getItem('discount_requests');
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+interface InvoiceOption {
+  id: string;
+  invoiceNumber: string;
+  patientName: string;
+  total: number;
+  discountStatus?: string;
+  discountAmount?: number;
+  discountReason?: string;
+  discountRequestedBy?: string;
 }
 
-function saveDiscounts(list: DiscountRequest[]) {
-  try {
-    localStorage.setItem('discount_requests', JSON.stringify(list));
-  } catch {}
+function invoiceToDiscount(inv: {
+  id: string;
+  patientName: string;
+  invoiceNumber: string;
+  discountStatus?: string;
+  discountAmount?: number;
+  discountReason?: string;
+  discountRequestedBy?: string;
+  createdAt?: string;
+}): DiscountRequest {
+  const status =
+    inv.discountStatus === 'APPROVED'
+      ? 'APPROVED'
+      : inv.discountStatus === 'REJECTED'
+        ? 'REJECTED'
+        : 'PENDING';
+  return {
+    id: inv.id,
+    invoiceId: inv.id,
+    patient: inv.patientName || '—',
+    invoiceNo: inv.invoiceNumber || inv.id?.slice(0, 8) || '—',
+    amount: Number(inv.discountAmount) || 0,
+    reason: inv.discountReason || '',
+    requestedBy: inv.discountRequestedBy || '',
+    status,
+    createdAt: inv.createdAt || '',
+  };
 }
 
 export default function ReceptionPage() {
@@ -128,7 +153,10 @@ export default function ReceptionPage() {
   const [billingAnalytics, setBillingAnalytics] = useState<any>(null);
 
   const [discounts, setDiscounts] = useState<DiscountRequest[]>([]);
-  const [discountForm, setDiscountForm] = useState({ patient: '', invoiceNo: '', amount: '', reason: '', requestedBy: '' });
+  const [invoiceOptions, setInvoiceOptions] = useState<InvoiceOption[]>([]);
+  const [loadingDiscounts, setLoadingDiscounts] = useState(false);
+  const [discountError, setDiscountError] = useState<string | null>(null);
+  const [discountForm, setDiscountForm] = useState({ invoiceId: '', amount: '', reason: '', requestedBy: '' });
   const [discountSaved, setDiscountSaved] = useState(false);
 
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -172,9 +200,48 @@ export default function ReceptionPage() {
       .finally(() => setLoadingPayments(false));
   }, [tab]);
 
+  const loadDiscountQueue = async () => {
+    setLoadingDiscounts(true);
+    setDiscountError(null);
+    try {
+      const r = await api('/billing/invoices?limit=200');
+      const data = unwrap(r);
+      const rows = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+      const options: InvoiceOption[] = rows.map((inv: any) => ({
+        id: inv.id,
+        invoiceNumber: inv.invoiceNumber || inv.id?.slice(0, 8) || '',
+        patientName: [inv.patient?.firstName, inv.patient?.lastName].filter(Boolean).join(' ') || inv.patient?.mrn || '—',
+        total: Number(inv.total || inv.totalAmount || 0),
+        discountStatus: inv.discountStatus,
+        discountAmount: Number(inv.discountAmount || 0),
+        discountReason: inv.discountReason,
+        discountRequestedBy: inv.discountRequestedBy,
+      }));
+      setInvoiceOptions(options);
+      const queued = options
+        .filter((o) => o.discountStatus)
+        .map((o) =>
+          invoiceToDiscount({
+            id: o.id,
+            patientName: o.patientName,
+            invoiceNumber: o.invoiceNumber,
+            discountStatus: o.discountStatus,
+            discountAmount: o.discountAmount,
+            discountReason: o.discountReason,
+            discountRequestedBy: o.discountRequestedBy,
+          }),
+        );
+      setDiscounts(queued);
+    } catch {
+      setDiscountError('Failed to load discount queue from billing.');
+    } finally {
+      setLoadingDiscounts(false);
+    }
+  };
+
   useEffect(() => {
-    setDiscounts(loadDiscounts());
-  }, []);
+    loadDiscountQueue();
+  }, [tab]);
 
   const todayKey = toDateKey(new Date());
   const todaysAppointments = appointments.filter((a) => {
@@ -275,30 +342,37 @@ export default function ReceptionPage() {
     return { todaysCount: todays.length, walkIns, avgWait, served, byHour, maxHour, doctorCounts };
   })();
 
-  const submitDiscount = () => {
-    if (!discountForm.patient.trim() || !discountForm.invoiceNo.trim() || !discountForm.amount) return;
-    const entry: DiscountRequest = {
-      id: `${Date.now()}`,
-      patient: discountForm.patient,
-      invoiceNo: discountForm.invoiceNo,
-      amount: Number(discountForm.amount),
-      reason: discountForm.reason,
-      requestedBy: discountForm.requestedBy,
-      status: 'PENDING',
-      createdAt: new Date().toISOString(),
-    };
-    const next = [entry, ...discounts];
-    setDiscounts(next);
-    saveDiscounts(next);
-    setDiscountForm({ patient: '', invoiceNo: '', amount: '', reason: '', requestedBy: '' });
-    setDiscountSaved(true);
-    setTimeout(() => setDiscountSaved(false), 2500);
+  const submitDiscount = async () => {
+    if (!discountForm.invoiceId || !discountForm.amount) return;
+    setDiscountError(null);
+    try {
+      await api(`/billing/invoices/${discountForm.invoiceId}/discount`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          amount: Number(discountForm.amount),
+          reason: discountForm.reason || undefined,
+        }),
+      });
+      setDiscountForm({ invoiceId: '', amount: '', reason: '', requestedBy: '' });
+      setDiscountSaved(true);
+      setTimeout(() => setDiscountSaved(false), 2500);
+      await loadDiscountQueue();
+    } catch {
+      setDiscountError('Failed to submit discount request.');
+    }
   };
 
-  const setDiscountStatus = (id: string, status: 'APPROVED' | 'REJECTED') => {
-    const next = discounts.map((d) => (d.id === id ? { ...d, status } : d));
-    setDiscounts(next);
-    saveDiscounts(next);
+  const setDiscountStatus = async (id: string, status: 'APPROVED' | 'REJECTED') => {
+    setDiscountError(null);
+    try {
+      await api(`/billing/invoices/${id}/discount/approval`, {
+        method: 'PATCH',
+        body: JSON.stringify({ approve: status === 'APPROVED' }),
+      });
+      await loadDiscountQueue();
+    } catch {
+      setDiscountError('Failed to update discount status.');
+    }
   };
 
   const collections = (() => {
@@ -576,23 +650,21 @@ export default function ReceptionPage() {
           <div className="card" style={{ marginBottom: 16 }}>
             <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 12px' }}>Request Discount</h3>
             <div className="form-grid">
-              <div className="field">
-                <label className="label">Patient</label>
-                <input
+              <div className="field field-full">
+                <label className="label">Invoice</label>
+                <select
                   className="input"
-                  value={discountForm.patient}
-                  onChange={(e) => setDiscountForm({ ...discountForm, patient: e.target.value })}
-                  placeholder="Patient name or ID"
-                />
-              </div>
-              <div className="field">
-                <label className="label">Invoice #</label>
-                <input
-                  className="input"
-                  value={discountForm.invoiceNo}
-                  onChange={(e) => setDiscountForm({ ...discountForm, invoiceNo: e.target.value })}
-                  placeholder="INV-0001"
-                />
+                  value={discountForm.invoiceId}
+                  onChange={(e) => setDiscountForm({ ...discountForm, invoiceId: e.target.value })}
+                >
+                  <option value="">Select an invoice…</option>
+                  {invoiceOptions.map((inv) => (
+                    <option key={inv.id} value={inv.id}>
+                      {inv.invoiceNumber} — {inv.patientName} ({fmtMoney(inv.total)})
+                      {inv.discountStatus ? ` [${inv.discountStatus}]` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="field">
                 <label className="label">Amount</label>
@@ -625,13 +697,16 @@ export default function ReceptionPage() {
               </div>
             </div>
             <div className="form-actions">
+              {discountError && <span style={{ fontSize: 13, color: 'var(--danger)' }}>{discountError}</span>}
               {discountSaved && <span style={{ fontSize: 13, color: 'var(--success)' }}>Request submitted.</span>}
-              <button className="btn" onClick={submitDiscount}>Submit Request</button>
+              <button className="btn" disabled={!discountForm.invoiceId || !discountForm.amount} onClick={submitDiscount}>Submit Request</button>
             </div>
           </div>
 
-          {!discounts.length ? (
-            <div className="empty">No discount requests yet.</div>
+          {loadingDiscounts ? (
+            <div className="loading">Loading discount queue…</div>
+          ) : !discounts.length ? (
+            <div className="empty">No pending discount requests. Select an invoice above and submit one.</div>
           ) : (
             <div className="table-wrap">
               <table className="table">

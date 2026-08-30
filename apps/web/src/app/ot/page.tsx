@@ -22,6 +22,7 @@ interface OtCase {
   startedAt?: string;
   endedAt?: string;
   status?: string;
+  checklist?: any;
 }
 
 const STATUS_TONES: Record<string, string> = {
@@ -193,17 +194,35 @@ export default function OtPage() {
 
   const rooms = Array.from(new Set(scheduleList.map((c) => c.otRoom || 'Unassigned'))).sort();
 
+  const persistChecklist = (surgeryId: string, surgery: Record<string, any>) => {
+    api(`/ot/${surgeryId}/checklist`, {
+      method: 'PATCH',
+      body: JSON.stringify({ checklist: surgery }),
+    }).catch(() => {});
+  };
+
   const toggleItem = (surgeryId: string, category: string, item: string) => {
+    const prevSurgery: Record<string, any> = checklists[surgeryId] || {};
+    const surgery = { ...prevSurgery };
+    const current: string[] = surgery[category] || [];
+    surgery[category] = current.includes(item) ? current.filter((i) => i !== item) : [...current, item];
+    const next = { ...checklists, [surgeryId]: surgery };
+    setChecklists(next);
+    saveChecklists(next);
+    persistChecklist(surgeryId, surgery);
+  };
+
+  useEffect(() => {
+    if (!selectedSurgery) return;
+    const c = cases.find((x) => x.id === selectedSurgery);
+    if (!c || !c.checklist) return;
     setChecklists((prev) => {
-      const next = { ...prev };
-      const surgery = { ...(next[surgeryId] || {}) };
-      const current: string[] = surgery[category] || [];
-      surgery[category] = current.includes(item) ? current.filter((i) => i !== item) : [...current, item];
-      next[surgeryId] = surgery;
+      if (prev[selectedSurgery]) return prev;
+      const next = { ...prev, [selectedSurgery]: c.checklist };
       saveChecklists(next);
       return next;
     });
-  };
+  }, [selectedSurgery, cases]);
 
   const stats = (() => {
     const total = cases.length;
@@ -421,6 +440,7 @@ export default function OtPage() {
                   delete next[selectedSurgery];
                   setChecklists(next);
                   saveChecklists(next);
+                  persistChecklist(selectedSurgery, {});
                 }}
               >
                 Reset checklist

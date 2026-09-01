@@ -271,9 +271,9 @@ export default function PatientDetailPage() {
     }
   }
 
-  if (!patient && loading) return <AppShell><div className="loading">Loading patient record…</div></AppShell>;
-  if (error && !patient) return <AppShell><div className="banner-danger">{error}</div></AppShell>;
-  if (!patient) return <AppShell><div className="empty">Patient not found.</div></AppShell>;
+  if (!patient && loading) return <AppShell><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="loading">Loading patient record…</div></AppShell>;
+  if (error && !patient) return <AppShell><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="banner-danger">{error}</div></AppShell>;
+  if (!patient) return <AppShell><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="empty">Patient not found.</div></AppShell>;
 
   const fullName = [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(' ');
   const age = patient.age ?? '—';

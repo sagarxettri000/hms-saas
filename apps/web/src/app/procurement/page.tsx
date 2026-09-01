@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AppShell from '@/components/AppShell';
-import ModulePage from '@/components/ModulePage';
+import EntityPage from '@/components/EntityPage';
 import { api } from '@/lib/api';
 import { formatDate, formatMoney } from '@/lib/hooks';
 
@@ -171,7 +171,7 @@ export default function ProcurementPage() {
   };
 
   return (
-    <div className="procurement-layout">
+    <AppShell>
       <div className="page-header">
         <div>
           <h1>Procurement</h1>
@@ -188,7 +188,7 @@ export default function ProcurementPage() {
       </div>
 
       {tab === 'orders' && (
-        <ModulePage
+        <EntityPage
           title="Purchase Orders"
           subtitle="Manage purchase orders"
           endpoint="/procurement/purchase-orders"
@@ -212,7 +212,7 @@ export default function ProcurementPage() {
       )}
 
       {tab === 'requests' && (
-        <ModulePage
+        <EntityPage
           title="Purchase Requests"
           subtitle="Track and approve purchase requests"
           endpoint="/procurement/purchase-requests"
@@ -236,7 +236,7 @@ export default function ProcurementPage() {
       )}
 
       {tab === 'items' && (
-        <ModulePage
+        <EntityPage
           title="Inventory Items"
           subtitle="Manage procurement catalog and stock"
           endpoint="/pharmacy/inventory"
@@ -430,6 +430,6 @@ export default function ProcurementPage() {
           )}
         </>
       )}
-    </div>
+    </AppShell>
   );
 }

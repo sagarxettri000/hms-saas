@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import AppShell from '@/components/AppShell';
-import ModulePage from '@/components/ModulePage';
+import EntityPage from '@/components/EntityPage';
 import { formatMoney, formatDate, formatDateTime } from '@/lib/hooks';
 import { PATIENT_REF } from '@/lib/options';
 
@@ -687,7 +687,7 @@ export default function InsurancePage() {
           )}
 
           {tab === 'policies' && (
-            <ModulePage
+            <EntityPage
               title="Insurance Policies"
               subtitle="Patient insurance policies"
               endpoint="/insurance/policies"
@@ -715,7 +715,7 @@ export default function InsurancePage() {
           )}
 
           {tab === 'providers' && (
-            <ModulePage
+            <EntityPage
               title="Insurance Providers"
               subtitle="Manage insurance companies and TPAs"
               endpoint="/insurance/providers"

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AppShell from '@/components/AppShell';
-import ModulePage from '@/components/ModulePage';
+import EntityPage from '@/components/EntityPage';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/hooks';
 
@@ -451,7 +451,7 @@ export default function HrPage() {
       )}
 
       {tab === 'shifts' && (
-        <ModulePage
+        <EntityPage
           title="Shifts"
           subtitle="Manage work shifts"
           endpoint="/hr/shifts"
@@ -472,7 +472,7 @@ export default function HrPage() {
       )}
 
       {tab === 'rosters' && (
-        <ModulePage
+        <EntityPage
           title="Rosters"
           subtitle="Shift assignments"
           endpoint="/hr/rosters"

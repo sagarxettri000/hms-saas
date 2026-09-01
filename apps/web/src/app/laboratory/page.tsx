@@ -337,12 +337,14 @@ export default function LaboratoryPage() {
     if (loadingDetail)
       return (
         <AppShell>
+          <button className="btn btn-secondary btn-sm" onClick={() => setDetailId(null)} style={{ marginBottom: 12 }}>← Back to Laboratory Orders</button>
           <div className="loading">Loading order details...</div>
         </AppShell>
       );
     if (!detail)
       return (
         <AppShell>
+          <button className="btn btn-secondary btn-sm" onClick={() => setDetailId(null)} style={{ marginBottom: 12 }}>← Back to Laboratory Orders</button>
           <div className="banner-danger">Order not found</div>
         </AppShell>
       );

@@ -84,9 +84,9 @@ export default function DoctorDetailPage() {
     };
   }, [id]);
 
-  if (!doctor && loading) return <AppShell><div className="loading">Loading doctor profile…</div></AppShell>;
-  if (error && !doctor) return <AppShell><div className="banner-danger">{error}</div></AppShell>;
-  if (!doctor) return <AppShell><div className="empty">Doctor not found.</div></AppShell>;
+  if (!doctor && loading) return <AppShell><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="loading">Loading doctor profile…</div></AppShell>;
+  if (error && !doctor) return <AppShell><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="banner-danger">{error}</div></AppShell>;
+  if (!doctor) return <AppShell><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="empty">Doctor not found.</div></AppShell>;
 
   const fullName = [doctor.firstName, doctor.lastName].filter(Boolean).join(' ');
   const d = dashboard as any;

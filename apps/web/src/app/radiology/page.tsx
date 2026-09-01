@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/hooks';
 import { DOCTOR_REF, PATIENT_REF } from '@/lib/options';
@@ -124,6 +125,7 @@ const EMPTY_ORDER: CreateOrderState = {
 };
 
 export default function RadiologyPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>('orders');
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<any>(null);
@@ -346,7 +348,7 @@ export default function RadiologyPage() {
     if (loadingDetail) return <div className="loading">Loading order…</div>;
     if (!detail) return (
       <div style={{ padding: '0 0 24px' }}>
-        <button className="btn btn-secondary btn-sm" onClick={() => setDetailId(null)}>← Back</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => setDetailId(null)}>← Back to Radiology Orders</button>
         <div className="empty" style={{ marginTop: 16 }}>Order not found</div>
       </div>
     );
@@ -358,7 +360,7 @@ export default function RadiologyPage() {
         {flash && <div className="alert alert-success">{flash}</div>}
         <div className="page-header">
           <div>
-            <button className="btn btn-secondary btn-sm" onClick={() => setDetailId(null)} style={{ marginBottom: 10 }}>← Back</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setDetailId(null)} style={{ marginBottom: 10 }}>← Back to Radiology Orders</button>
             <h1 className="page-title" style={{ margin: 0 }}>
               Radiology Order Details
               <span className="mono" style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 10 }}>{detail.orderNumber}</span>
@@ -497,6 +499,9 @@ export default function RadiologyPage() {
     ];
     return (
       <div style={{ padding: '0 0 24px' }}>
+        <div style={{ marginBottom: 12 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => switchTab('orders')}>← Back to Radiology Orders</button>
+        </div>
         <div className="page-header">
           <div>
             <h1 className="page-title">Radiology Summary</h1>
@@ -546,6 +551,10 @@ export default function RadiologyPage() {
   return (
     <div style={{ padding: '0 0 24px' }}>
       {flash && <div className="alert alert-success">{flash}</div>}
+
+      <div style={{ marginBottom: 12 }}>
+        <button className="btn btn-secondary btn-sm" onClick={() => router.push('/dashboard')}>← Back to Dashboard</button>
+      </div>
 
       <div className="page-header">
         <div>

@@ -169,8 +169,10 @@ export class AuthService {
       data: {
         userId: user.id,
         tenantId: user.tenantId,
-        token: "",
-        refreshToken,
+        // Unique placeholder; the access token is written right after signing.
+        token: crypto.randomUUID(),
+        // Only the SHA-256 hash of the refresh token is persisted.
+        refreshToken: refreshTokenHash,
         refreshTokenHash,
         userAgent,
         ipAddress,
@@ -239,8 +241,14 @@ export class AuthService {
     userAgent?: string,
     ipAddress?: string,
   ) {
+    // The DB only stores the SHA-256 hash of the refresh token, so look it up by hash.
+    const refreshTokenHash = crypto
+      .createHash("sha256")
+      .update(refreshToken)
+      .digest("hex");
+
     const session = await this.prisma.session.findUnique({
-      where: { refreshToken },
+      where: { refreshTokenHash },
       include: { user: true },
     });
 
@@ -261,6 +269,10 @@ export class AuthService {
     const permissions = this.getUserPermissions(user.role);
 
     const newRefreshToken = crypto.randomBytes(40).toString("hex");
+    const newRefreshTokenHash = crypto
+      .createHash("sha256")
+      .update(newRefreshToken)
+      .digest("hex");
 
     const accessToken = this.jwtService.sign(
       {
@@ -279,7 +291,8 @@ export class AuthService {
       where: { id: session.id },
       data: {
         token: accessToken,
-        refreshToken: newRefreshToken,
+        refreshToken: newRefreshTokenHash,
+        refreshTokenHash: newRefreshTokenHash,
         lastActivityAt: new Date(),
       },
     });
@@ -288,8 +301,12 @@ export class AuthService {
   }
 
   async logout(refreshToken: string) {
+    const refreshTokenHash = crypto
+      .createHash("sha256")
+      .update(refreshToken)
+      .digest("hex");
     await this.prisma.session.updateMany({
-      where: { refreshToken },
+      where: { refreshTokenHash },
       data: { isActive: false, revokedAt: new Date() },
     });
     return { success: true };

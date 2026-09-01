@@ -178,7 +178,7 @@ describe("AuthService", () => {
       const result = await service.refreshToken("valid");
       expect(result.accessToken).toBe("new-access-token");
       expect(prisma.session.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: "session-1" }, data: expect.objectContaining({ token: "new-access-token", lastActivityAt: expect.any(Date) }) }),
+        expect.objectContaining({ where: { id: "session-1" }, data: expect.objectContaining({ token: "new-access-token", lastActivityAt: expect.any(Date), refreshTokenHash: expect.any(String) }) }),
       );
     });
   });
@@ -200,7 +200,7 @@ describe("AuthService", () => {
     it("revokes session", async () => {
       await service.logout("refresh-token");
       expect(prisma.session.updateMany).toHaveBeenCalledWith({
-        where: { refreshToken: "refresh-token" },
+        where: { refreshTokenHash: expect.any(String) },
         data: { isActive: false, revokedAt: expect.any(Date) },
       });
     });

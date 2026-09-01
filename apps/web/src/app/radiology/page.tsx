@@ -358,15 +358,13 @@ export default function RadiologyPage() {
         {flash && <div className="alert alert-success">{flash}</div>}
         <div className="page-header">
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => setDetailId(null)}>← Back</button>
-              <h1 className="page-title" style={{ margin: 0 }}>
-                {detail.orderNumber}
-                <span className="mono" style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 10 }}>{MODALITY_LABEL[detail.modality] || detail.modality}</span>
-              </h1>
-            </div>
-            <p className="page-subtitle" style={{ marginLeft: 70 }}>
-              {patientName(detail.patient)} · {detail.patient?.mrn || '—'}
+            <button className="btn btn-secondary btn-sm" onClick={() => setDetailId(null)} style={{ marginBottom: 10 }}>← Back</button>
+            <h1 className="page-title" style={{ margin: 0 }}>
+              Radiology Order Details
+              <span className="mono" style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 10 }}>{detail.orderNumber}</span>
+            </h1>
+            <p className="page-subtitle">
+              {patientName(detail.patient)} · {detail.patient?.mrn || '—'} · {MODALITY_LABEL[detail.modality] || detail.modality}
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

@@ -111,13 +111,6 @@ function isThisMonth(v: any): boolean {
   return !isNaN(t) && t >= startOfMonth().getTime();
 }
 
-function coversToday(v: any): boolean {
-  if (!v) return false;
-  const t = new Date(v).getTime();
-  if (isNaN(t)) return false;
-  return t <= Date.now() + 86400000;
-}
-
 function startedOnOrAfter(v: any, from: Date): boolean {
   if (!v) return false;
   const t = new Date(v).getTime();

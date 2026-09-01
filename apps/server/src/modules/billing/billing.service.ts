@@ -9,6 +9,8 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { buildInvoicePdf, buildReceiptPdf } from "./invoice-pdf";
 
+const MAX_LIMIT = 100;
+
 export interface InvoiceItemDto {
   serviceName: string;
   serviceCode?: string;
@@ -360,7 +362,7 @@ export class BillingService {
 
   async findInvoices(tenantId: string, params: InvoiceSearchParams) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 20;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     await this.refreshOverdueStatus(tenantId);
 
@@ -413,7 +415,7 @@ export class BillingService {
 
   async findPayments(tenantId: string, params: PaymentSearchParams) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 20;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { tenantId };
     if (params.patientId) where.patientId = params.patientId;
@@ -1228,7 +1230,7 @@ export class BillingService {
 
   async findDeposits(tenantId: string, params: any) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 20;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
     const where: any = { tenantId };
     if (params.patientId) where.patientId = params.patientId;
     if (params.status) where.status = params.status;
@@ -1266,7 +1268,7 @@ export class BillingService {
 
   async findRefunds(tenantId: string, params: any) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 20;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
     const where: any = { tenantId };
     if (params.patientId) where.patientId = params.patientId;
     if (params.status) where.status = params.status;
@@ -1479,7 +1481,7 @@ export class BillingService {
     params: BillingServiceSearchParams,
   ) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 20;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { tenantId };
     if (params.category) where.category = params.category;
@@ -1633,7 +1635,7 @@ export class BillingService {
 
   async findBillingSchemes(tenantId: string, params: { search?: string; isActive?: string; page?: number; limit?: number }) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 20;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
     const where: any = { tenantId };
     if (params.isActive !== undefined) where.isActive = params.isActive === "true";
     if (params.search) {
@@ -1867,7 +1869,7 @@ export class BillingService {
     },
   ) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 20;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { tenantId };
     if (params.type) where.type = params.type;
@@ -2362,6 +2364,8 @@ export class BillingService {
           metadata,
         },
       });
-    } catch {}
+    } catch (error) {
+      console.warn(`Failed to write audit log: ${error}`);
+    }
   }
 }

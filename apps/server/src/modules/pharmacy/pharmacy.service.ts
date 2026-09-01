@@ -7,6 +7,8 @@ import {
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 
+const MAX_LIMIT = 100;
+
 export interface CreateMedicineDto {
   name: string;
   genericName?: string;
@@ -140,7 +142,7 @@ export class PharmacyService {
     },
   ) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 50;
+    const limit = Math.min(Number(params.limit) || 50, MAX_LIMIT);
 
     const where: any = { tenantId };
     if (params.category) where.category = params.category;
@@ -304,7 +306,7 @@ export class PharmacyService {
     },
   ) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 50;
+    const limit = Math.min(Number(params.limit) || 50, MAX_LIMIT);
 
     const where: any = { tenantId };
     if (params.storeId) where.storeId = params.storeId;
@@ -478,7 +480,7 @@ export class PharmacyService {
 
   async findPrescriptions(tenantId: string, params: { status?: string; patientId?: string; page?: number; limit?: number }) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 50;
+    const limit = Math.min(Number(params.limit) || 50, MAX_LIMIT);
 
     const where: any = { tenantId };
     if (params.status) where.status = params.status;

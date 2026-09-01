@@ -270,14 +270,16 @@ export default function LaboratoryPage() {
     saveSamples(next);
   }
 
-  function loadDetail(id: string) {
-    setDetailId(id);
+  useEffect(() => {
+    if (!detailId) return;
+    let active = true;
     setLoadingDetail(true);
-    api(`/lab/orders/${id}`)
-      .then((r: any) => setDetail(unwrap(r)))
-      .catch(() => setDetail(null))
-      .finally(() => setLoadingDetail(false));
-  }
+    api(`/lab/orders/${detailId}`)
+      .then((r: any) => { if (active) setDetail(unwrap(r)); })
+      .catch(() => { if (active) setDetail(null); })
+      .finally(() => { if (active) setLoadingDetail(false); });
+    return () => { active = false; };
+  }, [detailId]);
 
   function closeDetail() {
     setDetailId(null);
@@ -286,7 +288,7 @@ export default function LaboratoryPage() {
 
   function transitionStatus(orderId: string, status: string) {
     api(`/lab/orders/${orderId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })
-      .then(() => loadDetail(orderId))
+      .then(() => setDetailId(orderId))
       .catch(() => {});
   }
 
@@ -295,7 +297,7 @@ export default function LaboratoryPage() {
       method: 'PATCH',
       body: JSON.stringify(data),
     })
-      .then(() => loadDetail(orderId))
+      .then(() => setDetailId(orderId))
       .catch(() => {});
   }
 
@@ -308,7 +310,7 @@ export default function LaboratoryPage() {
       method: 'PATCH',
       body: JSON.stringify({ reason }),
     })
-      .then(() => loadDetail(orderId))
+      .then(() => setDetailId(orderId))
       .catch(() => {});
   }
 
@@ -566,7 +568,7 @@ export default function LaboratoryPage() {
             hint: '[{labTestId, testName, price}]',
           },
         ]}
-        actions={[{ label: 'View', onClick: (r) => loadDetail(r.id) }]}
+        actions={[{ label: 'View', onClick: (r) => setDetailId(r.id) }]}
       />
     );
   }

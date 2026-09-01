@@ -453,7 +453,7 @@ export class EncountersService {
           where: { id: encounter.appointmentId },
           data: { status: "COMPLETED", completedAt: new Date() },
         })
-        .catch(() => {});
+        .catch((err) => console.warn(`Failed to update appointment status: ${err.message}`));
     }
 
     return result;
@@ -913,6 +913,8 @@ export class EncountersService {
           metadata,
         },
       });
-    } catch {}
+    } catch (error) {
+      console.warn(`Failed to write audit log: ${error}`);
+    }
   }
 }

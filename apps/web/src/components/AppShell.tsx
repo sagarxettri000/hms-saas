@@ -7,8 +7,6 @@ import GlobalSearch from './GlobalSearch';
 import NotificationBell from './NotificationBell';
 import { api } from '@/lib/api';
 
-const ALL = undefined;
-
 const ADMIN = ['HOSPITAL_ADMIN', 'HOSPITAL_OWNER'];
 const SUPER = ['PLATFORM_SUPER_ADMIN', 'IT_ADMIN'];
 const MANAGER = [...SUPER, ...ADMIN, 'DEPARTMENT_HEAD'];

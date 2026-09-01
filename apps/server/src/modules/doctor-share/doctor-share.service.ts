@@ -285,7 +285,9 @@ export class DoctorShareService {
           metadata,
         },
       });
-    } catch {}
+    } catch (error) {
+      console.warn(`Failed to write audit log: ${error}`);
+    }
   }
 
   async getDoctorSummary(tenantId: string, doctorId: string) {

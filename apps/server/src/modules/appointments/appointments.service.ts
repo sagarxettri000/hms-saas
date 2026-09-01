@@ -8,6 +8,8 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 
+const MAX_LIMIT = 100;
+
 export interface CreateAppointmentDto {
   patientId?: string;
   // Auto-register fields: used when no patientId is provided
@@ -184,7 +186,7 @@ export class AppointmentsService {
 
   async findAll(tenantId: string, params: AppointmentSearchParams) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 20;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { tenantId };
 
@@ -703,6 +705,8 @@ export class AppointmentsService {
           metadata,
         },
       });
-    } catch {}
+    } catch (error) {
+      console.warn(`Failed to write audit log: ${error}`);
+    }
   }
 }

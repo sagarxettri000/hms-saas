@@ -7,6 +7,8 @@
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 
+const MAX_LIMIT = 100;
+
 export interface CreatePatientDto {
   firstName: string;
   middleName?: string;
@@ -235,7 +237,7 @@ export class PatientsService {
 
   async findAll(tenantId: string, params: PatientSearchParams) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 20;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { tenantId, deletedAt: null };
 
@@ -725,6 +727,8 @@ export class PatientsService {
           metadata,
         },
       });
-    } catch {}
+    } catch (error) {
+      console.warn(`Failed to write audit log: ${error}`);
+    }
   }
 }

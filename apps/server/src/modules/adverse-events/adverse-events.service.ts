@@ -179,6 +179,8 @@ export class AdverseEventsService {
           metadata,
         },
       });
-    } catch {}
+    } catch (error) {
+      console.warn(`Failed to write audit log: ${error}`);
+    }
   }
 }

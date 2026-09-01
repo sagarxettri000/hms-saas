@@ -106,6 +106,8 @@ export class AuthService {
     });
 
     if (!user) {
+      // Run a dummy compare to prevent timing-based email enumeration.
+      await bcrypt.compare(dto.password, "$2a$12$x".padEnd(60, "0"));
       throw new UnauthorizedException("Invalid credentials");
     }
 
@@ -426,11 +428,47 @@ export class AuthService {
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        tenant: true,
-        doctorProfile: true,
-        staffProfile: true,
-        department: true,
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        role: true,
+        status: true,
+        tenantId: true,
+        createdAt: true,
+        mustChangePassword: true,
+        tenant: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            logoUrl: true,
+            timezone: true,
+            currency: true,
+          },
+        },
+        doctorProfile: {
+          select: {
+            id: true,
+            specialization: true,
+            departmentId: true,
+          },
+        },
+        staffProfile: {
+          select: {
+            id: true,
+            departmentId: true,
+            designation: true,
+          },
+        },
+        department: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -438,8 +476,7 @@ export class AuthService {
       throw new UnauthorizedException("User not found");
     }
 
-    const { passwordHash: _, twoFactorSecret: __, ...safeUser } = user;
-    return safeUser;
+    return user;
   }
 
   async setupTwoFactor(userId: string, email: string) {

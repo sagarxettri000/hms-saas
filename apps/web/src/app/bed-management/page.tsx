@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { useData, formatDateTime } from '@/lib/hooks';
-import type { ApiResponse } from '@/lib/types';
+import { formatDateTime } from '@/lib/hooks';
 import AppShell from '@/components/AppShell';
 
 const BED_TYPES = [

@@ -8,6 +8,8 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 
+const MAX_LIMIT = 100;
+
 export interface CreateAdmissionDto {
   patientId: string;
   encounterId?: string;
@@ -120,7 +122,7 @@ export class AdmissionsService {
             where: { id: encounter.id },
             data: { status: "ADMITTED" },
           })
-          .catch(() => {});
+          .catch((err) => console.warn(`Failed to update encounter status: ${err.message}`));
       }
     }
 
@@ -149,7 +151,7 @@ export class AdmissionsService {
 
   async findAll(tenantId: string, params: AdmissionSearchParams) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 20;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { tenantId };
     if (params.patientId) where.patientId = params.patientId;
@@ -433,7 +435,7 @@ export class AdmissionsService {
             where: { id: admission.encounterId },
             data: { status: "DISCHARGED" },
           })
-          .catch(() => {});
+          .catch((err) => console.warn(`Failed to update encounter status: ${err.message}`));
       }
 
       await this.logAudit(tenantId, userId, "UPDATE", "Admission", id, {
@@ -674,6 +676,8 @@ export class AdmissionsService {
           metadata,
         },
       });
-    } catch {}
+    } catch (error) {
+      console.warn(`Failed to write audit log: ${error}`);
+    }
   }
 }

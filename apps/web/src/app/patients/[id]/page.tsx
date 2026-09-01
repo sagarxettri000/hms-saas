@@ -124,7 +124,6 @@ export default function PatientDetailPage() {
   const CLINICAL_ROLES = ['DOCTOR', 'NURSE', 'WARD_INCHARGE', 'ICU_STAFF', 'EMERGENCY_STAFF', 'ANESTHETIST'];
   const ADMIN_ROLES = ['HOSPITAL_ADMIN', 'HOSPITAL_OWNER', 'PLATFORM_SUPER_ADMIN', 'IT_ADMIN', 'DEPARTMENT_HEAD'];
   const FRONT_ROLES = ['RECEPTIONIST', 'RECEPTION_SUPERVISOR'];
-  const canViewPatient = true;
   const canManageClinical = CLINICAL_ROLES.concat(ADMIN_ROLES).includes(role);
   const canAdmit = CLINICAL_ROLES.concat(FRONT_ROLES).concat(ADMIN_ROLES).includes(role);
   const canDischarge = canManageClinical;

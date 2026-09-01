@@ -8,6 +8,7 @@ import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UserRole } from "@hms/shared";
 
+const MAX_LIMIT = 100;
 const ROLE_VALUES = new Set(Object.values(UserRole));
 
 function isRole(value: any): value is UserRole {
@@ -210,7 +211,7 @@ export class UsersService {
     status?: string;
   }) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 20;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { deletedAt: null };
     if (params.tenantId) where.tenantId = params.tenantId;

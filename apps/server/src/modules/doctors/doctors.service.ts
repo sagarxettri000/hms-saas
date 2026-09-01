@@ -7,6 +7,8 @@ import {
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../../prisma/prisma.service";
 
+const MAX_LIMIT = 100;
+
 export interface CreateDoctorDto {
   firstName: string;
   middleName?: string;
@@ -133,7 +135,7 @@ export class DoctorsService {
     },
   ) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 20;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { tenantId, isActive: params.active !== false };
     if (params.departmentId) where.departmentId = params.departmentId;

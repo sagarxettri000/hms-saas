@@ -5,6 +5,9 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
 import { TenantScoped } from "../../common/decorators/permissions.decorator";
 
+// No @Permissions decorator here — the portal is patient self-service.
+// Access is scoped to the authenticated patient via TenantGuard + JwtAuthGuard;
+// MRN/ patientId params are resolved server-side against req.user.
 @ApiTags("Patient Portal")
 @Controller("portal")
 @UseGuards(JwtAuthGuard, TenantGuard)

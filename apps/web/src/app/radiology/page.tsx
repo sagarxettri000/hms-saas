@@ -236,15 +236,21 @@ export default function RadiologyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, queryKey]);
 
-  const loadDetail = useCallback(async (id: string) => {
-    setDetailId(id);
+  useEffect(() => {
+    if (!detailId) return;
+    let active = true;
     setLoadingDetail(true);
-    const res: any = await api(`/radiology/orders/${id}`);
-    const d = res?.data ?? res;
-    setDetail(d);
-    setReportFields({ findings: d.findings || '', impression: d.impression || '', report: d.report || '' });
-    setLoadingDetail(false);
-  }, []);
+    api(`/radiology/orders/${detailId}`)
+      .then((res: any) => {
+        if (!active) return;
+        const d = res?.data ?? res;
+        setDetail(d);
+        setReportFields({ findings: d.findings || '', impression: d.impression || '', report: d.report || '' });
+      })
+      .catch(() => { if (active) setDetail(null); })
+      .finally(() => { if (active) setLoadingDetail(false); });
+    return () => { active = false; };
+  }, [detailId]);
 
   const transitionStatus = async (toStatus: string) => {
     if (!detailId) return;
@@ -252,7 +258,7 @@ export default function RadiologyPage() {
     try {
       await api(`/radiology/orders/${detailId}/status`, { method: 'PATCH', body: JSON.stringify({ status: toStatus }) });
       setFlash(`Order ${STATUS_LABEL[toStatus]}`);
-      await loadDetail(detailId);
+      setDetailId(detailId);
       loadRef.current();
     } catch (e) {
       setFlash(e instanceof Error ? e.message : 'Transition failed');
@@ -266,7 +272,7 @@ export default function RadiologyPage() {
     try {
       await api(`/radiology/orders/${detailId}/report`, { method: 'PATCH', body: JSON.stringify(reportFields) });
       setFlash('Report saved');
-      await loadDetail(detailId);
+      setDetailId(detailId);
     } catch (e) {
       setFlash(e instanceof Error ? e.message : 'Failed to save report');
     }
@@ -631,7 +637,7 @@ export default function RadiologyPage() {
                   <td style={{ whiteSpace: 'nowrap' }}>{r.scheduledAt ? formatDateTime(r.scheduledAt) : '—'}</td>
                   <td>{statusBadge(r.status)}</td>
                   <td>
-                    <button className="btn btn-sm btn-ghost" onClick={() => loadDetail(r.id)}>View</button>
+                    <button className="btn btn-sm btn-ghost" onClick={() => setDetailId(r.id)}>View</button>
                   </td>
                 </tr>
               ))}

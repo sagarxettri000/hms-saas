@@ -13,7 +13,7 @@ import { RlsContextInterceptor } from "./common/rls/rls-context.interceptor";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: process.env.NODE_ENV === "production"
-      ? ({ log: () => {}, warn: () => {}, error: () => {}, debug: () => {}, verbose: () => {} } as any)
+      ? ["error", "warn"]
       : undefined,
   });
 
@@ -47,31 +47,33 @@ async function bootstrap() {
     new TransformInterceptor(),
   );
 
-  const config = new DocumentBuilder()
-    .setTitle("HMS SaaS API")
-    .setDescription("Enterprise SaaS Hospital Management System API")
-    .setVersion("1.0.0")
-    .addBearerAuth()
-    .addTag("Auth", "Authentication endpoints")
-    .addTag("Tenants", "Multi-tenant management")
-    .addTag("Users", "User management")
-    .addTag("Roles", "Role management")
-    .addTag("Permissions", "Permission management")
-    .addTag("Patients", "Patient management")
-    .addTag("Appointments", "Appointment management")
-    .addTag("Doctors", "Doctor management")
-    .addTag("Encounters", "Clinical encounters")
-    .addTag("Departments", "Department management")
-    .addTag("Settings", "System settings")
-    .addTag("Health", "Health checks")
-    .build();
+  if (process.env.NODE_ENV !== "production") {
+    const config = new DocumentBuilder()
+      .setTitle("HMS SaaS API")
+      .setDescription("Enterprise SaaS Hospital Management System API")
+      .setVersion("1.0.0")
+      .addBearerAuth()
+      .addTag("Auth", "Authentication endpoints")
+      .addTag("Tenants", "Multi-tenant management")
+      .addTag("Users", "User management")
+      .addTag("Roles", "Role management")
+      .addTag("Permissions", "Permission management")
+      .addTag("Patients", "Patient management")
+      .addTag("Appointments", "Appointment management")
+      .addTag("Doctors", "Doctor management")
+      .addTag("Encounters", "Clinical encounters")
+      .addTag("Departments", "Department management")
+      .addTag("Settings", "System settings")
+      .addTag("Health", "Health checks")
+      .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup("api/docs", app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-    },
-  });
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup("api/docs", app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+      },
+    });
+  }
 
   const port = process.env.PORT || 4000;
   await app.listen(port);

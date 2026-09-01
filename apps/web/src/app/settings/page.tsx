@@ -12,10 +12,12 @@ function ToggleList({ path }: { path: string }) {
   const [busyKey, setBusyKey] = useState('');
 
   useEffect(() => {
+    let active = true;
     api(path)
-      .then((data) => setItems(Array.isArray(data) ? data : data.data ?? []))
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+      .then((data) => { if (active) setItems(Array.isArray(data) ? data : data.data ?? []); })
+      .catch((e) => { if (active) setError(e.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [path]);
 
   async function toggle(item: any, enabled: boolean) {

@@ -1053,6 +1053,7 @@ model Session {
   tenantId       String?
   token          String    @unique
   refreshToken   String?   @unique
+  refreshTokenHash   String  @unique
   userAgent      String?
   ipAddress      String?
   deviceId       String?

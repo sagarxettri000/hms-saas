@@ -203,18 +203,19 @@ export default function RadiologyPage() {
 
   return (
     <>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {tabBtn('orders', 'Orders')}
-        {tabBtn('worklist', 'Worklist')}
-        {tabBtn('summary', 'Summary')}
-      </div>
-
       {activeTab === 'orders' && (
         <ModulePage
           title="Radiology Orders"
           subtitle="Imaging orders and reports"
           endpoint="/radiology/orders"
           createLabel="New imaging order"
+          extra={() => (
+            <div style={{ display: 'flex', gap: 4, marginTop: 8, alignItems: 'center' }}>
+              {tabBtn('orders', 'Orders')}
+              {tabBtn('worklist', 'Worklist')}
+              {tabBtn('summary', 'Summary')}
+            </div>
+          )}
           columns={[
             { key: 'orderNumber', label: 'Order no.', render: (r) => <span className="mono">{r.orderNumber}</span> },
             { key: 'patient', label: 'Patient', render: (r) => [r.patient?.firstName, r.patient?.lastName].filter(Boolean).join(' ') },

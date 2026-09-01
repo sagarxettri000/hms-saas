@@ -1,4 +1,4 @@
-import {
+﻿import {
   BadRequestException,
   ConflictException,
   Injectable,
@@ -324,7 +324,7 @@ export class PatientsService {
       const copy = { ...row };
       for (const field of maskedFields) {
         if (copy[field] !== undefined && copy[field] !== null) {
-          copy[field] = "••••••";
+          copy[field] = "â€¢â€¢â€¢â€¢â€¢â€¢";
         }
       }
       return copy;

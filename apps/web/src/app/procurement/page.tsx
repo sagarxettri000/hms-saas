@@ -171,7 +171,7 @@ export default function ProcurementPage() {
   };
 
   return (
-    <AppShell>
+    <div className="procurement-layout">
       <div className="page-header">
         <div>
           <h1>Procurement</h1>
@@ -430,6 +430,6 @@ export default function ProcurementPage() {
           )}
         </>
       )}
-    </AppShell>
+    </div>
   );
 }

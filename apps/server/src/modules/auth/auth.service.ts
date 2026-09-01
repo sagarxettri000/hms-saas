@@ -161,6 +161,7 @@ export class AuthService {
       : 7 * 24 * 60 * 60 * 1000;
 
     const refreshToken = crypto.randomBytes(40).toString("hex");
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
 
     const session = await this.prisma.session.create({
       data: {
@@ -168,6 +169,7 @@ export class AuthService {
         tenantId: user.tenantId,
         token: "",
         refreshToken,
+        refreshTokenHash,
         userAgent,
         ipAddress,
         expiresAt: new Date(Date.now() + sessionExpiryMs),
@@ -436,7 +438,7 @@ export class AuthService {
       throw new UnauthorizedException("User not found");
     }
 
-    const { passwordHash: _, ...safeUser } = user;
+    const { passwordHash: _, twoFactorSecret: __, ...safeUser } = user;
     return safeUser;
   }
 

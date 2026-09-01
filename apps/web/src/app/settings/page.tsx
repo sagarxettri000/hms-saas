@@ -89,6 +89,38 @@ export default function SettingsPage() {
             { key: 'email', label: 'Email', render: (r) => <span className="mono">{r.email}</span> },
             { key: 'role', label: 'Role', badge: true },
             { key: 'status', label: 'Status', badge: true },
+            {
+              key: 'actions',
+              label: 'Actions',
+              render: (r: any) => {
+                const isSuper = r.role === 'PLATFORM_SUPER_ADMIN';
+                return (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {isSuper && (
+                      <button
+                        className="btn btn-link text-error text-sm"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Delete user ${r.firstName} ${r.lastName} (${r.email})?`,
+                            )
+                          ) {
+                            api(`/users/${r.id}`, {
+                              method: 'DELETE',
+                            }).then(() => {
+                              window.location.reload();
+                            });
+                          }
+                        }}
+                        title="Delete user"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                );
+              },
+            },
           ],
           fields: [
             { name: 'firstName', label: 'First name' },
@@ -138,6 +170,34 @@ export default function SettingsPage() {
             { key: 'name', label: 'Name' },
             { key: 'description', label: 'Description' },
             { key: 'isSystem', label: 'System', render: (r) => (r.isSystem ? 'Yes' : 'No') },
+            {
+              key: 'actions',
+              label: 'Actions',
+              render: (r: any) => {
+                const isSuper = r.name === 'PLATFORM_SUPER_ADMIN' || false;
+                return (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {!r.isSystem && isSuper && (
+                      <button
+                        className="btn btn-link text-error text-sm"
+                        onClick={() => {
+                          if (window.confirm(`Delete role ${r.name}?`)) {
+                            api(`/roles/${r.id}`, {
+                              method: 'DELETE',
+                            }).then(() => {
+                              window.location.reload();
+                            });
+                          }
+                        }}
+                        title="Delete role"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                );
+              },
+            },
           ],
           fields: [
             { name: 'name', label: 'Name', required: true, type: 'select', options: [

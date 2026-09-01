@@ -37,8 +37,10 @@ jobs:
       - run: npm run typecheck -w @hms/web
       - run: npm run test -w @hms/server
       - run: npm run test -w @hms/web
-      - name: Prisma migrate
-        run: npm run db:migrate
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+      - name: Apply migrations against test DB (detects drift)
+        run: npx prisma migrate deploy --skip-generate
         working-directory: apps/server
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hms_test

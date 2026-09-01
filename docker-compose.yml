@@ -23,7 +23,8 @@ services:
       - "${SERVER_PORT:-4000}:4000"
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-hms_saas}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-placeholder-long-enough}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-placeholder-long-enough}
       PORT: 4000
     depends_on:
       postgres:

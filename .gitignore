@@ -25,8 +25,7 @@ logs/
 *.log
 npm-debug.log*
 
-# Prisma
-apps/server/prisma/migrations/
+# Prisma (migrations are version-controlled and MUST be committed)
 
 # OS
 .DS_Store

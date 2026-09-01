@@ -4,7 +4,7 @@ set -e
 cd /app/apps/server
 
 echo "Applying database migrations..."
-npx prisma migrate deploy --skip-generate
+npx prisma migrate deploy
 
 echo "Running database seed..."
 npx prisma db seed || echo "Seed failed or already run, continuing..."

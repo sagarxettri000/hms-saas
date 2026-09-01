@@ -33,10 +33,17 @@ jobs:
       - run: npm run build -w @hms/shared
       - name: Generate Prisma client
         run: npm run db:generate -w @hms/server
-      - run: npm run typecheck -w @hms/server
-      - run: npm run typecheck -w @hms/web
-      - run: npm run test -w @hms/server
-      - run: npm run test -w @hms/web
+      - name: Typecheck + test
+        # Unit tests call JwtStrategy.secretOrKey() which requires these vars.
+        # Using non-production dev placeholder tokens for the test job only.
+        env:
+          JWT_ACCESS_SECRET: dev-access-secret-placeholder-long-enough
+          JWT_REFRESH_SECRET: dev-refresh-secret-placeholder-long-enough
+        run: |
+          npm run typecheck -w @hms/server
+          npm run typecheck -w @hms/web
+          npm run test -w @hms/server
+          npm run test -w @hms/web
       - name: Audit production dependencies
         run: npm audit --omit=dev
       - name: Apply migrations against test DB (detects drift)

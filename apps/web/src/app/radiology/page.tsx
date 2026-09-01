@@ -61,6 +61,15 @@ export default function RadiologyPage() {
   if (activeTab === 'summary') {
     return (
       <div style={{ padding: '0 0 24px' }}>
+        <div style={{ padding: '12px 0', marginBottom: 12, borderBottom: '1px solid var(--border)' }}>
+          <button
+            className="btn btn-sm btn-ghost"
+            style={{ marginBottom: 4 }}
+            onClick={() => setActiveTab('orders')}
+          >
+            ← Back to Radiology Orders
+          </button>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div>
             <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Radiology Dashboard</h1>

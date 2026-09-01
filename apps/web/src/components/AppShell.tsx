@@ -15,6 +15,7 @@ const MANAGER = [...SUPER, ...ADMIN, 'DEPARTMENT_HEAD'];
 const FRONT = ['RECEPTIONIST', 'RECEPTION_SUPERVISOR'];
 const CLINICAL = ['DOCTOR', 'NURSE', 'WARD_INCHARGE', 'ICU_STAFF', 'EMERGENCY_STAFF'];
 const CLINICAL_WIDE = [...CLINICAL, ...FRONT, ...ADMIN, ...SUPER, 'ANESTHETIST'];
+const CLINICAL_NO_DOCTOR = CLINICAL_WIDE.filter((r) => r !== 'DOCTOR');
 const FINANCE = ['RECEPTIONIST', 'RECEPTION_SUPERVISOR', 'FINANCE_MANAGER'];
 const LAB = ['LAB_TECHNICIAN', 'PATHOLOGIST'];
 const RAD = ['RADIOLOGIST', 'RADIOLOGY_TECHNICIAN'];
@@ -55,15 +56,15 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { label: 'Laboratory', href: '/laboratory', icon: '◉', roles: [...LAB, ...CLINICAL_WIDE] },
       { label: 'Radiology', href: '/radiology', icon: '▤', roles: [...RAD, ...CLINICAL_WIDE] },
-      { label: 'Blood Bank', href: '/blood-bank', icon: '✖', roles: [...CLINICAL_WIDE, 'BLOOD_BANK_STAFF'] },
-      { label: 'Pharmacy', href: '/pharmacy', icon: '▥', roles: [...CLINICAL_WIDE, ...PHARMACY] },
+      { label: 'Blood Bank', href: '/blood-bank', icon: '✖', roles: [...CLINICAL_NO_DOCTOR, 'BLOOD_BANK_STAFF'] },
+      { label: 'Pharmacy', href: '/pharmacy', icon: '▥', roles: [...CLINICAL_NO_DOCTOR, ...PHARMACY] },
     ],
   },
   {
     title: 'Pharmacy',
     items: [
-      { label: 'Medicines', href: '/pharmacy?tab=medicines', icon: '💊', roles: [...PHARMACY, ...CLINICAL_WIDE, ...ADMIN, ...SUPER] },
-      { label: 'Dispensing', href: '/pharmacy?tab=dispensing', icon: '📋', roles: [...PHARMACY, ...CLINICAL_WIDE, ...ADMIN, ...SUPER] },
+      { label: 'Medicines', href: '/pharmacy?tab=medicines', icon: '💊', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR, ...ADMIN, ...SUPER] },
+      { label: 'Dispensing', href: '/pharmacy?tab=dispensing', icon: '📋', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR, ...ADMIN, ...SUPER] },
       { label: 'Sales', href: '/pharmacy?tab=sales', icon: '₨', roles: [...PHARMACY, ...ADMIN, ...SUPER] },
       { label: 'Stores & Stock', href: '/pharmacy?tab=stores', icon: '🗄', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER] },
       { label: 'Stock Alerts', href: '/pharmacy?tab=alerts', icon: '⚠', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER] },

@@ -326,7 +326,7 @@ export class PatientsService {
       const copy = { ...row };
       for (const field of maskedFields) {
         if (copy[field] !== undefined && copy[field] !== null) {
-          copy[field] = "â€¢â€¢â€¢â€¢â€¢â€¢";
+          copy[field] = "••••••";
         }
       }
       return copy;

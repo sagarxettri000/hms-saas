@@ -6,6 +6,8 @@ import {
 import * as crypto from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 
+const MAX_LIMIT = 100;
+
 export interface CreateTenantDto {
   name: string;
   code: string;
@@ -181,7 +183,7 @@ export class TenantsService {
     status?: string;
   }) {
     const page = Number(params.page) || 1;
-    const limit = Number(params.limit) || 20;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { deletedAt: null };
     if (params.status) where.status = params.status;

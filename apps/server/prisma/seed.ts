@@ -4,6 +4,18 @@ import * as bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
+  // Safety: never destroy or re-seed a real database. The seed performs broad,
+  // destructive deleteMany() sweeps (including tenants) to rebuild demo data.
+  // Guard against accidental execution in any production-like environment.
+  const env = (process.env.NODE_ENV || "").toLowerCase();
+  if (env === "production" || env === "prod") {
+    console.error(
+      "Refusing to run seed in NODE_ENV=production: the seed wipes existing data. " +
+        "Use `prisma migrate deploy` only for production database changes.",
+    );
+    process.exit(1);
+  }
+
   console.log('🌱 Seeding HMS SaaS database...');
 
   // Clean up demo data first (idempotent)

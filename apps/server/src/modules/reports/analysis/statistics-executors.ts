@@ -965,10 +965,10 @@ export async function bedAnalysis(ctx: ExecContext): Promise<ExecResult> {
   const movesByBed = new Map<string, number>();
   for (const m of movements) movesByBed.set(m.bedId, (movesByBed.get(m.bedId) || 0) + 1);
 
-  const byBed = new Map<string, { ward: string; bed: string; occupiedDays: number; count: number }>();
+  const byBed = new Map<string, { bedId: string; ward: string; bed: string; occupiedDays: number; count: number }>();
   for (const a of allocations) {
     const key = a.bedId;
-    const cur = byBed.get(key) || { ward: a.bed?.ward?.name || "-", bed: a.bed?.bedNumber || "-", occupiedDays: 0, count: 0 };
+    const cur = byBed.get(key) || { bedId: a.bedId, ward: a.bed?.ward?.name || "-", bed: a.bed?.bedNumber || "-", occupiedDays: 0, count: 0 };
     const allocStart = a.allocatedAt > start ? a.allocatedAt : start;
     const allocEnd = a.releasedAt ? a.releasedAt : new Date();
     const days = daysBetween(allocStart, allocEnd);
@@ -982,7 +982,7 @@ export async function bedAnalysis(ctx: ExecContext): Promise<ExecResult> {
     bed: v.bed,
     occupiedDays: v.occupiedDays,
     utilization: pct1(v.occupiedDays, periodDays),
-    transfers: movesByBed.get(v.bed === "-" ? "" : "") || 0,
+    transfers: movesByBed.get(v.bedId) || 0,
     avgOccupancy: v.count ? Math.round((v.occupiedDays / v.count) * 10) / 10 : 0,
     available: Math.max(0, periodDays - v.occupiedDays),
   }));

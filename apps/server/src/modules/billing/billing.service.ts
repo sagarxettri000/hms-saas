@@ -1616,7 +1616,16 @@ export class BillingService {
     });
     if (!existing) throw new NotFoundException("Billing scheme not found");
 
-    const data: any = { ...dto, updatedAt: new Date() };
+    // Whitelist updatable fields to prevent mass-assignment of protected
+    // attributes (e.g. tenantId) from a caller-controlled body.
+    const data: any = {
+      name: dto.name,
+      code: dto.code,
+      description: dto.description,
+      rules: dto.rules,
+      isActive: dto.isActive,
+      updatedAt: new Date(),
+    };
     if (dto.discountPercent !== undefined) {
       data.discountPercent = this.validateMoney(dto.discountPercent, {
         min: 0,

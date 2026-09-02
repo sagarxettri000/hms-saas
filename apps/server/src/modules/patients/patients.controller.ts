@@ -99,8 +99,12 @@ export class PatientsController {
   @Get(":id")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Get patient details with full record" })
-  findById(@Param("id") id: string, @Req() req: any) {
-    return this.patientsService.findById(req.user.tenantId, id);
+  async findById(@Param("id") id: string, @Req() req: any) {
+    const patient = await this.patientsService.findById(req.user.tenantId, id);
+    // Apply the same PHI masking used by findAll/search so restricted roles
+    // (e.g. RECEPTIONIST) cannot read identity documents via the detail route.
+    const masked = this.patientsService.maskPatientPhi(req.user.role, [patient]);
+    return masked[0];
   }
 
   @Get(":id/timeline")

@@ -520,58 +520,83 @@ export class PharmacyService {
 
     const results: any[] = [];
 
-    for (const item of dto.items) {
-      const quantity = Number(item.quantity);
-      if (!quantity || quantity <= 0)
-        throw new BadRequestException(`Invalid quantity for ${item.medicineName}`);
+    // Wrap the whole dispensing (stock decrements + prescription status) in a
+    // single transaction so a failure mid-way rolls back every change, and use
+    // an atomic conditional update to prevent two concurrent dispatches from
+    // overselling the same batch.
+    await this.prisma.$transaction(async (tx) => {
+      for (const item of dto.items) {
+        const quantity = Number(item.quantity);
+        if (!quantity || quantity <= 0)
+          throw new BadRequestException(`Invalid quantity for ${item.medicineName}`);
 
-      let unitPrice = Number(item.unitPrice) || 0;
+        let unitPrice = Number(item.unitPrice) || 0;
 
-      const inventoryItem = item.medicineId
-        ? await this.prisma.inventoryItem.findFirst({
+        const inventoryItem = item.medicineId
+          ? await tx.inventoryItem.findFirst({
+              where: {
+                tenantId,
+                storeId: dto.storeId,
+                medicineId: item.medicineId,
+                batchNumber: item.batchNumber || undefined,
+              },
+            })
+          : null;
+
+        if (inventoryItem) {
+          const currentStock = Number(inventoryItem.currentStock);
+          if (currentStock < quantity)
+            throw new ConflictException(
+              `Insufficient stock for ${item.medicineName}. Available: ${currentStock}, Requested: ${quantity}`
+            );
+
+          if (!unitPrice) unitPrice = Number(inventoryItem.salesRate) || 0;
+
+          const updated = await tx.inventoryItem.updateMany({
             where: {
+              id: inventoryItem.id,
               tenantId,
-              storeId: dto.storeId,
-              medicineId: item.medicineId,
-              batchNumber: item.batchNumber || undefined,
+              currentStock: { gte: quantity },
             },
-          })
-        : null;
+            data: { currentStock: currentStock - quantity },
+          });
+          if (updated.count === 0)
+            throw new ConflictException(
+              `Insufficient stock for ${item.medicineName}`
+            );
 
-      if (inventoryItem) {
-        const currentStock = Number(inventoryItem.currentStock);
-        if (currentStock < quantity)
-          throw new ConflictException(
-            `Insufficient stock for ${item.medicineName}. Available: ${currentStock}, Requested: ${quantity}`
-          );
+          await tx.inventoryTransaction.create({
+            data: {
+              tenantId,
+              itemId: inventoryItem.id,
+              storeId: dto.storeId,
+              type: "CONSUMPTION",
+              quantity,
+              unitPrice,
+              totalValue: unitPrice ? unitPrice * quantity : undefined,
+              batchNumber: item.batchNumber || inventoryItem.batchNumber || undefined,
+              referenceType: "DISPENSING",
+              remarks: `Dispensed to ${patient.firstName} ${patient.lastName}`,
+              createdBy: userId,
+            },
+          });
+        }
 
-        if (!unitPrice) unitPrice = Number(inventoryItem.salesRate) || 0;
-
-        await this.adjustStock(tenantId, inventoryItem.id, {
-          type: "CONSUMPTION",
+        results.push({
+          medicineName: item.medicineName,
           quantity,
           unitPrice,
-          batchNumber: item.batchNumber || inventoryItem.batchNumber || undefined,
-          referenceType: "DISPENSING",
-          remarks: `Dispensed to ${patient.firstName} ${patient.lastName}`,
-        }, userId);
+          total: unitPrice * quantity,
+        });
       }
 
-      const result = {
-        medicineName: item.medicineName,
-        quantity,
-        unitPrice,
-        total: unitPrice * quantity,
-      };
-      results.push(result);
-    }
-
-    if (dto.prescriptionId) {
-      await this.prisma.prescription.update({
-        where: { id: dto.prescriptionId, tenantId },
-        data: { status: "DISPENSED" },
-      });
-    }
+      if (dto.prescriptionId) {
+        await tx.prescription.update({
+          where: { id: dto.prescriptionId, tenantId },
+          data: { status: "DISPENSED" },
+        });
+      }
+    });
 
     return {
       success: true,

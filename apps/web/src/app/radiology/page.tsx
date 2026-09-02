@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, API_URL } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/hooks';
 import { DOCTOR_REF, PATIENT_REF } from '@/lib/options';
 import AsyncSearchSelect from '@/components/AsyncSearchSelect';
@@ -378,7 +378,7 @@ export default function RadiologyPage() {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {priorityBadge(detail.isEmergency)}
             {statusBadge(detail.status)}
-            <button className="btn btn-secondary btn-sm" onClick={() => window.open(`/api/v1/radiology/orders/${detail.id}/pdf`, '_blank')}>Download PDF</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => window.open(`${API_URL}/radiology/orders/${detail.id}/pdf`, '_blank')}>Download PDF</button>
           </div>
         </div>
 

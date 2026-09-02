@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/hooks';
 
@@ -13,17 +13,22 @@ const DISCHARGE_TYPES = [
   { value: 'OTHER', label: 'Other' },
 ];
 
-interface BillingService {
-  id: string;
-  name: string;
-  code?: string;
-  rate: number;
-  category?: string;
-}
+const PAYMENT_METHODS = ['CASH', 'CARD', 'UPI', 'NET_BANKING', 'INSURANCE', 'CREDIT', 'CORPORATE'];
 
-interface SelectedService extends BillingService {
-  quantity: number;
-}
+const MODULE_LABEL: Record<string, string> = {
+  IPD: 'Room / Consultation',
+  LAB: 'Laboratory',
+  RADIOLOGY: 'Radiology',
+  OT: 'Operation Theatre',
+  PHARMACY: 'Pharmacy',
+  NURSING: 'Nursing',
+  OPD: 'OPD',
+  EMERGENCY: 'Emergency',
+  BLOOD_BANK: 'Blood Bank',
+  DIET: 'Diet',
+  ADMIN: 'Administrative',
+  MANUAL: 'Manual',
+};
 
 export default function DischargeModal({
   admission,
@@ -38,55 +43,47 @@ export default function DischargeModal({
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [step, setStep] = useState<'discharge' | 'dispensing' | 'billing' | 'receipt'>('discharge');
+  const [step, setStep] = useState<'discharge' | 'billing' | 'receipt'>('discharge');
   const [values, setValues] = useState<Record<string, any>>({
     dischargeType: 'RECOVERED',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [prescriptions, setPrescriptions] = useState<any[]>([]);
-  const [loadingPrescriptions, setLoadingPrescriptions] = useState(false);
-  const [dispensingAll, setDispensingAll] = useState(false);
-  const [storeId, setStoreId] = useState('');
-  const [stores, setStores] = useState<any[]>([]);
+  // Discharge bill state
+  const [bill, setBill] = useState<any>(null);
+  const [details, setDetails] = useState<any[]>([]);
+  const [billLoading, setBillLoading] = useState(false);
+  const [creatingBill, setCreatingBill] = useState(false);
 
-  const [services, setServices] = useState<BillingService[]>([]);
-  const [selected, setSelected] = useState<SelectedService[]>([]);
-  const [serviceSearch, setServiceSearch] = useState('');
-  const [loadingServices, setLoadingServices] = useState(false);
+  // Manual charge form
+  const [showAddCharge, setShowAddCharge] = useState(false);
+  const [chargeForm, setChargeForm] = useState({ serviceName: '', quantity: 1, unitRate: '', unit: '', notes: '' });
 
-  const [invoice, setInvoice] = useState<any>(null);
+  // Discount form
+  const [showDiscount, setShowDiscount] = useState(false);
+  const [discountForm, setDiscountForm] = useState({ amount: '', reason: '' });
+
+  // Payment form
+  const [showPayment, setShowPayment] = useState(false);
+  const [payForm, setPayForm] = useState({ amount: '', method: 'CASH', referenceNumber: '', notes: '' });
+
+  // Finalize confirm
+  const [showFinalize, setShowFinalize] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
+
   const [receiptData, setReceiptData] = useState<any>(null);
-  const [creatingInvoice, setCreatingInvoice] = useState(false);
 
-  useEffect(() => {
-    if (step === 'dispensing') {
-      setLoadingPrescriptions(true);
-      Promise.all([
-        api(`/pharmacy/prescriptions?patientId=${patientId}&limit=50`).catch(() => ({ data: { data: [] } })),
-        api('/pharmacy/stores').catch(() => ({ data: { data: [] } })),
-      ]).then(([rxRes, storeRes]) => {
-        const rxList = Array.isArray(rxRes?.data) ? rxRes.data : rxRes?.data?.data ?? [];
-        setPrescriptions(rxList.filter((p: any) => p.status !== 'DISPENSED' && p.status !== 'CANCELLED'));
-        const allStores = Array.isArray(storeRes?.data) ? storeRes.data : storeRes?.data?.data ?? [];
-        const filtered = allStores.filter((s: any) => s.location?.toLowerCase().includes('ground floor'));
-        setStores(filtered);
-        if (filtered.length === 1) setStoreId(filtered[0].id);
-      }).finally(() => setLoadingPrescriptions(false));
-    }
-    if (step === 'billing') {
-      setLoadingServices(true);
-      api('/billing/services?limit=200')
-        .then((res: any) => {
-          const list = Array.isArray(res?.data) ? res.data : res?.data?.data ?? [];
-          setServices(list);
-        })
-        .catch(() => {})
-        .finally(() => setLoadingServices(false));
-    }
-  }, [step, patientId]);
+  const isDraft = bill?.status === 'DRAFT';
+  const isFinalized = bill?.status === 'FINALIZED';
+  const dueAmount = Number(bill?.dueAmount ?? 0);
 
+  const detailsTotal = useMemo(
+    () => details.reduce((sum, d) => sum + Number(d.netAmount || d.grossAmount || 0), 0),
+    [details],
+  );
+
+  // ---- Step 1: submit discharge, then go to billing ----
   async function handleDischarge(e: React.FormEvent) {
     e.preventDefault();
     if (!values.dischargeType) {
@@ -103,7 +100,8 @@ export default function DischargeModal({
         method: 'POST',
         body: JSON.stringify(body),
       });
-      setStep('dispensing');
+      setStep('billing');
+      loadBill();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to discharge patient');
     } finally {
@@ -111,126 +109,210 @@ export default function DischargeModal({
     }
   }
 
-  async function handleDispenseAll() {
-    if (!storeId) { setError('Select a store to dispense from'); return; }
-    if (prescriptions.length === 0) { setStep('billing'); return; }
-    setDispensingAll(true);
+  // ---- Load or create the draft discharge bill (auto-collects charges) ----
+  async function loadBill() {
+    setBillLoading(true);
     setError(null);
     try {
-      for (const rx of prescriptions) {
-        const items = await Promise.all(
-          (rx.items || []).map(async (it: any) => {
-            let unitPrice = 0;
-            if (it.medicineId) {
-              try {
-                const medRes = await api(`/pharmacy/medicines/${it.medicineId}`);
-                const med = medRes?.data ?? medRes;
-                unitPrice = Number(med?.salesRate) || 0;
-              } catch { }
-            }
-            return {
-              prescriptionItemId: it.id,
-              medicineName: it.medicineName,
-              medicineId: it.medicineId,
-              quantity: it.quantity || 1,
-              unitPrice,
-            };
-          })
-        );
-        await api('/pharmacy/dispense', {
-          method: 'POST',
-          body: JSON.stringify({
-            patientId,
-            prescriptionId: rx.id,
-            storeId,
-            items,
-          }),
-        });
+      const draftRes = await api(`/billing/discharge/bills/draft/${admission.id}`).catch(() => null);
+      const draft = draftRes?.data?.data ?? draftRes?.data ?? null;
+      if (draft && draft.id) {
+        applyBill(draft);
+        return;
       }
-      setStep('billing');
+      // No draft exists; create one with auto-collected charges
+      const created = await createBill();
+      applyBill(created);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Dispensing failed');
+      setError(err instanceof Error ? err.message : 'Failed to load discharge billing');
+    } finally {
+      setBillLoading(false);
     }
-    setDispensingAll(false);
   }
 
-  function toggleService(svc: BillingService) {
-    setSelected((prev) => {
-      const exists = prev.find((s) => s.id === svc.id);
-      if (exists) return prev.filter((s) => s.id !== svc.id);
-      return [...prev, { ...svc, quantity: 1 }];
-    });
-  }
-
-  function updateQty(serviceId: string, qty: number) {
-    setSelected((prev) =>
-      prev.map((s) => (s.id === serviceId ? { ...s, quantity: Math.max(1, qty) } : s))
-    );
-  }
-
-  async function handleCreateInvoice() {
-    if (selected.length === 0) {
-      setError('Select at least one service');
-      return;
+  async function createBill() {
+    setCreatingBill(true);
+    try {
+      const res = await api('/billing/discharge/bills', {
+        method: 'POST',
+        body: JSON.stringify({ admissionId: admission.id, patientId }),
+      });
+      const b = res?.data ?? res;
+      return b;
+    } finally {
+      setCreatingBill(false);
     }
-    setCreatingInvoice(true);
+  }
+
+  function applyBill(b: any) {
+    setBill(b);
+    const dets = b.details ?? b.dischargeBillDetails ?? [];
+    setDetails(Array.isArray(dets) ? dets : []);
+  }
+
+  async function reloadBill() {
+    if (!bill) return;
+    setBillLoading(true);
+    try {
+      const res = await api(`/billing/discharge/bills/${bill.id}`);
+      applyBill(res?.data ?? res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reload bill');
+    } finally {
+      setBillLoading(false);
+    }
+  }
+
+  // ---- Add manual charge ----
+  async function handleAddCharge() {
+    if (!bill) return;
+    setSaving(true);
     setError(null);
     try {
-      const items = selected.map((s) => ({
-        serviceId: s.id,
-        serviceName: s.name,
-        serviceCode: s.code,
-        quantity: s.quantity,
-        rate: s.rate,
-      }));
-      const res = await api('/billing/invoices', {
+      const detail = await api(`/billing/discharge/bills/${bill.id}/charges`, {
         method: 'POST',
         body: JSON.stringify({
-          patientId,
-          type: 'ADMISSION',
-          items,
-          notes: `Discharge billing for ${admission.admissionNumber || admission.id}`,
+          serviceName: chargeForm.serviceName,
+          quantity: Number(chargeForm.quantity),
+          unitRate: Number(chargeForm.unitRate),
+          unit: chargeForm.unit || undefined,
+          notes: chargeForm.notes || undefined,
         }),
       });
-      const inv = res.data ?? res;
-      setInvoice(inv);
-      const receiptRes = await api(`/billing/invoices/${inv.id}`);
-      setReceiptData(receiptRes.data ?? receiptRes);
-      setStep('receipt');
+      setShowAddCharge(false);
+      setChargeForm({ serviceName: '', quantity: 1, unitRate: '', unit: '', notes: '' });
+      const d = detail?.data ?? detail;
+      setDetails((prev) => [...prev, d]);
+      await reloadBill();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create invoice');
+      setError(err instanceof Error ? err.message : 'Failed to add charge');
     } finally {
-      setCreatingInvoice(false);
+      setSaving(false);
     }
   }
 
-  function handleSkipBilling() {
-    onDone();
+  // ---- Remove a per-line manual charge (only manual rows can be removed) ----
+  async function handleRemoveCharge(detailId: string) {
+    if (!bill) return;
+    if (!confirm('Remove this charge?')) return;
+    setError(null);
+    try {
+      await api(`/billing/discharge/bills/${bill.id}/charges/${detailId}`, { method: 'DELETE' });
+      await reloadBill();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove charge');
+    }
+  }
+
+  // ---- Apply discount ----
+  async function handleApplyDiscount() {
+    if (!bill) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await api(`/billing/discharge/bills/${bill.id}/discount`, {
+        method: 'PATCH',
+        body: JSON.stringify({ amount: Number(discountForm.amount), reason: discountForm.reason }),
+      });
+      setShowDiscount(false);
+      setDiscountForm({ amount: '', reason: '' });
+      applyBill(res?.data ?? res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to apply discount');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ---- Finalize bill (server-side calc, creates linked invoice) ----
+  async function handleFinalize() {
+    if (!bill) return;
+    setFinalizing(true);
+    setError(null);
+    try {
+      const res = await api(`/billing/discharge/bills/${bill.id}/finalize`, { method: 'POST' });
+      const finalized = res?.data ?? res;
+      applyBill(finalized);
+      setShowFinalize(false);
+      // Load the linked invoice for the receipt
+      if (finalized?.invoiceId) {
+        const invRes = await api(`/billing/invoices/${finalized.invoiceId}`);
+        setReceiptData(invRes?.data ?? invRes);
+      }
+      setStep('receipt');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to finalize bill');
+    } finally {
+      setFinalizing(false);
+    }
+  }
+
+  // ---- Record payment ----
+  async function handleRecordPayment() {
+    if (!bill) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await api(`/billing/discharge/bills/${bill.id}/payments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          amount: Number(payForm.amount),
+          method: payForm.method,
+          referenceNumber: payForm.referenceNumber || undefined,
+          notes: payForm.notes || undefined,
+        }),
+      });
+      setShowPayment(false);
+      setPayForm({ amount: '', method: 'CASH', referenceNumber: '', notes: '' });
+      const updated = res?.data?.bill ?? res?.data ?? res;
+      applyBill(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to record payment');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ---- Move to receipt (after finalized) ----
+  async function handleShowReceipt() {
+    if (bill?.invoiceId && !receiptData) {
+      try {
+        const invRes = await api(`/billing/invoices/${bill.invoiceId}`);
+        setReceiptData(invRes?.data ?? invRes);
+      } catch {}
+    }
+    setStep('receipt');
   }
 
   function handleFinish() {
     onDone();
   }
 
-  const filteredServices = services.filter(
-    (s) =>
-      s.name.toLowerCase().includes(serviceSearch.toLowerCase()) ||
-      (s.code && s.code.toLowerCase().includes(serviceSearch.toLowerCase()))
-  );
-
-  const totalAmount = selected.reduce((sum, s) => sum + s.rate * s.quantity, 0);
+  const grouped = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    for (const d of details) {
+      const key = d.sourceModule || 'MANUAL';
+      map[key] = map[key] || [];
+      map[key].push(d);
+    }
+    return map;
+  }, [details]);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: step === 'receipt' ? 700 : 560 }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: step === 'receipt' ? 700 : 640 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3 className="modal-title">
             {step === 'discharge' && 'Discharge patient'}
-            {step === 'dispensing' && 'Dispense medicines'}
             {step === 'billing' && 'Discharge billing'}
             {step === 'receipt' && 'Receipt'}
           </h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
+          {step === 'billing' && (
+            <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
+          )}
+          {step !== 'billing' && (
+            <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
+          )}
         </div>
 
         {(admission.patientName || patientName) && (
@@ -288,150 +370,121 @@ export default function DischargeModal({
           </form>
         )}
 
-        {/* Step 2: Dispensing */}
-        {step === 'dispensing' && (
+        {/* Step 2: Discharge billing */}
+        {step === 'billing' && (
           <div>
-            {loadingPrescriptions && <div className="loading">Loading prescriptions...</div>}
+            {billLoading && <div className="loading">Loading discharge billing…</div>}
 
-            {!loadingPrescriptions && prescriptions.length === 0 && (
-              <div className="empty" style={{ padding: 20 }}>No pending prescriptions to dispense.</div>
+            {!billLoading && !bill && (
+              <div className="empty" style={{ padding: 20 }}>
+                No discharge bill yet. Click below to auto-collect charges from this admission (bed/room, doctor visits, lab, radiology, OT, pharmacy, nursing).
+              </div>
             )}
 
-            {!loadingPrescriptions && prescriptions.length > 0 && (
+            {!billLoading && bill && (
               <>
-                <div className="field" style={{ marginBottom: 12 }}>
-                  <label className="label">Dispense from store</label>
-                  <select className="input" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-                    <option value="">Select store</option>
-                    {stores.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.location})</option>)}
-                  </select>
+                {/* Groups */}
+                {details.length === 0 ? (
+                  <div className="empty" style={{ padding: 20 }}>No charges collected yet.</div>
+                ) : (
+                  <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 12, border: '1px solid var(--border)', borderRadius: 8 }}>
+                    {Object.keys(grouped).map((mod) => (
+                      <div key={mod} style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <span className="badge badge-blue">{MODULE_LABEL[mod] || mod}</span>
+                          <span style={{ fontWeight: 600, fontSize: 13 }}>{formatMoney(grouped[mod].reduce((s, c) => s + Number(c.netAmount || c.grossAmount || 0), 0))}</span>
+                        </div>
+                        {grouped[mod].map((c: any) => (
+                          <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0 3px 8px', fontSize: 13, color: 'var(--text-muted)' }}>
+                            <span>
+                              {c.serviceName || c.name}
+                              <span style={{ marginLeft: 6, fontSize: 11 }}>×{Number(c.quantity)}</span>
+                            </span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span className="mono">{formatMoney(c.netAmount ?? c.grossAmount)}</span>
+                              {isDraft && c.chargeTransactionId === null && (
+                                <button className="btn btn-sm btn-ghost" style={{ color: 'var(--danger)', padding: '0 4px' }} onClick={() => handleRemoveCharge(c.id)} aria-label="Remove">✕</button>
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Bill summary */}
+                <div style={{ padding: '12px', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span>Subtotal</span><span className="mono">{formatMoney(bill.subtotal ?? detailsTotal)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--danger)' }}>
+                    <span>Discount</span><span className="mono">-{formatMoney(bill.discountAmount ?? bill.discount)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span>Tax</span><span className="mono">{formatMoney(bill.tax)}</span>
+                  </div>
+                  <hr style={{ margin: '6px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15 }}>
+                    <span>Net</span><span className="mono">{formatMoney(bill.netAmount ?? (bill.subtotal ?? detailsTotal) - Number(bill.discount ?? 0) + Number(bill.tax ?? 0))}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--success)' }}>
+                    <span>Paid</span><span className="mono">{formatMoney(bill.paidAmount)}</span>
+                  </div>
+                  <hr style={{ margin: '6px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15 }}>
+                    <span>Due</span>
+                    <span className="mono" style={{ color: dueAmount > 0 ? 'var(--danger)' : 'var(--success)' }}>{formatMoney(bill.dueAmount ?? dueAmount)}</span>
+                  </div>
                 </div>
 
-                <div style={{ maxHeight: 250, overflowY: 'auto', marginBottom: 12 }}>
-                  {prescriptions.map((rx) => (
-                    <div key={rx.id} style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
-                      <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                        Prescription · {rx.items?.length || 0} items
-                      </div>
-                      {rx.items?.map((it: any) => (
-                        <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: 'var(--text-muted)' }}>
-                          <span>{it.medicineName}</span>
-                          <span>Qty: {it.quantity || '—'}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
+                {error && <div className="alert alert-error" style={{ marginTop: 8 }}>{error}</div>}
+
+                <div className="form-actions">
+                  {isDraft && (
+                    <>
+                      <button className="btn btn-secondary" onClick={() => setShowAddCharge(true)} disabled={saving}>+ Charge</button>
+                      <button className="btn btn-secondary" onClick={() => setShowDiscount(true)} disabled={saving}>Discount</button>
+                      <button className="btn" onClick={() => setShowFinalize(true)} disabled={saving || details.length === 0}>
+                        {finalizing ? 'Finalizing...' : 'Finalize & Receipt'}
+                      </button>
+                    </>
+                  )}
+                  {isFinalized && (
+                    <>
+                      {dueAmount > 0 && (
+                        <button className="btn" onClick={() => setShowPayment(true)} disabled={saving}>Record Payment</button>
+                      )}
+                      <button className="btn" onClick={handleShowReceipt}>View Receipt</button>
+                    </>
+                  )}
+                  <button className="btn btn-secondary" onClick={onClose}>Close</button>
                 </div>
               </>
             )}
 
-            {error && <div className="alert alert-error" style={{ marginTop: 8 }}>{error}</div>}
-
-            <div className="form-actions">
-              <button className="btn btn-secondary" onClick={() => setStep('billing')}>Skip dispensing</button>
-              <button className="btn" onClick={handleDispenseAll} disabled={dispensingAll || !storeId}>
-                {dispensingAll ? 'Dispensing...' : 'Dispense all & continue'}
-              </button>
-            </div>
+            {!billLoading && !bill && (
+              <div className="form-actions" style={{ marginTop: 12 }}>
+                <button className="btn" onClick={async () => { setCreatingBill(true); try { applyBill(await createBill()); } catch (err) { setError(err instanceof Error ? err.message : 'Failed to create bill'); } finally { setCreatingBill(false); } }} disabled={creatingBill}>
+                  {creatingBill ? 'Collecting charges...' : 'Collect Charges & Create Bill'}
+                </button>
+                <button className="btn btn-secondary" onClick={onClose}>Close</button>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Step 3: Billing */}
-        {step === 'billing' && (
-          <div>
-            <div style={{ marginBottom: 12 }}>
-              <input
-                className="input"
-                placeholder="Search services..."
-                value={serviceSearch}
-                onChange={(e) => setServiceSearch(e.target.value)}
-              />
-            </div>
-
-            {loadingServices && <div className="loading">Loading services...</div>}
-
-            {!loadingServices && (
-              <div style={{ maxHeight: 300, overflowY: 'auto', marginBottom: 16 }}>
-                {filteredServices.length === 0 && (
-                  <div className="empty" style={{ padding: 20 }}>No services found.</div>
-                )}
-                {filteredServices.map((svc) => {
-                  const isSelected = selected.some((s) => s.id === svc.id);
-                  const sel = selected.find((s) => s.id === svc.id);
-                  return (
-                    <div
-                      key={svc.id}
-                      onClick={() => toggleService(svc)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '10px 12px',
-                        borderBottom: '1px solid var(--border)',
-                        cursor: 'pointer',
-                        background: isSelected ? 'var(--primary-light)' : 'transparent',
-                        borderRadius: 6,
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 500, fontSize: 14 }}>{svc.name}</div>
-                        {svc.code && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{svc.code}</div>}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontWeight: 600, fontSize: 14 }}>{formatMoney(svc.rate)}</span>
-                        {isSelected && (
-                          <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <button
-                              className="btn btn-sm btn-ghost"
-                              onClick={() => updateQty(svc.id, (sel?.quantity || 1) - 1)}
-                            >
-                              −
-                            </button>
-                            <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 600 }}>{sel?.quantity || 1}</span>
-                            <button
-                              className="btn btn-sm btn-ghost"
-                              onClick={() => updateQty(svc.id, (sel?.quantity || 1) + 1)}
-                            >
-                              +
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {selected.length > 0 && (
-              <div style={{ padding: '12px 0', borderTop: '2px solid var(--border)', display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 16 }}>
-                <span>Total ({selected.length} items)</span>
-                <span>{formatMoney(totalAmount)}</span>
-              </div>
-            )}
-
-            {error && <div className="alert alert-error" style={{ marginTop: 8 }}>{error}</div>}
-
-            <div className="form-actions">
-              <button className="btn btn-secondary" onClick={handleSkipBilling}>Skip billing</button>
-              <button className="btn" onClick={handleCreateInvoice} disabled={creatingInvoice || selected.length === 0}>
-                {creatingInvoice ? 'Creating...' : 'Create invoice & receipt'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 4: Receipt */}
+        {/* Step 3: Receipt */}
         {step === 'receipt' && receiptData && (
           <div>
             <div className="receipt-print" style={{ padding: '0 0 16px' }}>
               <div className="receipt-header">
                 <div>
-                  <h2 style={{ margin: 0, fontSize: 18 }}>{receiptData.invoiceNumber}</h2>
+                  <h2 style={{ margin: 0, fontSize: 18 }}>{receiptData.invoiceNumber || bill?.billNumber}</h2>
                   <div className="muted" style={{ fontSize: 12 }}>Discharge invoice</div>
                 </div>
                 <span className={`badge badge-${receiptData.status === 'PAID' ? 'green' : receiptData.status === 'PARTIAL' ? 'yellow' : 'gray'}`}>
-                  {receiptData.status}
+                  {receiptData.status || bill?.status}
                 </span>
               </div>
 
@@ -454,16 +507,16 @@ export default function DischargeModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {(receiptData.items || []).map((it: any, i: number) => (
+                  {(receiptData.items || details).map((it: any, i: number) => (
                     <tr key={it.id ?? i}>
                       <td>{i + 1}</td>
                       <td>
-                        {it.serviceName}
+                        {it.serviceName || it.name}
                         {it.serviceCode ? <span className="mono muted"> ({it.serviceCode})</span> : null}
                       </td>
                       <td>{it.quantity}</td>
-                      <td className="mono">{formatMoney(it.rate)}</td>
-                      <td className="mono">{formatMoney(it.lineTotal)}</td>
+                      <td className="mono">{formatMoney(it.rate ?? it.unitRate)}</td>
+                      <td className="mono">{formatMoney(it.lineTotal ?? it.netAmount ?? it.grossAmount)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -472,18 +525,18 @@ export default function DischargeModal({
               <div className="receipt-totals">
                 <div className="receipt-total-row receipt-grand">
                   <span>Total</span>
-                  <span className="mono">{formatMoney(receiptData.totalAmount)}</span>
+                  <span className="mono">{formatMoney(receiptData.totalAmount ?? bill?.netAmount)}</span>
                 </div>
-                {Number(receiptData.paidAmount || 0) > 0 && (
+                {Number(receiptData.paidAmount ?? bill?.paidAmount ?? 0) > 0 && (
                   <div className="receipt-total-row">
                     <span>Paid</span>
-                    <span className="mono">{formatMoney(receiptData.paidAmount)}</span>
+                    <span className="mono">{formatMoney(receiptData.paidAmount ?? bill?.paidAmount)}</span>
                   </div>
                 )}
-                {Number(receiptData.dueAmount || 0) > 0 && (
+                {Number(receiptData.dueAmount ?? bill?.dueAmount ?? 0) > 0 && (
                   <div className="receipt-total-row receipt-grand">
                     <span>Balance due</span>
-                    <span className="mono">{formatMoney(receiptData.dueAmount)}</span>
+                    <span className="mono">{formatMoney(receiptData.dueAmount ?? bill?.dueAmount)}</span>
                   </div>
                 )}
               </div>
@@ -501,6 +554,94 @@ export default function DischargeModal({
           </div>
         )}
       </div>
+
+      {/* Add manual charge modal */}
+      {showAddCharge && (
+        <div className="modal-backdrop" onClick={() => setShowAddCharge(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Add Manual Charge</h3>
+              <button className="modal-close" onClick={() => setShowAddCharge(false)}>×</button>
+            </div>
+            <div className="form-grid">
+              <div className="field" style={{ gridColumn: '1 / -1' }}><label className="label">Service Name *</label><input className="input" value={chargeForm.serviceName} onChange={(e) => setChargeForm({ ...chargeForm, serviceName: e.target.value })} /></div>
+              <div className="field"><label className="label">Quantity *</label><input className="input" type="number" min="1" step="1" value={chargeForm.quantity} onChange={(e) => setChargeForm({ ...chargeForm, quantity: Number(e.target.value) })} /></div>
+              <div className="field"><label className="label">Unit Rate (Rs.) *</label><input className="input" type="number" step="0.01" value={chargeForm.unitRate} onChange={(e) => setChargeForm({ ...chargeForm, unitRate: e.target.value })} /></div>
+              <div className="field"><label className="label">Unit</label><input className="input" value={chargeForm.unit} onChange={(e) => setChargeForm({ ...chargeForm, unit: e.target.value })} placeholder="e.g. per day" /></div>
+              <div className="field" style={{ gridColumn: '1 / -1' }}><label className="label">Notes</label><textarea className="input" rows={2} value={chargeForm.notes} onChange={(e) => setChargeForm({ ...chargeForm, notes: e.target.value })} /></div>
+            </div>
+            <div className="form-actions">
+              <button className="btn btn-secondary" onClick={() => setShowAddCharge(false)}>Cancel</button>
+              <button className="btn" onClick={handleAddCharge} disabled={!chargeForm.serviceName || !chargeForm.unitRate || saving}>{saving ? 'Adding…' : 'Add Charge'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discount modal */}
+      {showDiscount && (
+        <div className="modal-backdrop" onClick={() => setShowDiscount(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Apply Discount</h3>
+              <button className="modal-close" onClick={() => setShowDiscount(false)}>×</button>
+            </div>
+            <div className="form-grid">
+              <div className="field"><label className="label">Discount Amount (Rs.) *</label><input className="input" type="number" step="0.01" min="0" value={discountForm.amount} onChange={(e) => setDiscountForm({ ...discountForm, amount: e.target.value })} /></div>
+              <div className="field" style={{ gridColumn: '1 / -1' }}><label className="label">Reason *</label><textarea className="input" rows={2} value={discountForm.reason} onChange={(e) => setDiscountForm({ ...discountForm, reason: e.target.value })} /></div>
+            </div>
+            <div className="form-actions">
+              <button className="btn btn-secondary" onClick={() => setShowDiscount(false)}>Cancel</button>
+              <button className="btn" onClick={handleApplyDiscount} disabled={!discountForm.amount || !discountForm.reason || saving}>{saving ? 'Applying…' : 'Apply'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment modal */}
+      {showPayment && (
+        <div className="modal-backdrop" onClick={() => setShowPayment(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Record Payment</h3>
+              <button className="modal-close" onClick={() => setShowPayment(false)}>×</button>
+            </div>
+            <div className="form-grid">
+              <div className="field"><label className="label">Amount (Rs.) *</label><input className="input" type="number" step="0.01" min="0" max={dueAmount} value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} /></div>
+              <div className="field"><label className="label">Method *</label>
+                <select className="input" value={payForm.method} onChange={(e) => setPayForm({ ...payForm, method: e.target.value })}>
+                  {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m.replace('_', ' ')}</option>)}
+                </select>
+              </div>
+              <div className="field"><label className="label">Reference Number</label><input className="input" value={payForm.referenceNumber} onChange={(e) => setPayForm({ ...payForm, referenceNumber: e.target.value })} /></div>
+              <div className="field" style={{ gridColumn: '1 / -1' }}><label className="label">Notes</label><textarea className="input" rows={2} value={payForm.notes} onChange={(e) => setPayForm({ ...payForm, notes: e.target.value })} /></div>
+            </div>
+            <div className="form-actions">
+              <button className="btn btn-secondary" onClick={() => setShowPayment(false)}>Cancel</button>
+              <button className="btn" onClick={handleRecordPayment} disabled={!payForm.amount || saving}>{saving ? 'Recording…' : 'Record Payment'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Finalize confirm modal */}
+      {showFinalize && (
+        <div className="modal-backdrop" onClick={() => setShowFinalize(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Finalize Bill</h3>
+              <button className="modal-close" onClick={() => setShowFinalize(false)}>×</button>
+            </div>
+            <p style={{ padding: '0 16px', margin: '0 0 16px' }}>
+              Finalize discharge bill? The system will recalculate totals, lock the bill, create a linked invoice for revenue reports, and mark services as billed.
+            </p>
+            <div className="form-actions">
+              <button className="btn btn-secondary" onClick={() => setShowFinalize(false)}>Cancel</button>
+              <button className="btn" onClick={handleFinalize} disabled={finalizing}>{finalizing ? 'Finalizing…' : 'Confirm Finalize'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

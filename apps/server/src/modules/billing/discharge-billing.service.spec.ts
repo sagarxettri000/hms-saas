@@ -67,43 +67,17 @@ describe("DischargeBillingService", () => {
     return defaults;
   }
 
-  describe("collectCharges", () => {
-    it("returns empty array when no charges exist", async () => {
-      const prisma = mockPrisma();
-      const service = new DischargeBillingService(prisma as any);
-      const result = await service.collectCharges(tenantId, admissionId);
-      expect(result).toEqual([]);
-    });
-
-    it("deduplicates charges by sourceModule + sourceTransactionId", async () => {
-      const existingCharge = {
-        id: "ct-existing",
-        sourceModule: "LAB",
-        sourceTransactionId: "lab-item-1",
-        billingStatus: "UNBILLED",
-      };
-      const prisma = mockPrisma({
-        chargeTransaction: {
-          findMany: jest.fn().mockResolvedValue([existingCharge]),
-          create: jest.fn(),
-          updateMany: jest.fn().mockResolvedValue({ count: 0 }),
-          count: jest.fn().mockResolvedValue(0),
-        },
-      });
-      const service = new DischargeBillingService(prisma as any);
-      const result = await service.collectCharges(tenantId, admissionId);
-      expect(result.length).toBe(1);
-      expect(prisma.chargeTransaction.create).not.toHaveBeenCalled();
-    });
-  });
-
   describe("createDraftBill", () => {
-    it("rejects when no charges found for admission", async () => {
+    it("creates an empty draft bill (services added manually later)", async () => {
       const prisma = mockPrisma();
+      prisma.$transaction = jest.fn().mockImplementation(async (fn: any) => fn(prisma));
       const service = new DischargeBillingService(prisma as any);
-      await expect(
-        service.createDraftBill(tenantId, { patientId, admissionId }, userId),
-      ).rejects.toThrow("No charges found");
+      const result = await service.createDraftBill(tenantId, { patientId, admissionId }, userId);
+      expect(result).toBeDefined();
+      // A brand-new draft bill starts with no auto-collected charge details
+      expect(prisma.dischargeBill.create).toHaveBeenCalled();
+      const createArgs = prisma.dischargeBill.create.mock.calls[0][0];
+      expect(createArgs.data.details).toBeUndefined();
     });
   });
 

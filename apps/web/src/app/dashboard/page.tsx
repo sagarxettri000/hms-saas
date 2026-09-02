@@ -244,17 +244,19 @@ export default function DashboardPage() {
   }
 
   async function loadAdminData(isSuper: boolean) {
-    const [summaryR, todayR, analyticsR, usersR] = await Promise.all([
+    const [summaryR, todayR, analyticsR, usersStatsR] = await Promise.all([
       safe(api('/reports/summary')),
       safe(api('/appointments/today')),
       safe(api('/billing/analytics')),
-      safe(api('/users?limit=500')),
+      safe(api('/users/stats')),
     ]);
     const s = summaryOf(summaryR);
     const appts = listOf(todayR);
     const sum = summaryOf(todayR)?.summary || {};
     const analytics = summaryOf(analyticsR);
-    const users = listOf(usersR);
+    const uStats = unwrapResponse(usersStatsR) || {};
+    const totalStaff = uStats.total ?? 0;
+    const activeUsers = uStats.active ?? 0;
     const beds = s.bedOccupancy || { occupied: 0, total: 0 };
     const occupancy = beds.total > 0 ? Math.round((beds.occupied / beds.total) * 100) : 0;
 
@@ -263,8 +265,8 @@ export default function DashboardPage() {
       { label: "Today's appointments", value: sum.total ?? appts.length, tone: 'green', icon: '📅' },
       { label: 'Bed occupancy', value: `${occupancy}%`, tone: occupancy >= 90 ? 'red' : occupancy >= 70 ? 'amber' : 'green', icon: '🛏' },
       { label: 'Revenue this month', value: formatMoney(analytics.month?.revenue ?? 0), tone: 'purple', icon: '₨' },
-      { label: 'Total staff', value: users.length, tone: 'blue', icon: '👥' },
-      { label: 'Active users', value: users.filter((u: any) => u.isActive).length, tone: 'green', icon: '🟢' },
+      { label: 'Total staff', value: totalStaff, tone: 'blue', icon: '👥' },
+      { label: 'Active users', value: activeUsers, tone: 'green', icon: '🟢' },
     ]);
 
     setFocus({

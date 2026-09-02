@@ -260,6 +260,16 @@ export class UsersService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
+  async getStats(tenantId?: string) {
+    const where: any = { deletedAt: null };
+    if (tenantId) where.tenantId = tenantId;
+    const [total, active] = await Promise.all([
+      this.prisma.user.count({ where }),
+      this.prisma.user.count({ where: { ...where, isActive: true } }),
+    ]);
+    return { total, active };
+  }
+
   async findById(id: string, tenantId?: string) {
     const where: any = { id, deletedAt: null };
     if (tenantId) where.tenantId = tenantId;

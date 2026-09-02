@@ -62,6 +62,15 @@ export class UsersController {
     });
   }
 
+  @Get("stats")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Get user stats (total/active counts)" })
+  getStats(@Req() req: any, @Query() query: any) {
+    return this.usersService.getStats(
+      req.user.role === "PLATFORM_SUPER_ADMIN" ? query.tenantId : req.user.tenantId,
+    );
+  }
+
   @Get("sessions")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Get current user sessions" })

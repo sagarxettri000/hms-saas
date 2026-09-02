@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
+import DischargeModal from '@/components/DischargeModal';
 import { api } from '@/lib/api';
 import { GENDERS } from '@/lib/options';
 import type { ApiResponse, Row } from '@/lib/types';
@@ -40,7 +40,6 @@ interface QuickPatient {
 }
 
 export default function AdmissionsPage() {
-  const router = useRouter();
   const [role, setRole] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Patient[]>([]);
@@ -57,6 +56,7 @@ export default function AdmissionsPage() {
   const [searchAdmissions, setSearchAdmissions] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [dischargeTarget, setDischargeTarget] = useState<Row | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [quickPatient, setQuickPatient] = useState<QuickPatient>({
@@ -413,6 +413,16 @@ export default function AdmissionsPage() {
         </div>
       )}
 
+      {dischargeTarget && (
+        <DischargeModal
+          admission={{ id: dischargeTarget.id, admissionNumber: dischargeTarget.admissionNumber, patientName: patientName(dischargeTarget) }}
+          patientId={dischargeTarget.patientId}
+          patientName={patientName(dischargeTarget)}
+          onClose={() => setDischargeTarget(null)}
+          onDone={() => { setDischargeTarget(null); loadData(); }}
+        />
+      )}
+
       {loading ? (
         <div className="loading">Loading admissions...</div>
       ) : admissions.length === 0 ? (
@@ -446,7 +456,7 @@ export default function AdmissionsPage() {
                         {r.status !== 'DISCHARGED' && !r.isDischarged && (
                           <button
                             className="btn btn-sm btn-secondary"
-                            onClick={() => router.push(`/billing/discharge/${r.id}`)}
+                            onClick={() => setDischargeTarget({ ...r, patientName: patientName(r) })}
                           >
                             Discharge
                           </button>

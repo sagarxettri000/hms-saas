@@ -22,14 +22,16 @@ import {
   UpdateBillingServiceDto,
   CloseDayDto,
 } from "./billing.service";
+import { DischargeBillingService } from "./discharge-billing.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
 import {
   Permissions,
+  Roles,
   TenantScoped,
 } from "../../common/decorators/permissions.decorator";
-import { PermissionAction } from "@hms/shared";
+import { PermissionAction, UserRole } from "@hms/shared";
 
 @ApiTags("Billing")
 @Controller("billing")
@@ -37,7 +39,10 @@ import { PermissionAction } from "@hms/shared";
 @TenantScoped()
 @ApiBearerAuth()
 export class BillingController {
-  constructor(private readonly billingService: BillingService) {}
+  constructor(
+    private readonly billingService: BillingService,
+    private readonly dischargeBillingService: DischargeBillingService,
+  ) {}
 
   // ---------- Invoices ----------
 
@@ -215,6 +220,12 @@ export class BillingController {
 
   @Post("deposits/:id/refund")
   @Permissions(PermissionAction.REFUND)
+  @Roles(
+    UserRole.FINANCE_MANAGER,
+    UserRole.HOSPITAL_ADMIN,
+    UserRole.HOSPITAL_OWNER,
+    UserRole.PLATFORM_SUPER_ADMIN,
+  )
   @ApiOperation({ summary: "Refund deposit balance" })
   refundDeposit(
     @Param("id") id: string,
@@ -246,6 +257,47 @@ export class BillingController {
   }
 
   // ---------- Billing Services (Catalog) ----------
+
+  @Get("service-categories")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List service categories" })
+  findServiceCategories(@Query() query: any, @Req() req: any) {
+    return this.billingService.findServiceCategories(req.user.tenantId, query);
+  }
+
+  @Post("service-categories")
+  @Permissions(PermissionAction.CONFIGURE)
+  @ApiOperation({ summary: "Create service category" })
+  createServiceCategory(@Body() body: any, @Req() req: any) {
+    return this.billingService.createServiceCategory(
+      req.user.tenantId,
+      body,
+      req.user.id,
+    );
+  }
+
+  @Get("service-categories/:id")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Get service category with services" })
+  findServiceCategoryById(@Param("id") id: string, @Req() req: any) {
+    return this.billingService.findServiceCategoryById(req.user.tenantId, id);
+  }
+
+  @Patch("service-categories/:id")
+  @Permissions(PermissionAction.CONFIGURE)
+  @ApiOperation({ summary: "Update service category" })
+  updateServiceCategory(
+    @Param("id") id: string,
+    @Body() body: any,
+    @Req() req: any,
+  ) {
+    return this.billingService.updateServiceCategory(
+      req.user.tenantId,
+      id,
+      body,
+      req.user.id,
+    );
+  }
 
   @Get("services")
   @Permissions(PermissionAction.VIEW)
@@ -370,6 +422,12 @@ export class BillingController {
 
   @Post("daily-closings")
   @Permissions(PermissionAction.APPROVE)
+  @Roles(
+    UserRole.FINANCE_MANAGER,
+    UserRole.HOSPITAL_ADMIN,
+    UserRole.HOSPITAL_OWNER,
+    UserRole.PLATFORM_SUPER_ADMIN,
+  )
   @ApiOperation({ summary: "Close day (end of day)" })
   closeDay(@Body() dto: CloseDayDto, @Req() req: any) {
     return this.billingService.closeDay(req.user.tenantId, dto, req.user.id);
@@ -447,8 +505,86 @@ export class BillingController {
 
   @Patch("credit-accounts/:id/settle")
   @Permissions(PermissionAction.SETTLE)
+  @Roles(
+    UserRole.FINANCE_MANAGER,
+    UserRole.HOSPITAL_ADMIN,
+    UserRole.HOSPITAL_OWNER,
+    UserRole.PLATFORM_SUPER_ADMIN,
+  )
   @ApiOperation({ summary: "Settle credit account" })
   settleCredit(@Param("id") id: string, @Req() req: any) {
     return this.billingService.settleCredit(req.user.tenantId, id, req.user.id);
+  }
+
+  // ---------- Discharge Billing ----------
+
+  @Get("discharge/bills")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List discharge bills" })
+  findDischargeBills(@Query() query: any, @Req() req: any) {
+    return this.dischargeBillingService.findBills(req.user.tenantId, query);
+  }
+
+  @Get("discharge/bills/draft/:admissionId")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Get or create draft discharge bill for admission" })
+  getDraftBill(@Param("admissionId") admissionId: string, @Req() req: any) {
+    return this.dischargeBillingService.getDraftBill(req.user.tenantId, admissionId);
+  }
+
+  @Post("discharge/bills")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Create discharge bill draft with auto-collected charges" })
+  createDischargeBill(@Body() dto: any, @Req() req: any) {
+    return this.dischargeBillingService.createDraftBill(req.user.tenantId, dto, req.user.id);
+  }
+
+  @Get("discharge/bills/:id")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Get discharge bill details" })
+  getDischargeBill(@Param("id") id: string, @Req() req: any) {
+    return this.dischargeBillingService.getBill(req.user.tenantId, id);
+  }
+
+  @Post("discharge/bills/:id/charges")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Add manual charge to draft bill" })
+  addManualCharge(@Param("id") id: string, @Body() dto: any, @Req() req: any) {
+    return this.dischargeBillingService.addManualCharge(req.user.tenantId, id, dto, req.user.id);
+  }
+
+  @Delete("discharge/bills/:id/charges/:detailId")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Remove charge from draft bill" })
+  removeCharge(@Param("id") id: string, @Param("detailId") detailId: string, @Req() req: any) {
+    return this.dischargeBillingService.removeCharge(req.user.tenantId, id, detailId, req.user.id);
+  }
+
+  @Patch("discharge/bills/:id/discount")
+  @Permissions(PermissionAction.DISCOUNT)
+  @ApiOperation({ summary: "Apply discount to draft discharge bill" })
+  applyDischargeDiscount(@Param("id") id: string, @Body() body: { amount: number; reason: string }, @Req() req: any) {
+    return this.dischargeBillingService.applyDiscount(req.user.tenantId, id, body, req.user.id);
+  }
+
+  @Post("discharge/bills/:id/finalize")
+  @Permissions(PermissionAction.APPROVE)
+  @ApiOperation({ summary: "Finalize discharge bill (server-side calculation, lock)" })
+  finalizeDischargeBill(@Param("id") id: string, @Req() req: any) {
+    return this.dischargeBillingService.finalizeBill(req.user.tenantId, id, req.user.id);
+  }
+
+  @Patch("discharge/bills/:id/cancel")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Cancel draft discharge bill" })
+  cancelDischargeBill(@Param("id") id: string, @Body() body: { reason: string }, @Req() req: any) {
+    return this.dischargeBillingService.cancelBill(req.user.tenantId, id, body.reason, req.user.id);
+  }
+
+  @Post("discharge/bills/:id/payments")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Record payment against discharge bill" })
+  recordDischargePayment(@Param("id") id: string, @Body() dto: any, @Req() req: any) {
+    return this.dischargeBillingService.recordPayment(req.user.tenantId, id, dto, req.user.id);
   }
 }

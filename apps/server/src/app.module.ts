@@ -54,6 +54,7 @@ import { QualityChecklistsModule } from "./modules/quality-checklists/quality-ch
 import { NursingHandoversModule } from "./modules/nursing-handovers/nursing-handovers.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "./common/guards/permissions.guard";
+import { RolesGuard } from "./common/guards/roles.guard";
 import { TenantGuard } from "./common/guards/tenant.guard";
 import { MustChangePasswordGuard } from "./common/guards/must-change-password.guard";
 import { RlsBootstrap } from "./common/rls/rls.bootstrap";
@@ -143,6 +144,10 @@ import { AppController } from "./app.controller";
     {
       provide: APP_GUARD,
       useClass: PermissionsGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
     {
       provide: APP_GUARD,

@@ -92,6 +92,13 @@ export async function creditSales(ctx: ExecContext): Promise<ExecResult> {
   }
   const invoices = await fetchInvoices(ctx, extra);
 
+  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  for (const inv of invoices) {
+    const ref = refundMap.get(inv.id) || 0;
+    inv.paidAmount = money(inv.paidAmount) - ref;
+    inv.dueAmount = money(inv.dueAmount) + ref;
+  }
+
   const deptIds = new Set<string>();
   for (const i of invoices) for (const it of i.items || []) if (it.departmentId) deptIds.add(it.departmentId);
   const deptMap = await deptNames(ctx.prisma, ctx.tenantId, [...deptIds]);
@@ -328,11 +335,12 @@ export async function departmentWiseRevenue(ctx: ExecContext): Promise<ExecResul
   for (const inv of invoices) {
     const items = inv.items || [];
     const invRefund = refunds.get(inv.id) || 0;
+    const totalLine = items.reduce((s: number, i: any) => s + money(i.lineTotal), 0);
     for (const item of items) {
       if (!item.departmentId) continue;
       deptIds.add(item.departmentId);
       const fin = itemFinance(inv, item);
-      const refundShare = items.length ? invRefund / items.length : 0;
+      const refundShare = totalLine > 0 ? invRefund * (money(item.lineTotal) / totalLine) : 0;
       const cur = byDept.get(item.departmentId) || { gross: 0, discount: 0, concession: 0, refund: 0, net: 0, paid: 0, outstanding: 0 };
       cur.gross += fin.gross;
       cur.discount += fin.discount;
@@ -390,7 +398,10 @@ export async function discountOutstanding(ctx: ExecContext): Promise<ExecResult>
   if (ctx.filters.departmentId) extra.AND = [{ items: { some: { departmentId: ctx.filters.departmentId } } }];
   const invoices = await fetchInvoices(ctx, extra);
 
+  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+
   const rows = invoices.map((inv) => {
+    const ref = refundMap.get(inv.id) || 0;
     const depts = [...new Set((inv.items || []).map((it: any) => it.departmentId).filter(Boolean))];
     const fin = itemFinance(inv, { lineTotal: money(inv.subtotal), quantity: 1 } as any);
     return {
@@ -400,8 +411,8 @@ export async function discountOutstanding(ctx: ExecContext): Promise<ExecResult>
       gross: r2(money(inv.subtotal)),
       discount: r2(money(inv.discountAmount)),
       concession: r2(inv.discountStatus === "APPROVED" || inv.discountApprovedBy ? money(inv.discountAmount) : 0),
-      paid: r2(money(inv.paidAmount)),
-      outstanding: r2(money(inv.dueAmount)),
+      paid: r2(money(inv.paidAmount) - ref),
+      outstanding: r2(money(inv.dueAmount) + ref),
     };
   });
 
@@ -428,6 +439,13 @@ export async function doctorWiseIncome(ctx: ExecContext): Promise<ExecResult> {
   if (ctx.filters.departmentId) extra.items = { some: { departmentId: ctx.filters.departmentId } };
   if (ctx.filters.doctorId) extra.items = { some: { doctorId: ctx.filters.doctorId } };
   const invoices = await fetchInvoices(ctx, extra);
+
+  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  for (const inv of invoices) {
+    const ref = refundMap.get(inv.id) || 0;
+    inv.paidAmount = money(inv.paidAmount) - ref;
+    inv.dueAmount = money(inv.dueAmount) + ref;
+  }
 
   const byDoc = new Map<string, Record<string, number>>();
   const docIds = new Set<string>();
@@ -535,6 +553,13 @@ export async function doctorVsDept(ctx: ExecContext): Promise<ExecResult> {
   if (ctx.filters.departmentId) extra.items = { some: { departmentId: ctx.filters.departmentId } };
   if (ctx.filters.doctorId) extra.items = { some: { doctorId: ctx.filters.doctorId } };
   const invoices = await fetchInvoices(ctx, extra);
+
+  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  for (const inv of invoices) {
+    const ref = refundMap.get(inv.id) || 0;
+    inv.paidAmount = money(inv.paidAmount) - ref;
+    inv.dueAmount = money(inv.dueAmount) + ref;
+  }
 
   const byKey = new Map<string, Record<string, any>>();
   const docIds = new Set<string>();
@@ -756,18 +781,21 @@ export async function indoorTreatmentSummary(ctx: ExecContext): Promise<ExecResu
         orderBy: { allocatedAt: "desc" },
         take: 1,
       },
-      invoices: { select: { totalAmount: true, paidAmount: true, dueAmount: true } },
+      invoices: { select: { id: true, totalAmount: true, paidAmount: true, dueAmount: true } },
     },
     orderBy: { admissionDate: "desc" },
   });
+
+  const allInvIds = admissions.flatMap((a) => (a.invoices || []).map((i: any) => i.id));
+  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, allInvIds);
 
   const docIds = [...new Set(admissions.map((a) => a.admittingDoctorId).filter(Boolean))] as string[];
   const docMap = await doctorNames(ctx.prisma, ctx.tenantId, docIds);
 
   const rows = admissions.map((a) => {
     const charges = a.invoices.reduce((s: number, i: any) => s + money(i.totalAmount), 0);
-    const payment = a.invoices.reduce((s: number, i: any) => s + money(i.paidAmount), 0);
-    const outstanding = a.invoices.reduce((s: number, i: any) => s + money(i.dueAmount), 0);
+    const payment = a.invoices.reduce((s: number, i: any) => s + money(i.paidAmount) - (refundMap.get(i.id) || 0), 0);
+    const outstanding = a.invoices.reduce((s: number, i: any) => s + money(i.dueAmount) + (refundMap.get(i.id) || 0), 0);
     return {
       patient: fullName(a.patient),
       uhid: uhid(a.patient),
@@ -797,6 +825,13 @@ export async function patientWiseRevenue(ctx: ExecContext): Promise<ExecResult> 
   if (ctx.filters.doctorId) extra.items = { some: { doctorId: ctx.filters.doctorId } };
   if (ctx.filters.patientId) extra.patientId = ctx.filters.patientId;
   const invoices = await fetchInvoices(ctx, extra);
+
+  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  for (const inv of invoices) {
+    const ref = refundMap.get(inv.id) || 0;
+    inv.paidAmount = money(inv.paidAmount) - ref;
+    inv.dueAmount = money(inv.dueAmount) + ref;
+  }
 
   const deptIds = new Set<string>();
   const docIds = new Set<string>();
@@ -936,6 +971,13 @@ export async function indoorIncome(ctx: ExecContext): Promise<ExecResult> {
   if (ctx.filters.doctorId) extra.items = { some: { doctorId: ctx.filters.doctorId } };
   const invoices = await fetchInvoices(ctx, extra);
 
+  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  for (const inv of invoices) {
+    const ref = refundMap.get(inv.id) || 0;
+    inv.paidAmount = money(inv.paidAmount) - ref;
+    inv.dueAmount = money(inv.dueAmount) + ref;
+  }
+
   const admissionIds = [...new Set(invoices.map((i) => i.admissionId).filter(Boolean))] as string[];
   const wardMap = await wardByAdmission(ctx.prisma, ctx.tenantId, admissionIds);
 
@@ -980,6 +1022,13 @@ export async function outdoorIncome(ctx: ExecContext): Promise<ExecResult> {
   if (ctx.filters.departmentId) extra.items = { some: { departmentId: ctx.filters.departmentId } };
   if (ctx.filters.doctorId) extra.items = { some: { doctorId: ctx.filters.doctorId } };
   const invoices = await fetchInvoices(ctx, extra);
+
+  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  for (const inv of invoices) {
+    const ref = refundMap.get(inv.id) || 0;
+    inv.paidAmount = money(inv.paidAmount) - ref;
+    inv.dueAmount = money(inv.dueAmount) + ref;
+  }
 
   const rows: Record<string, any>[] = [];
   const deptIds = new Set<string>();
@@ -1220,11 +1269,12 @@ export async function serviceWiseIncome(ctx: ExecContext): Promise<ExecResult> {
   for (const inv of invoices) {
     const items = inv.items || [];
     const invRefund = refunds.get(inv.id) || 0;
+    const totalLine = items.reduce((s: number, i: any) => s + money(i.lineTotal), 0);
     for (const item of items) {
       const key = item.serviceId || item.serviceName || "-";
       const cur = byKey.get(key) || { service: item.serviceName || key, departmentId: item.departmentId, quantity: 0, gross: 0, discount: 0, refund: 0, net: 0 };
       const fin = itemFinance(inv, item);
-      const refundShare = items.length ? invRefund / items.length : 0;
+      const refundShare = totalLine > 0 ? invRefund * (money(item.lineTotal) / totalLine) : 0;
       cur.quantity += money(item.quantity) || 1;
       cur.gross += fin.gross;
       cur.discount += fin.discount;
@@ -1333,11 +1383,12 @@ export async function operationReport(ctx: ExecContext): Promise<ExecResult> {
     ];
   }
   if (ctx.filters.doctorId) {
-    where.OR = [
-      ...(where.OR || []),
-      { surgeonId: ctx.filters.doctorId },
-      { assistantId: ctx.filters.doctorId },
-      { anesthetistId: ctx.filters.doctorId },
+    where.AND = [
+      { OR: [
+        { surgeonId: ctx.filters.doctorId },
+        { assistantId: ctx.filters.doctorId },
+        { anesthetistId: ctx.filters.doctorId },
+      ] },
     ];
   }
   if (ctx.filters.status) where.status = ctx.filters.status;

@@ -137,7 +137,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, PermissionAction[]> = {
     PermissionAction.PRINT,
     PermissionAction.EXPORT,
     PermissionAction.VERIFY,
-    PermissionAction.ADMINISTER,
   ],
   [UserRole.FINANCE_MANAGER]: [
     PermissionAction.VIEW,

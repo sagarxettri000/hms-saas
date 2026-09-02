@@ -29,6 +29,9 @@ describe("ReportsService", () => {
     encounter: {
       groupBy: jest.fn().mockResolvedValue([]),
     },
+    refund: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
     department: {
       findMany: jest.fn().mockResolvedValue([]),
     },

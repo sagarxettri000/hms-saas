@@ -74,26 +74,90 @@ export interface CreateDepositDto {
 export interface CreateBillingServiceDto {
   code: string;
   name: string;
+  shortName?: string;
+  categoryId?: string;
   category?: string;
   departmentId?: string;
   description?: string;
+  serviceType?: string;
+  unit?: string;
   price: number;
   taxPercent?: number;
+  insuranceRate?: number;
+  patientRate?: number;
+  corporateRate?: number;
+  emergencyRate?: number;
+  nightRate?: number;
+  weekendRate?: number;
   isActive?: boolean;
+  taxable?: boolean;
+  requiresDoctor?: boolean;
+  requiresDepartment?: boolean;
+  requiresQuantity?: boolean;
+  requiresApproval?: boolean;
+  isPackageService?: boolean;
+  isRoomCharge?: boolean;
+  isPharmacyItem?: boolean;
+  isConsumable?: boolean;
+  isInventoryItem?: boolean;
+  displayOrder?: number;
 }
 
 export interface UpdateBillingServiceDto {
   name?: string;
+  shortName?: string;
+  categoryId?: string;
   category?: string;
   departmentId?: string;
   description?: string;
+  serviceType?: string;
+  unit?: string;
   price?: number;
   taxPercent?: number;
+  insuranceRate?: number;
+  patientRate?: number;
+  corporateRate?: number;
+  emergencyRate?: number;
+  nightRate?: number;
+  weekendRate?: number;
   isActive?: boolean;
+  taxable?: boolean;
+  requiresDoctor?: boolean;
+  requiresDepartment?: boolean;
+  requiresQuantity?: boolean;
+  requiresApproval?: boolean;
+  isPackageService?: boolean;
+  isRoomCharge?: boolean;
+  isPharmacyItem?: boolean;
+  isConsumable?: boolean;
+  isInventoryItem?: boolean;
+  displayOrder?: number;
 }
 
 export interface BillingServiceSearchParams {
   category?: string;
+  categoryId?: string;
+  search?: string;
+  isActive?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface CreateServiceCategoryDto {
+  name: string;
+  code: string;
+  description?: string;
+  displayOrder?: number;
+}
+
+export interface UpdateServiceCategoryDto {
+  name?: string;
+  description?: string;
+  displayOrder?: number;
+  isActive?: boolean;
+}
+
+export interface ServiceCategorySearchParams {
   search?: string;
   isActive?: string;
   page?: number;
@@ -1426,20 +1490,47 @@ export class BillingService {
       label: "Service tax percent",
     });
 
-    return this.prisma.billingService.create({
-      data: {
-        tenantId,
-        code: dto.code,
-        name: dto.name,
-        category: dto.category || "OTHER",
-        departmentId: dto.departmentId,
-        description: dto.description,
-        price,
-        taxPercent,
-        isActive: dto.isActive ?? true,
-        createdBy: userId,
-      },
-    });
+    const data: any = {
+      tenantId,
+      code: dto.code,
+      name: dto.name,
+      shortName: dto.shortName,
+      categoryId: dto.categoryId,
+      departmentId: dto.departmentId,
+      description: dto.description,
+      serviceType: (dto.serviceType || "PER_UNIT") as any,
+      unit: dto.unit,
+      price,
+      taxPercent,
+      isActive: dto.isActive ?? true,
+      taxable: dto.taxable ?? true,
+      requiresDoctor: dto.requiresDoctor ?? false,
+      requiresDepartment: dto.requiresDepartment ?? false,
+      requiresQuantity: dto.requiresQuantity ?? true,
+      requiresApproval: dto.requiresApproval ?? false,
+      isPackageService: dto.isPackageService ?? false,
+      isRoomCharge: dto.isRoomCharge ?? false,
+      isPharmacyItem: dto.isPharmacyItem ?? false,
+      isConsumable: dto.isConsumable ?? false,
+      isInventoryItem: dto.isInventoryItem ?? false,
+      displayOrder: dto.displayOrder ?? 0,
+      createdBy: userId,
+    };
+
+    if (dto.insuranceRate !== undefined)
+      data.insuranceRate = dto.insuranceRate;
+    if (dto.patientRate !== undefined)
+      data.patientRate = dto.patientRate;
+    if (dto.corporateRate !== undefined)
+      data.corporateRate = dto.corporateRate;
+    if (dto.emergencyRate !== undefined)
+      data.emergencyRate = dto.emergencyRate;
+    if (dto.nightRate !== undefined)
+      data.nightRate = dto.nightRate;
+    if (dto.weekendRate !== undefined)
+      data.weekendRate = dto.weekendRate;
+
+    return this.prisma.billingService.create({ data });
   }
 
   async updateBillingService(
@@ -1484,7 +1575,8 @@ export class BillingService {
     const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { tenantId };
-    if (params.category) where.category = params.category;
+    if (params.categoryId) where.categoryId = params.categoryId;
+    if (params.category) where.categoryId = params.category;
     if (params.isActive !== undefined) {
       where.isActive = params.isActive === "true";
     }
@@ -1499,7 +1591,10 @@ export class BillingService {
     const [data, total] = await Promise.all([
       this.prisma.billingService.findMany({
         where,
-        orderBy: [{ category: "asc" }, { name: "asc" }],
+        include: {
+          category: { select: { id: true, name: true, code: true } },
+        },
+        orderBy: [{ categoryId: "asc" }, { displayOrder: "asc" }, { name: "asc" }],
         skip: (page - 1) * limit,
         take: limit,
       }),
@@ -1515,6 +1610,123 @@ export class BillingService {
     });
     if (!service) throw new NotFoundException("Billing service not found");
     return service;
+  }
+
+  // ---------- Service Categories ----------
+
+  async findServiceCategories(
+    tenantId: string,
+    params: ServiceCategorySearchParams,
+  ) {
+    const page = Number(params.page) || 1;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
+
+    const where: any = { tenantId };
+    if (params.isActive !== undefined) {
+      where.isActive = params.isActive === "true";
+    }
+    if (params.search) {
+      where.OR = [
+        { name: { contains: params.search, mode: "insensitive" } },
+        { code: { contains: params.search, mode: "insensitive" } },
+      ];
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.serviceCategory.findMany({
+        where,
+        include: { _count: { select: { services: true } } },
+        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.serviceCategory.count({ where }),
+    ]);
+
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async createServiceCategory(
+    tenantId: string,
+    dto: CreateServiceCategoryDto,
+    userId?: string,
+  ) {
+    if (!dto.name || !String(dto.name).trim())
+      throw new BadRequestException("Category name is required");
+    if (!dto.code || !String(dto.code).trim())
+      throw new BadRequestException("Category code is required");
+
+    const existing = await this.prisma.serviceCategory.findFirst({
+      where: { tenantId, code: dto.code.trim() },
+    });
+    if (existing)
+      throw new ConflictException("Service category code already exists");
+
+    const category = await this.prisma.serviceCategory.create({
+      data: {
+        tenantId,
+        name: dto.name.trim(),
+        code: dto.code.trim(),
+        description: dto.description,
+        displayOrder: dto.displayOrder ?? 0,
+      },
+    });
+
+    await this.logAudit(
+      tenantId,
+      userId,
+      "CREATE",
+      "ServiceCategory",
+      category.id,
+    );
+    return category;
+  }
+
+  async updateServiceCategory(
+    tenantId: string,
+    id: string,
+    dto: UpdateServiceCategoryDto,
+    userId?: string,
+  ) {
+    const existing = await this.prisma.serviceCategory.findFirst({
+      where: { id, tenantId },
+    });
+    if (!existing)
+      throw new NotFoundException("Service category not found");
+
+    if (dto.name !== undefined && (!dto.name || !String(dto.name).trim()))
+      throw new BadRequestException("Category name cannot be empty");
+
+    const data: any = {
+      name: dto.name,
+      description: dto.description,
+      displayOrder: dto.displayOrder,
+      isActive: dto.isActive,
+      updatedAt: new Date(),
+    };
+
+    const updated = await this.prisma.serviceCategory.update({
+      where: { id },
+      data,
+    });
+    await this.logAudit(
+      tenantId,
+      userId,
+      "UPDATE",
+      "ServiceCategory",
+      id,
+    );
+    return updated;
+  }
+
+  async findServiceCategoryById(tenantId: string, id: string) {
+    const category = await this.prisma.serviceCategory.findFirst({
+      where: { id, tenantId },
+      include: { services: { where: { isActive: true }, orderBy: { displayOrder: "asc" } } },
+    });
+    if (!category)
+      throw new NotFoundException("Service category not found");
+    return category;
   }
 
   // ---------- Billing Settings ----------

@@ -37,6 +37,8 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { label: 'Dashboard', href: '/dashboard', icon: '▦' },
       { label: 'Patients', href: '/patients', icon: '☺', roles: [...CLINICAL_WIDE, 'DEPARTMENT_HEAD'] },
       { label: 'Billing', href: '/billing', icon: '₨', roles: [...FINANCE, ...ADMIN, ...SUPER, ...INSURANCE] },
+      { label: 'Service Master', href: '/billing/service-master', icon: '☰', roles: [...FINANCE, ...ADMIN, ...SUPER] },
+      { label: 'Discharge Billing', href: '/billing/discharge-billing', icon: '▦', roles: [...FINANCE, ...ADMIN, ...SUPER] },
       { label: 'Admit', href: '/admissions', icon: '▣', roles: [...CLINICAL_WIDE, 'DEPARTMENT_HEAD'] },
       { label: 'Beds', href: '/bed-management', icon: '⊞', roles: [...CLINICAL_WIDE] },
       { label: 'Appointments', href: '/appointments', icon: '◷', roles: [...CLINICAL_WIDE, 'DEPARTMENT_HEAD'] },

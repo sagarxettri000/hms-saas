@@ -15,6 +15,33 @@ const DISCHARGE_TYPES = [
 
 const PAYMENT_METHODS = ['CASH', 'CARD', 'UPI', 'NET_BANKING', 'INSURANCE', 'CREDIT', 'CORPORATE'];
 
+const SERVICE_GROUPS = [
+  { label: 'Room Charges', match: ['room', 'bed', 'ward', 'accomodation', 'accommodation'] },
+  { label: 'Doctor / Consultant', match: ['doctor', 'consult', 'physician', 'specialist', 'surgeon fee', 'visiting'] },
+  { label: 'Nursing Charges', match: ['nurs', 'iv', 'dressing', 'injection', 'catheter', 'monitoring'] },
+  { label: 'Laboratory', match: ['lab', 'test', 'patholog', 'biochem', 'hematolog', 'serolog', 'blood count', 'culture'] },
+  { label: 'Radiology / Imaging', match: ['radiolog', 'imaging', 'x-ray', 'xray', 'ct scan', 'mri', 'ultrasound', 'usg', 'echocardio', 'ecg', 'echo'] },
+  { label: 'OT / Surgery Procedure', match: ['surg', 'procedure', 'operation', 'anaesth', 'anesth', 'theatre'] },
+  { label: 'Pharmacy', match: ['pharm', 'medicine', 'medication', 'drug', 'tablet', 'syrup', 'injection'] },
+  { label: 'Medical Consumables', match: ['consum', 'suppl', 'glove', 'syringe', 'needle', 'suture'] },
+  { label: 'Blood Bank', match: ['blood', 'plasma', 'transfusion'] },
+  { label: 'Diet', match: ['diet', 'nutrition', 'meal', 'food', 'beverage'] },
+  { label: 'Oxygen / Respiratory', match: ['oxygen', 'respir', 'ventilat', 'nebuliz', 'cpap', 'bipap'] },
+  { label: 'Equipment Charges', match: ['equipment', 'device', 'rental', 'monitor', 'machine'] },
+  { label: 'Ambulance', match: ['ambulance', 'transport'] },
+  { label: 'Administrative Charges', match: ['administrat', 'admin', 'regist', 'admission', 'discharge fee', 'documentation'] },
+  { label: 'Medical Documents', match: ['document', 'report', 'certificate', 'record', 'discharge summary', 'medical record'] },
+  { label: 'Miscellaneous', match: null },
+];
+
+function matchService(s: any, keywords: string[] | null): boolean {
+  if (!keywords) return true;
+  const cat = (s.category?.name || '').toLowerCase();
+  const name = (s.name || '').toLowerCase();
+  return keywords.some((k) => cat.includes(k) || name.includes(k));
+}
+
+
 export default function DischargeModal({
   admission,
   patientId,
@@ -43,6 +70,19 @@ export default function DischargeModal({
   const [services, setServices] = useState<any[]>([]);
   const [svcSearch, setSvcSearch] = useState('');
   const [svcLoading, setSvcLoading] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(SERVICE_GROUPS.map((g) => [g.label, true])),
+  );
+
+  function toggleGroup(label: string) {
+    setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }));
+  }
+  function openAllGroups() {
+    setOpenGroups(Object.fromEntries(SERVICE_GROUPS.map((g) => [g.label, true])));
+  }
+  function collapseAllGroups() {
+    setOpenGroups(Object.fromEntries(SERVICE_GROUPS.map((g) => [g.label, false])));
+  }
 
   // Add charge dialog
   const [showAddCharge, setShowAddCharge] = useState(false);
@@ -169,10 +209,13 @@ export default function DischargeModal({
     };
   }, [showAddCharge]);
 
-  const filteredServices = useMemo(() => {
+  const groupedServices = useMemo(() => {
     const q = svcSearch.trim().toLowerCase();
-    const list = q ? services.filter((s: any) => `${s.name} ${s.code || ''}`.toLowerCase().includes(q)) : services;
-    return list.filter((s: any) => s.isActive !== false);
+    const list = services.filter((s: any) => s.isActive !== false && (!q || `${s.name} ${s.code || ''} ${s.category?.name || ''}`.toLowerCase().includes(q)));
+    return SERVICE_GROUPS.map((g) => ({
+      label: g.label,
+      services: list.filter((s) => matchService(s, g.match)),
+    }));
   }, [services, svcSearch]);
 
   function selectService(s: any) {
@@ -548,24 +591,49 @@ export default function DischargeModal({
               />
             </div>
 
-            <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 12 }}>
+            <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 12 }}>
               {svcLoading ? (
                 <div className="loading" style={{ padding: 16 }}>Loading services…</div>
-              ) : filteredServices.length === 0 ? (
-                <div className="empty" style={{ padding: 16 }}>No services found. Enter a custom service below.</div>
+              ) : services.length === 0 ? (
+                <div className="empty" style={{ padding: 16 }}>No services found. Use Manual below to add a custom service.</div>
               ) : (
-                filteredServices.slice(0, 50).map((s: any) => (
-                  <button
-                    key={s.id}
-                    className={`service-option ${chargeForm.serviceId === s.id ? 'selected' : ''}`}
-                    onClick={() => selectService(s)}
-                    style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '8px 12px', border: 'none', background: chargeForm.serviceId === s.id ? 'var(--accent-soft, #eef2ff)' : 'transparent', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid var(--border)' }}
-                  >
-                    <span>{s.name}{s.code ? <span className="mono muted" style={{ marginLeft: 6 }}>{s.code}</span> : null}</span>
-                    <span className="mono" style={{ marginLeft: 12 }}>{formatMoney(s.patientRate ?? s.price)}</span>
-                  </button>
+                groupedServices.map((g) => (
+                  <div key={g.label} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <div
+                      className="service-group-head"
+                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', cursor: 'pointer', background: 'var(--bg-soft, #f6f7fb)' }}
+                      onClick={() => toggleGroup(g.label)}
+                    >
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{g.label}</span>
+                      <span className="mono muted" style={{ fontSize: 12 }}>{g.services.length} {openGroups[g.label] ? '▾' : '▸'}</span>
+                    </div>
+                    {openGroups[g.label] && (
+                      <div>
+                        {g.services.length === 0 ? (
+                          <div className="empty" style={{ padding: '8px 12px', fontSize: 12 }}>No services in this category yet.</div>
+                        ) : (
+                          g.services.map((s: any) => (
+                            <button
+                              key={s.id}
+                              className={`service-option ${chargeForm.serviceId === s.id ? 'selected' : ''}`}
+                              onClick={() => selectService(s)}
+                              style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '8px 12px', border: 'none', background: chargeForm.serviceId === s.id ? 'var(--accent-soft, #eef2ff)' : 'transparent', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid var(--border)' }}
+                            >
+                              <span>{s.name}{s.code ? <span className="mono muted" style={{ marginLeft: 6 }}>{s.code}</span> : null}</span>
+                              <span className="mono" style={{ marginLeft: 12 }}>{formatMoney(s.patientRate ?? s.price)}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                 ))
               )}
+            </div>
+            <div className="form-actions" style={{ marginBottom: 8, justifyContent: 'flex-start', gap: 8 }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => openAllGroups()}>Expand all</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => collapseAllGroups()}>Collapse all</button>
+              <span className="muted" style={{ fontSize: 12, marginLeft: 'auto' }}>Or type a name below for a manual service</span>
             </div>
 
             <div className="form-grid">

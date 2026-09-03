@@ -15,6 +15,10 @@ npx prisma migrate resolve --rolled-back 20260903003000_seed_services 2>/dev/nul
 
 npx prisma migrate deploy
 
+# Regenerate the Prisma client from the committed schema so runtime queries
+# (including newly added fields/relations) match the deployed migrations.
+npx prisma generate
+
 # NOTE: `prisma db seed` is intentionally NOT run here. The seed performs
 # destructive deleteMany() sweeps (including tenants) to rebuild demo data; it
 # must never run against a production database on container start. Require CLI

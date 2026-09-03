@@ -174,7 +174,7 @@ export default function OtPage() {
     nurses: [] as any[],
     nurseInput: '',
   });
-  const OT_TYPES = ['ELECTIVE', 'EMERGENCY', 'URGENT', 'SAME_DAY', 'INPATIENT'];
+  const OT_TYPES = ['MAJOR', 'MINOR', 'EMERGENCY', 'ELECTIVE', 'AMBULATORY'];
   const OT_ROOMS = ['OT 1', 'OT 2', 'OT 3', 'OT 4'];
 
   useEffect(() => {

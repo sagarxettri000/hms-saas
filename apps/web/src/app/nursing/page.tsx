@@ -76,6 +76,7 @@ export default function NursingPage() {
   const [doctors, setDoctors] = useState<any[]>([]);
 
   const [patientId, setPatientId] = useState('');
+  const [patientSearch, setPatientSearch] = useState('');
   const [vitals, setVitals] = useState<any[]>([]);
   const [loadingVitals, setLoadingVitals] = useState(false);
 
@@ -381,6 +382,16 @@ export default function NursingPage() {
     return admissions.filter((a) => wardOf(a) === wardName);
   }, [handoverWardId, wards, admissions, wardOf]);
 
+  const filteredPatients = useMemo(() => {
+    const q = patientSearch.trim().toLowerCase();
+    if (!q) return patients;
+    return patients.filter((p: any) =>
+      [p.firstName, p.lastName, p.mrn, p.id]
+        .filter(Boolean)
+        .some((v: string) => String(v).toLowerCase().includes(q)),
+    );
+  }, [patients, patientSearch]);
+
   const trackedPatients = useMemo(() => {
     const rows = [...admissions];
     if (sortBy === 'ward') rows.sort((a, b) => wardOf(a).localeCompare(wardOf(b)));
@@ -511,15 +522,68 @@ export default function NursingPage() {
     );
   };
 
-  const renderVitals = () => (
+  const renderVitals = () => {
+    const selectedPatient = patients.find((p: any) => p.id === patientId);
+    return (
     <div>
-      <div className="toolbar">
-        <select className="input" style={{ maxWidth: 320 }} value={patientId} onChange={(e) => setPatientId(e.target.value)}>
-          <option value="">Choose patient...</option>
-          {patients.map((p: any) => (
-            <option key={p.id} value={p.id}>{patientName(p)} ({p.mrn})</option>
-          ))}
-        </select>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title">Select Patient</div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: 380 }}>
+            <input
+              className="input"
+              placeholder="Search by name or MRN..."
+              value={selectedPatient ? patientSearch || patientName(selectedPatient) : patientSearch}
+              onChange={(e) => {
+                setPatientSearch(e.target.value);
+                if (patientId) { setPatientId(''); setVitals([]); }
+              }}
+              onFocus={(e) => { if (selectedPatient) e.target.select(); }}
+              style={{ paddingRight: 28 }}
+            />
+            {patientSearch && (
+              <button
+                type="button"
+                onClick={() => { setPatientSearch(''); setPatientId(''); setVitals([]); }}
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text-muted)', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+          {selectedPatient && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <span style={{ fontWeight: 600 }}>{patientName(selectedPatient)}</span>
+              {selectedPatient.mrn && <span style={{ color: 'var(--text-muted)' }}>(MRN {selectedPatient.mrn})</span>}
+            </div>
+          )}
+        </div>
+        {patientSearch && !patientId && (
+          <div style={{ border: '1px solid var(--border)', borderRadius: 6, marginTop: 6, maxHeight: 220, overflowY: 'auto' }}>
+            {filteredPatients.length === 0 ? (
+              <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>No patients found.</div>
+            ) : (
+              filteredPatients.slice(0, 50).map((p: any) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => { setPatientId(p.id); setPatientSearch(''); }}
+                  style={{ display: 'flex', gap: 10, width: '100%', padding: '8px 14px', border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', textAlign: 'left', fontSize: 13 }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--hover, #f1f5f9)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <span style={{ fontWeight: 600 }}>{patientName(p)}</span>
+                  {p.mrn && <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>MRN {p.mrn}</span>}
+                </button>
+              ))
+            )}
+          </div>
+        )}
+        {!patientSearch && !patientId && (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+            Type a patient name or MRN to search, then select from the results.
+          </div>
+        )}
       </div>
 
       {patientId && renderVitalsChart()}
@@ -564,7 +628,8 @@ export default function NursingPage() {
         <div className="empty">No vital records found for this patient.</div>
       )}
     </div>
-  );
+    );
+  };
 
   const renderNotes = () => (
     <div>

@@ -92,6 +92,8 @@ export default function NursingPage() {
   const [notesPatientSearch, setNotesPatientSearch] = useState('');
   const [notes, setNotes] = useState<any[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
+  const [noteForm, setNoteForm] = useState({ note: '', assessment: '', plan: '' });
+  const [savingNote, setSavingNote] = useState(false);
 
   const [marAdmissionId, setMarAdmissionId] = useState('');
   const [marPatientId, setMarPatientId] = useState('');
@@ -351,10 +353,18 @@ export default function NursingPage() {
     setSavingVitals(false);
   };
 
-  const addNote = async (data: any) => {
-    if (!notesAdmissionId) return;
-    await api(`/admissions/${notesAdmissionId}/nursing-notes`, { method: 'POST', body: JSON.stringify(data) }).catch(() => {});
-    loadNotes(notesAdmissionId);
+  const submitNote = async () => {
+    if (!notesAdmissionId || !noteForm.note.trim()) return;
+    setSavingNote(true);
+    try {
+      await api(`/admissions/${notesAdmissionId}/nursing-notes`, {
+        method: 'POST',
+        body: JSON.stringify({ note: noteForm.note.trim(), assessment: noteForm.assessment.trim() || undefined, plan: noteForm.plan.trim() || undefined }),
+      });
+      setNoteForm({ note: '', assessment: '', plan: '' });
+      loadNotes(notesAdmissionId);
+    } catch {}
+    setSavingNote(false);
   };
 
   const administerMed = async (medId: string) => {
@@ -437,6 +447,24 @@ export default function NursingPage() {
     if (!marPatientId) return [];
     return admissions.filter((a: any) => a.patientId === marPatientId);
   }, [admissions, marPatientId]);
+
+  const admittedPatientOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const rows: any[] = [];
+    admissions.forEach((a: any) => {
+      const pid = a.patientId;
+      if (!pid || seen.has(pid)) return;
+      seen.add(pid);
+      rows.push({
+        patientId: pid,
+        admissionId: a.id,
+        patient: a.patient,
+        admissionNumber: a.admissionNumber || a.id.slice(0, 8),
+        bedNumber: a.bedAllocations?.[0]?.bed?.bedNumber || '—',
+      });
+    });
+    return rows;
+  }, [admissions]);
 
   const trackedPatients = useMemo(() => {
     const rows = [...admissions];
@@ -788,6 +816,30 @@ export default function NursingPage() {
         )}
       </div>
 
+      {!notesPatientId && !notesPatientSearch && admittedPatientOptions.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-title">Currently Admitted Patients ({admittedPatientOptions.length})</div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {admittedPatientOptions.map((o: any) => (
+              <button
+                key={o.patientId}
+                type="button"
+                onClick={() => { setNotesPatientId(o.patientId); setNotesAdmissionId(o.admissionId); setNotesPatientSearch(''); }}
+                style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%', padding: '10px 4px', border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--hover, #f1f5f9)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <span style={{ fontWeight: 600, fontSize: 13.5 }}>{patientName(o.patient)}</span>
+                {o.patient?.mrn && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>MRN {o.patient.mrn}</span>}
+                <span className="badge badge-blue" style={{ fontSize: 11 }}>{o.admissionNumber}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>Bed {o.bedNumber}</span>
+                <span style={{ fontSize: 12, color: 'var(--primary)' }}>Add note ›</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {notesPatientId && (
         <div className="toolbar" style={{ marginBottom: 12 }}>
           <select className="input" style={{ maxWidth: 380 }} value={notesAdmissionId} onChange={(e) => setNotesAdmissionId(e.target.value)}>
@@ -799,6 +851,38 @@ export default function NursingPage() {
           {notesPatientAdmissions.length === 0 && (
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No active admissions for this patient.</span>
           )}
+        </div>
+      )}
+
+      {notesAdmissionId && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-title">Add Nursing Note</div>
+          <div className="form-grid">
+            <div className="field field-full">
+              <label className="label">Note *</label>
+              <textarea
+                className="textarea"
+                placeholder="Write the nursing note..."
+                value={noteForm.note}
+                onChange={(e) => setNoteForm({ ...noteForm, note: e.target.value })}
+                style={{ minHeight: 80 }}
+              />
+            </div>
+            <div className="field">
+              <label className="label">Assessment</label>
+              <input className="input" placeholder="Optional assessment" value={noteForm.assessment} onChange={(e) => setNoteForm({ ...noteForm, assessment: e.target.value })} />
+            </div>
+            <div className="field">
+              <label className="label">Plan</label>
+              <input className="input" placeholder="Optional plan" value={noteForm.plan} onChange={(e) => setNoteForm({ ...noteForm, plan: e.target.value })} />
+            </div>
+          </div>
+          <div className="form-actions" style={{ marginTop: 10 }}>
+            <button className="btn" disabled={savingNote || !noteForm.note.trim()} onClick={submitNote}>
+              {savingNote ? 'Saving...' : 'Save Note'}
+            </button>
+            <button className="btn btn-secondary" onClick={() => setNoteForm({ note: '', assessment: '', plan: '' })}>Clear</button>
+          </div>
         </div>
       )}
 

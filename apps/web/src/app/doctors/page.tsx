@@ -18,11 +18,6 @@ const TABS: { key: Tab; label: string }[] = [
 
 const ADMIN_ROLES = ['HOSPITAL_ADMIN', 'HOSPITAL_OWNER', 'PLATFORM_SUPER_ADMIN', 'IT_ADMIN'];
 
-const START_HOUR = 8;
-const END_HOUR = 18;
-const SLOT_H = 48;
-const SLOT_GAP = 4;
-const HOURS = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i);
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const DRUG_INTERACTIONS = [
@@ -78,17 +73,6 @@ function toMinutes(t?: string): number {
   return h * 60 + m;
 }
 
-function fmtClock(mins: number): string {
-  const h24 = Math.floor(mins / 60) % 24;
-  const m = mins % 60;
-  const suffix = h24 >= 12 ? 'PM' : 'AM';
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  return `${h12}:${String(m).padStart(2, '0')} ${suffix}`;
-}
-
-function fmtHourLabel(h: number): string {
-  return fmtClock(h * 60);
-}
 
 function medicineNames(item: any): string[] {
   return [item?.medicineName, item?.genericName, item?.brandName].filter(Boolean).map((n: string) => n.toLowerCase());
@@ -114,7 +98,6 @@ export default function DoctorsPage() {
   const [loadingSchedules, setLoadingSchedules] = useState(false);
   const [weekStart, setWeekStart] = useState<Date>(() => mondayOf(new Date()));
   const [schedDoctor, setSchedDoctor] = useState('');
-  const [now, setNow] = useState<Date>(() => new Date());
 
   const [me, setMe] = useState<any>(null);
   const [myEncounters, setMyEncounters] = useState<any[]>([]);
@@ -163,8 +146,6 @@ export default function DoctorsPage() {
   useEffect(() => {
     if (tab === 'schedule') {
       loadSchedules();
-      const t = setInterval(() => setNow(new Date()), 60000);
-      return () => clearInterval(t);
     }
     if (tab === 'alerts') {
       setLoadingAlerts(true);
@@ -231,22 +212,7 @@ export default function DoctorsPage() {
     [schedules, schedDoctor],
   );
 
-  const blocksFor = (day: Date, hour: number) => {
-    const dow = day.getDay();
-    const hStart = hour * 60;
-    const hEnd = hStart + 60;
-    return visibleSchedules.filter((s) => {
-      if (Number(s.dayOfWeek) !== dow) return false;
-      const sStart = toMinutes(s.startTime);
-      const sEnd = toMinutes(s.endTime);
-      return sStart < hEnd && sEnd > hStart;
-    });
-  };
-
   const today = new Date();
-  const nowMins = now.getHours() * 60 + now.getMinutes();
-  const nowTop =
-    ((nowMins - START_HOUR * 60) / 60) * (SLOT_H + SLOT_GAP);
 
   const schedStats = useMemo(() => {
     const todayDow = today.getDay();
@@ -506,110 +472,99 @@ export default function DoctorsPage() {
 
       {loadingSchedules ? (
         <div className="loading">Loading schedule…</div>
+      ) : schedules.length === 0 ? (
+        <div className="empty">No doctor schedules configured.</div>
       ) : (
-        <div className="card" style={{ overflowX: 'auto' }}>
-          <div style={{ minWidth: 920 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '80px repeat(7, minmax(0, 1fr))', gap: 6 }}>
-              <div />
-              {weekDays.map((d, i) => {
-                const isToday = sameDay(d, today);
-                return (
+        <div style={{ display: 'grid', gap: 14 }}>
+          {weekDays.map((day, di) => {
+            const isToday = sameDay(day, today);
+            const dayBlocks = visibleSchedules
+              .filter((s) => Number(s.dayOfWeek) === day.getDay())
+              .sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
+            return (
+              <div
+                key={di}
+                className="card"
+                style={{
+                  padding: '14px 16px',
+                  border: isToday ? '1px solid var(--primary)' : undefined,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 10,
+                  }}
+                >
                   <div
-                    key={i}
                     style={{
-                      textAlign: 'center',
                       fontWeight: 700,
-                      fontSize: 13,
-                      padding: '6px 0',
-                      borderRadius: 6,
-                      background: isToday ? 'var(--primary-light)' : 'transparent',
+                      fontSize: 15,
                       color: isToday ? 'var(--primary-dark)' : 'var(--text)',
                     }}
                   >
-                    {DAY_LABELS[i]} {d.getDate()}
-                    {isToday && <div style={{ fontSize: 10, fontWeight: 600 }}>TODAY</div>}
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '80px repeat(7, minmax(0, 1fr))', gap: 6, marginTop: 6 }}>
-              <div>
-                {HOURS.map((h) => (
-                  <div key={h} style={{ height: SLOT_H, marginBottom: SLOT_GAP, fontSize: 11, color: 'var(--text-muted)', textAlign: 'right', paddingRight: 8 }}>
-                    {fmtHourLabel(h)}
-                  </div>
-                ))}
-              </div>
-              {weekDays.map((day, di) => {
-                const isToday = sameDay(day, today);
-                const showLine = isToday && nowMins >= START_HOUR * 60 && nowMins <= END_HOUR * 60;
-                return (
-                  <div key={di} style={{ position: 'relative' }}>
-                    {HOURS.map((h) => {
-                      const blocks = blocksFor(day, h);
-                      const slotStart = h * 60;
-                      const n = Math.max(1, blocks.length);
-                      return (
-                        <div key={h} style={{ height: SLOT_H, marginBottom: SLOT_GAP, position: 'relative' }}>
-                          {blocks.length === 0 ? (
-                            <div style={{ position: 'absolute', inset: 0, border: '1px dashed var(--border)', borderRadius: 4, background: isToday ? 'rgba(59,130,246,0.03)' : 'transparent' }} />
-                          ) : (
-                            blocks.map((b, bi) => {
-                              const bStart = Math.max(toMinutes(b.startTime), slotStart);
-                              const bEnd = Math.min(toMinutes(b.endTime), slotStart + 60);
-                              const top = ((bStart - slotStart) / 60) * SLOT_H;
-                              const height = Math.max(4, ((Math.max(bEnd, bStart + 1) - bStart) / 60) * SLOT_H);
-                              return (
-                                <div
-                                  key={b.id || bi}
-                                  title={`${personName(b.doctor)} ${b.startTime}-${b.endTime}`}
-                                  style={{
-                                    position: 'absolute',
-                                    top,
-                                    height,
-                                    left: `calc(${(bi * 100) / n}% + 1px)`,
-                                    width: `calc(${100 / n}% - 2px)`,
-                                    background: 'var(--primary-light)',
-                                    borderLeft: '3px solid var(--primary)',
-                                    borderRadius: 4,
-                                    padding: '3px 6px',
-                                    fontSize: 10.5,
-                                    lineHeight: 1.3,
-                                    color: 'var(--primary-dark)',
-                                    overflow: 'hidden',
-                                    boxSizing: 'border-box',
-                                    zIndex: bi + 1,
-                                  }}
-                                >
-                                  <strong>{personName(b.doctor)}</strong>
-                                  <div>{b.startTime}–{b.endTime}{b.breakStart ? ' · break' : ''}</div>
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                      );
-                    })}
-                    {showLine && (
-                      <div style={{ position: 'absolute', left: 0, right: 0, top: nowTop, zIndex: 5, pointerEvents: 'none' }}>
-                        <div style={{ borderTop: '2px solid var(--danger)', position: 'relative' }}>
-                          <span style={{ position: 'absolute', left: -2, top: -5, width: 8, height: 8, borderRadius: 4, background: 'var(--danger)' }} />
-                        </div>
-                      </div>
+                    {DAY_LABELS[di]} · {formatDate(day)}
+                    {isToday && (
+                      <span
+                        style={{
+                          marginLeft: 8,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: '#fff',
+                          background: 'var(--primary)',
+                          padding: '2px 7px',
+                          borderRadius: 10,
+                          verticalAlign: 'middle',
+                        }}
+                      >
+                        TODAY
+                      </span>
                     )}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-            <span><span style={{ display: 'inline-block', width: 12, height: 12, background: 'var(--primary-light)', borderLeft: '3px solid var(--primary)', verticalAlign: '-1px', marginRight: 6 }} />Scheduled</span>
-            <span><span style={{ display: 'inline-block', width: 12, height: 12, border: '1px dashed var(--border-strong)', verticalAlign: '-1px', marginRight: 6 }} />Free</span>
-          </div>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {dayBlocks.length} schedule{dayBlocks.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+
+                {dayBlocks.length === 0 ? (
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '6px 0' }}>
+                    No shifts scheduled.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {dayBlocks.map((b, bi) => (
+                      <div
+                        key={b.id || bi}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                          padding: '9px 12px',
+                          background: 'var(--surface-2, var(--primary-light))',
+                          borderRadius: 8,
+                          borderLeft: '3px solid var(--primary)',
+                        }}
+                      >
+                        <div style={{ minWidth: 120, fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+                          {personName(b.doctor)}
+                        </div>
+                        <div style={{ width: 96, fontSize: 13, color: 'var(--primary-dark)', fontWeight: 600 }}>
+                          {b.startTime}–{b.endTime}
+                        </div>
+                        <div style={{ flex: 1, fontSize: 13, color: 'var(--text-muted)' }}>
+                          {b.department?.name || b.departmentId || ''}
+                          {b.breakStart ? <span style={{ marginLeft: 8 }}>· Break {b.breakStart}</span> : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-      )}
-      {!loadingSchedules && schedules.length === 0 && (
-        <div className="empty">No doctor schedules configured.</div>
       )}
     </div>
   );

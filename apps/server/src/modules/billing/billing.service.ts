@@ -2361,117 +2361,143 @@ export class BillingService {
     const last30Start = new Date(dayStart);
     last30Start.setDate(last30Start.getDate() - 29);
 
-    const [todayInvoices, todayPayments, refundsToday, depositsToday] =
+    const n = (v: unknown): number => Number(v ?? 0);
+
+    // Today's rollups + grouped breakdowns (all DB-side aggregation)
+    const [todayInvSum, todayBills, todayPaid, todayCredit, todayOutstanding, typeGroup, methodGroup, todayPaySum, refundsSum, depositsSum] =
       await Promise.all([
-        this.prisma.invoice.findMany({
+        this.prisma.invoice.aggregate({
+          _sum: { totalAmount: true },
           where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" } },
-          select: { totalAmount: true, status: true, type: true, isCredit: true, paidAmount: true },
         }),
-        this.prisma.payment.findMany({
+        this.prisma.invoice.count({
+          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" } },
+        }),
+        this.prisma.invoice.count({
+          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: "PAID" },
+        }),
+        this.prisma.invoice.count({
+          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, OR: [{ isCredit: true }, { status: "PARTIAL" }] },
+        }),
+        this.prisma.invoice.aggregate({
+          _sum: { dueAmount: true },
+          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" } },
+        }),
+        this.prisma.invoice.groupBy({
+          by: ["type"],
+          _sum: { totalAmount: true },
+          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" } },
+        }),
+        this.prisma.payment.groupBy({
+          by: ["method"],
+          _sum: { amount: true },
           where: { tenantId, paidAt: { gte: dayStart, lt: dayEnd } },
-          select: { amount: true, method: true },
         }),
-        this.prisma.refund.findMany({
+        this.prisma.payment.aggregate({
+          _sum: { amount: true },
+          where: { tenantId, paidAt: { gte: dayStart, lt: dayEnd } },
+        }),
+        this.prisma.refund.aggregate({
+          _sum: { amount: true },
           where: { tenantId, refundedAt: { gte: dayStart, lt: dayEnd }, status: "COMPLETED" },
-          select: { amount: true },
         }),
-        this.prisma.deposit.findMany({
+        this.prisma.deposit.aggregate({
+          _sum: { amount: true },
           where: { tenantId, receivedAt: { gte: dayStart, lt: dayEnd } },
-          select: { amount: true },
         }),
       ]);
 
-    const todayRevenue = todayInvoices.reduce((s, i) => s + Number(i.totalAmount), 0);
-    const todayRefundsTotal = refundsToday.reduce((s, r) => s + Number(r.amount), 0);
-    const todayCollection =
-      todayPayments.reduce((s, p) => s + Number(p.amount), 0) - todayRefundsTotal;
-    const todayDepositsTotal = depositsToday.reduce((s, d) => s + Number(d.amount), 0);
-
     const byType: Record<string, number> = {};
-    for (const i of todayInvoices)
-      byType[i.type] = (byType[i.type] || 0) + Number(i.totalAmount);
-
+    for (const g of typeGroup) byType[g.type] = n(g._sum.totalAmount);
     const byMethod: Record<string, number> = {};
-    for (const p of todayPayments)
-      byMethod[p.method] = (byMethod[p.method] || 0) + Number(p.amount);
+    for (const g of methodGroup) byMethod[g.method] = n(g._sum.amount);
 
-    const [monthInvoices, monthPayments] = await Promise.all([
-      this.prisma.invoice.findMany({
+    const todayRefundsTotal = n(refundsSum._sum.amount);
+    const todayRevenue = n(todayInvSum._sum.totalAmount);
+    const todayCollection = n(todayPaySum._sum.amount) - todayRefundsTotal;
+    const todayDepositsTotal = n(depositsSum._sum.amount);
+
+    // Month rollups
+    const [monthInvAgg, monthPayAgg] = await Promise.all([
+      this.prisma.invoice.aggregate({
+        _sum: { totalAmount: true },
         where: { tenantId, issuedDate: { gte: monthStart }, status: { not: "CANCELLED" } },
-        select: { totalAmount: true },
       }),
-      this.prisma.payment.findMany({
+      this.prisma.payment.aggregate({
+        _sum: { amount: true },
         where: { tenantId, paidAt: { gte: monthStart } },
-        select: { amount: true },
       }),
     ]);
 
-    // Revenue + collection trend (last 30 days)
+    // 30-day trend — DB groups by timestamp, JS buckets into days (small, bounded)
+    const [trendInvoices, trendPayments] = await Promise.all([
+      this.prisma.invoice.groupBy({
+        by: ["issuedDate"],
+        _sum: { totalAmount: true },
+        where: { tenantId, issuedDate: { gte: last30Start }, status: { not: "CANCELLED" } },
+      }),
+      this.prisma.payment.groupBy({
+        by: ["paidAt"],
+        _sum: { amount: true },
+        where: { tenantId, paidAt: { gte: last30Start } },
+      }),
+    ]);
     const trendMap: Record<string, { revenue: number; collection: number }> = {};
     for (let d = 0; d < 30; d++) {
       const day = new Date(last30Start);
       day.setDate(day.getDate() + d);
       trendMap[day.toISOString().slice(0, 10)] = { revenue: 0, collection: 0 };
     }
-    const trendInvoices = await this.prisma.invoice.findMany({
-      where: { tenantId, issuedDate: { gte: last30Start }, status: { not: "CANCELLED" } },
-      select: { totalAmount: true, issuedDate: true },
-    });
-    const trendPayments = await this.prisma.payment.findMany({
-      where: { tenantId, paidAt: { gte: last30Start } },
-      select: { amount: true, paidAt: true },
-    });
-    for (const i of trendInvoices) {
-      const key = i.issuedDate.toISOString().slice(0, 10);
-      if (trendMap[key]) trendMap[key].revenue += Number(i.totalAmount);
+    for (const g of trendInvoices) {
+      const key = g.issuedDate.toISOString().slice(0, 10);
+      if (trendMap[key]) trendMap[key].revenue += n(g._sum.totalAmount);
     }
-    for (const p of trendPayments) {
-      const key = p.paidAt.toISOString().slice(0, 10);
-      if (trendMap[key]) trendMap[key].collection += Number(p.amount);
+    for (const g of trendPayments) {
+      const key = g.paidAt.toISOString().slice(0, 10);
+      if (trendMap[key]) trendMap[key].collection += n(g._sum.amount);
     }
 
-    // Doctor-wise income (from invoice items with doctorId)
-    const doctorItems = await this.prisma.invoiceItem.findMany({
+    // Doctor-wise income — DB group by doctorId (all time, aggregated server-side)
+    const doctorGroup = await this.prisma.invoiceItem.groupBy({
+      by: ["doctorId"],
+      _sum: { lineTotal: true },
       where: { tenantId, doctorId: { not: null } },
-      select: { doctorId: true, lineTotal: true, discountAmount: true },
     });
     const doctorIncome: Record<string, number> = {};
-    for (const it of doctorItems) {
-      if (!it.doctorId) continue;
-      doctorIncome[it.doctorId] =
-        (doctorIncome[it.doctorId] || 0) + Number(it.lineTotal);
-    }
+    for (const g of doctorGroup) if (g.doctorId) doctorIncome[g.doctorId] = n(g._sum.lineTotal);
 
-    // User-wise collection
-    const userPayments = await this.prisma.payment.findMany({
+    // User-wise collection — DB group by receivedBy + method, composited in JS
+    const userGroup = await this.prisma.payment.groupBy({
+      by: ["receivedBy", "method"],
+      _sum: { amount: true },
       where: { tenantId, receivedBy: { not: null } },
-      select: { receivedBy: true, amount: true, method: true },
     });
+    const METHOD_KEYS = ["CASH", "CARD", "BANK", "ONLINE"];
     const userCollection: Record<string, { total: number; CASH: number; CARD: number; BANK: number; ONLINE: number }> = {};
-    for (const p of userPayments) {
-      const uid = p.receivedBy!;
-      const u = (userCollection[uid] = userCollection[uid] || { total: 0, CASH: 0, CARD: 0, BANK: 0, ONLINE: 0 });
-      u.total += Number(p.amount);
-      const m = p.method as string;
-      if (u[m as keyof typeof u] !== undefined) (u as any)[m] += Number(p.amount);
+    for (const g of userGroup) {
+      if (!g.receivedBy) continue;
+      const u = (userCollection[g.receivedBy] = userCollection[g.receivedBy] || { total: 0, CASH: 0, CARD: 0, BANK: 0, ONLINE: 0 });
+      const amt = n(g._sum.amount);
+      u.total += amt;
+      if (METHOD_KEYS.includes(g.method)) (u as any)[g.method] += amt;
     }
 
     return {
       today: {
         revenue: todayRevenue,
         collection: todayCollection,
-        bills: todayInvoices.length,
-        paidBills: todayInvoices.filter((i) => i.status === "PAID").length,
-        creditBills: todayInvoices.filter((i) => i.isCredit || i.status === "PARTIAL").length,
-        outstanding: todayInvoices.reduce((s, i) => s + (Number(i.totalAmount) - Number(i.paidAmount || 0)), 0),
+        bills: todayBills,
+        paidBills: todayPaid,
+        creditBills: todayCredit,
+        outstanding: n(todayOutstanding._sum.dueAmount),
         refunds: todayRefundsTotal,
         deposits: todayDepositsTotal,
         revenueByType: byType,
         collectionByMethod: byMethod,
       },
       month: {
-        revenue: monthInvoices.reduce((s, i) => s + Number(i.totalAmount), 0),
-        collection: monthPayments.reduce((s, p) => s + Number(p.amount), 0),
+        revenue: n(monthInvAgg._sum.totalAmount),
+        collection: n(monthPayAgg._sum.amount),
       },
       trend: Object.entries(trendMap)
         .map(([date, v]) => ({ date, ...v }))

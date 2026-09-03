@@ -2389,6 +2389,7 @@ model Invoice {
   @@index([admissionId])
   @@index([patientId])
   @@index([schemeId])
+  @@index([tenantId, issuedDate, status])
 }
 
 model BillingScheme {
@@ -2441,8 +2442,8 @@ model InvoiceItem {
   @@index([tenantId])
   @@index([invoiceId])
   @@map("invoice_items")
+  @@index([tenantId, doctorId])
 }
-
 model Payment {
   id              String        @id @default(cuid())
   tenantId        String
@@ -2473,6 +2474,8 @@ model Payment {
   @@map("payments")
   @@index([invoiceId])
   @@index([patientId])
+  @@index([tenantId, paidAt])
+  @@index([tenantId, receivedBy, method])
 }
 
 model Refund {
@@ -2506,6 +2509,7 @@ model Refund {
   @@index([invoiceId])
   @@index([patientId])
   @@index([paymentId])
+  @@index([tenantId, refundedAt, status])
 }
 
 model Deposit {
@@ -2538,6 +2542,7 @@ model Deposit {
   @@index([admissionId])
   @@index([invoiceId])
   @@index([patientId])
+  @@index([tenantId, receivedAt])
 }
 
 model DepositTransaction {

@@ -661,6 +661,8 @@ export default function BedManagementPage() {
   const [rooms, setRooms] = useState<any[]>([]);
   const [maintenanceRecords, setMaintenanceRecords] = useState<any[]>([]);
   const [loadingMaintenance, setLoadingMaintenance] = useState(true);
+  const [cleaningBeds, setCleaningBeds] = useState<any[]>([]);
+  const [loadingCleaning, setLoadingCleaning] = useState(true);
 
   const [filterWard, setFilterWard] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -730,10 +732,22 @@ export default function BedManagementPage() {
       .finally(() => setLoadingMaintenance(false));
   }, []);
 
+  const loadCleaning = useCallback(() => {
+    setLoadingCleaning(true);
+    api('/bed-management/beds?status=CLEANING&limit=200')
+      .then((res: any) => {
+        const data = res?.data?.data ?? res?.data ?? [];
+        setCleaningBeds(Array.isArray(data) ? data : data.data ?? []);
+      })
+      .catch(() => setCleaningBeds([]))
+      .finally(() => setLoadingCleaning(false));
+  }, []);
+
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
   useEffect(() => { loadWards(); loadRooms(); }, [loadWards, loadRooms]);
   useEffect(() => { if (tab === 'beds') loadBeds(); }, [tab, loadBeds]);
   useEffect(() => { if (tab === 'maintenance') loadMaintenance(); }, [tab, loadMaintenance]);
+  useEffect(() => { if (tab === 'cleaning') loadCleaning(); }, [tab, loadCleaning]);
 
   function refreshAll() {
     loadDashboard();
@@ -765,6 +779,7 @@ export default function BedManagementPage() {
             { key: 'dashboard', label: 'Overview' },
             { key: 'beds', label: 'Beds' },
             { key: 'wards', label: 'Wards' },
+            { key: 'cleaning', label: 'Cleaning' },
             { key: 'maintenance', label: 'Maintenance' },
           ].map((t) => (
             <button key={t.key} className={`tab ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
@@ -1112,6 +1127,75 @@ export default function BedManagementPage() {
                               Complete
                             </button>
                           )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Cleaning tab */}
+        {tab === 'cleaning' && (
+          <>
+            <div className="toolbar" style={{ marginBottom: 16 }}>
+              <span className="note" style={{ marginRight: 'auto' }}>
+                {loadingCleaning ? 'Loading...' : cleaningBeds.length === 0 ? 'No beds in cleaning' : `${cleaningBeds.length} bed${cleaningBeds.length !== 1 ? 's' : ''} in cleaning`}
+              </span>
+              <button className="btn btn-secondary" onClick={loadCleaning}>Refresh</button>
+            </div>
+            {loadingCleaning ? (
+              <div className="loading">Loading cleaning beds...</div>
+            ) : cleaningBeds.length === 0 ? (
+              <div className="empty">
+                <p>All beds are clean and ready!</p>
+                <span className="note">Beds automatically move to Cleaning when a patient is discharged.</span>
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Bed #</th>
+                      <th>Type</th>
+                      <th>Ward</th>
+                      <th>Room</th>
+                      <th>Last Patient</th>
+                      <th>Discharged</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cleaningBeds.map((bed: any) => (
+                      <tr key={bed.id}>
+                        <td style={{ fontWeight: 600 }}>{bed.bedNumber}</td>
+                        <td>{BED_TYPES.find((t) => t.value === bed.bedType)?.label || bed.bedType}</td>
+                        <td>{bed.ward?.name || '—'}</td>
+                        <td>{bed.room?.name || '—'}</td>
+                        <td>
+                          {bed.allocations?.[0]?.admission?.patient
+                            ? `${bed.allocations[0].admission.patient.firstName} ${bed.allocations[0].admission.patient.lastName}`
+                            : '—'}
+                        </td>
+                        <td className="note">
+                          {bed.allocations?.[0]?.releasedAt ? formatDateTime(bed.allocations[0].releasedAt) : '—'}
+                        </td>
+                        <td>
+                          <button
+                            className="btn btn-sm btn-success"
+                            onClick={async () => {
+                              await api(`/bed-management/beds/${bed.id}/status`, {
+                                method: 'PATCH',
+                                body: JSON.stringify({ status: 'AVAILABLE' }),
+                              });
+                              loadCleaning();
+                              refreshAll();
+                            }}
+                          >
+                            Mark Available
+                          </button>
                         </td>
                       </tr>
                     ))}

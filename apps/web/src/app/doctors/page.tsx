@@ -251,19 +251,20 @@ export default function DoctorsPage() {
   const schedStats = useMemo(() => {
     const todayDow = today.getDay();
     const onDuty = new Set(
-      schedules.filter((s) => Number(s.dayOfWeek) === todayDow).map((s) => s.doctorId),
+      visibleSchedules.filter((s) => Number(s.dayOfWeek) === todayDow).map((s) => s.doctorId),
     );
     let busiestDay = '—';
     let busiestCount = 0;
     for (let dow = 0; dow < 7; dow++) {
-      const c = schedules.filter((s) => Number(s.dayOfWeek) === dow).length;
+      const c = visibleSchedules.filter((s) => Number(s.dayOfWeek) === dow).length;
       if (c > busiestCount) {
         busiestCount = c;
         busiestDay = DAY_LABELS[(dow + 6) % 7];
       }
     }
-    return { shifts: schedules.length, onDuty: onDuty.size, busiestDay };
-  }, [schedules]);
+    const totalBlocks = visibleSchedules.length;
+    return { shifts: totalBlocks, onDuty: onDuty.size, busiestDay };
+  }, [visibleSchedules]);
 
   const myPatientRows = useMemo(() => {
     const profileId = me?.doctorProfile?.id;
@@ -546,31 +547,45 @@ export default function DoctorsPage() {
                   <div key={di} style={{ position: 'relative' }}>
                     {HOURS.map((h) => {
                       const blocks = blocksFor(day, h);
+                      const slotStart = h * 60;
+                      const n = Math.max(1, blocks.length);
                       return (
-                        <div key={h} style={{ height: SLOT_H, marginBottom: SLOT_GAP }}>
+                        <div key={h} style={{ height: SLOT_H, marginBottom: SLOT_GAP, position: 'relative' }}>
                           {blocks.length === 0 ? (
-                            <div style={{ height: '100%', border: '1px dashed var(--border)', borderRadius: 4, background: isToday ? 'rgba(59,130,246,0.03)' : 'transparent' }} />
+                            <div style={{ position: 'absolute', inset: 0, border: '1px dashed var(--border)', borderRadius: 4, background: isToday ? 'rgba(59,130,246,0.03)' : 'transparent' }} />
                           ) : (
-                            blocks.map((b, bi) => (
-                              <div
-                                key={bi}
-                                title={`${personName(b.doctor)} ${b.startTime}-${b.endTime}`}
-                                style={{
-                                  height: '100%',
-                                  background: 'var(--primary-light)',
-                                  borderLeft: '3px solid var(--primary)',
-                                  borderRadius: 4,
-                                  padding: '3px 6px',
-                                  fontSize: 10.5,
-                                  lineHeight: 1.3,
-                                  color: 'var(--primary-dark)',
-                                  overflow: 'hidden',
-                                }}
-                              >
-                                <strong>{personName(b.doctor)}</strong>
-                                <div>{b.startTime}–{b.endTime}{b.breakStart ? ' · break' : ''}</div>
-                              </div>
-                            ))
+                            blocks.map((b, bi) => {
+                              const bStart = Math.max(toMinutes(b.startTime), slotStart);
+                              const bEnd = Math.min(toMinutes(b.endTime), slotStart + 60);
+                              const top = ((bStart - slotStart) / 60) * SLOT_H;
+                              const height = Math.max(4, ((Math.max(bEnd, bStart + 1) - bStart) / 60) * SLOT_H);
+                              return (
+                                <div
+                                  key={b.id || bi}
+                                  title={`${personName(b.doctor)} ${b.startTime}-${b.endTime}`}
+                                  style={{
+                                    position: 'absolute',
+                                    top,
+                                    height,
+                                    left: `calc(${(bi * 100) / n}% + 1px)`,
+                                    width: `calc(${100 / n}% - 2px)`,
+                                    background: 'var(--primary-light)',
+                                    borderLeft: '3px solid var(--primary)',
+                                    borderRadius: 4,
+                                    padding: '3px 6px',
+                                    fontSize: 10.5,
+                                    lineHeight: 1.3,
+                                    color: 'var(--primary-dark)',
+                                    overflow: 'hidden',
+                                    boxSizing: 'border-box',
+                                    zIndex: bi + 1,
+                                  }}
+                                >
+                                  <strong>{personName(b.doctor)}</strong>
+                                  <div>{b.startTime}–{b.endTime}{b.breakStart ? ' · break' : ''}</div>
+                                </div>
+                              );
+                            })
                           )}
                         </div>
                       );

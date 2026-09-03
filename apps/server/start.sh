@@ -11,6 +11,7 @@ echo "Applying database migrations..."
 # - On production it unblocks the stuck 20260902172638 migration.
 # - On a fresh database it errors harmlessly and the migration is applied normally.
 npx prisma migrate resolve --rolled-back 20260902172638 2>/dev/null || true
+npx prisma migrate resolve --rolled-back 20260903003000_seed_services 2>/dev/null || true
 
 npx prisma migrate deploy
 

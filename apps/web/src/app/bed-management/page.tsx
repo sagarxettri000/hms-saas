@@ -780,7 +780,7 @@ export default function BedManagementPage() {
             { key: 'beds', label: 'Beds' },
             { key: 'wards', label: 'Wards' },
             { key: 'cleaning', label: 'Cleaning' },
-            { key: 'maintenance', label: 'Maintenance' },
+            { key: 'maintenance', label: 'Maintain' },
           ].map((t) => (
             <button key={t.key} className={`tab ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
               {t.label}

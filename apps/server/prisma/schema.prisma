@@ -1149,6 +1149,9 @@ model DoctorProfile {
   prescriptions Prescription[]
   assignedFollowUps FollowUp[] @relation("AssignedFollowUps")
   followUpDoctors   FollowUpDoctor[]
+  otCasesAsSurgeon    OTCase[] @relation("OTCSurgeon")
+  otCasesAsAssistant  OTCase[] @relation("OTCAssistant")
+  otCasesAsAnesthetist OTCase[] @relation("OTCAnesthetist")
 
   @@index([tenantId])
   @@index([departmentId])
@@ -1969,8 +1972,12 @@ model OTCase {
   status                  OTStatus        @default(REQUESTED)
   anesthesiaType          AnesthesiaType?
   surgeonId               String?
+  surgeon                 DoctorProfile? @relation("OTCSurgeon", fields: [surgeonId], references: [id], onDelete: SetNull)
   assistantId             String?
+  assistant               DoctorProfile? @relation("OTCAssistant", fields: [assistantId], references: [id], onDelete: SetNull)
   anesthetistId           String?
+  anesthetist             DoctorProfile? @relation("OTCAnesthetist", fields: [anesthetistId], references: [id], onDelete: SetNull)
+  nurses                  Json?
   otRoom                  String?
   scheduledDate           DateTime?
   startTime               String?

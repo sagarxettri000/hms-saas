@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 
@@ -11,6 +11,11 @@ interface OtCase {
   patientId?: string;
   surgeon?: any;
   surgeonId?: string;
+  assistant?: any;
+  assistantId?: string;
+  anesthetist?: any;
+  anesthetistId?: string;
+  nurses?: any;
   procedureName?: string;
   procedureCode?: string;
   otType?: string;
@@ -147,6 +152,31 @@ export default function OtPage() {
   const [checklists, setChecklists] = useState<Record<string, any>>({});
   const [selectedSurgery, setSelectedSurgery] = useState('');
 
+  // Schedule Surgery form
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [patients, setPatients] = useState<any[]>([]);
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [patientSearch, setPatientSearch] = useState('');
+  const [selectedPatient, setSelectedPatient] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const [formMsg, setFormMsg] = useState('');
+  const [form, setForm] = useState({
+    procedureName: '',
+    procedureCode: '',
+    otType: 'ELECTIVE',
+    surgeonId: '',
+    assistantId: '',
+    anesthetistId: '',
+    otRoom: '',
+    date: '',
+    startTime: '',
+    endTime: '',
+    nurses: [] as any[],
+    nurseInput: '',
+  });
+  const OT_TYPES = ['ELECTIVE', 'EMERGENCY', 'URGENT', 'SAME_DAY', 'INPATIENT'];
+  const OT_ROOMS = ['OT 1', 'OT 2', 'OT 3', 'OT 4'];
+
   useEffect(() => {
     api('/ot?limit=100')
       .then((r) => {
@@ -170,6 +200,19 @@ export default function OtPage() {
   useEffect(() => {
     setChecklists(loadChecklists());
   }, []);
+
+  useEffect(() => {
+    if (!showSchedule) return;
+    if (patients.length === 0) {
+      api('/patients?limit=500').then((r) => setPatients(Array.isArray(unwrap(r)) ? unwrap(r) : [])).catch(() => {});
+    }
+    if (doctors.length === 0) {
+      api('/doctors?limit=200').then((r) => {
+        const d = unwrap(r);
+        setDoctors(Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : []);
+      }).catch(() => {});
+    }
+  }, [showSchedule, patients.length, doctors.length]);
 
   useEffect(() => {
     if (tab !== 'active') return;
@@ -224,6 +267,72 @@ export default function OtPage() {
     });
   }, [selectedSurgery, cases]);
 
+  const ptResults = useMemo(() => {
+    const term = patientSearch.trim().toLowerCase();
+    if (!term) return [];
+    return patients
+      .filter((p: any) =>
+        [p.firstName, p.lastName, p.mrn, p.uid]
+          .filter(Boolean)
+          .some((v: string) => String(v).toLowerCase().includes(term)),
+      )
+      .slice(0, 20);
+  }, [patients, patientSearch]);
+
+  const addNurse = () => {
+    const name = form.nurseInput.trim();
+    if (!name) return;
+    setForm((f) => ({
+      ...f,
+      nurses: [...f.nurses, { name, id: `n-${Date.now()}-${f.nurses.length}` }],
+      nurseInput: '',
+    }));
+  };
+
+  const removeNurse = (id: string) => {
+    setForm((f) => ({ ...f, nurses: f.nurses.filter((n: any) => n.id !== id) }));
+  };
+
+  const submitSchedule = async () => {
+    setFormMsg('');
+    if (!selectedPatient) { setFormMsg('Please select a patient.'); return; }
+    if (!form.procedureName.trim()) { setFormMsg('Please enter the surgery / procedure.'); return; }
+    if (!form.date) { setFormMsg('Please choose the surgery date.'); return; }
+    setSaving(true);
+    try {
+      const payload: any = {
+        patientId: selectedPatient.id,
+        procedureName: form.procedureName.trim(),
+        procedureCode: form.procedureCode.trim() || undefined,
+        otType: form.otType,
+        surgeonId: form.surgeonId || undefined,
+        assistantId: form.assistantId || undefined,
+        anesthetistId: form.anesthetistId || undefined,
+        nurses: form.nurses.filter((n: any) => n.name).map((n: any) => ({ name: n.name })),
+        otRoom: form.otRoom || undefined,
+        scheduledDate: form.date ? `${form.date}T${form.startTime || '09:00'}` : undefined,
+        startTime: form.startTime || undefined,
+        endTime: form.endTime || undefined,
+      };
+      await api('/ot', { method: 'POST', body: JSON.stringify(payload) });
+      setFormMsg('Surgery scheduled successfully.');
+      setSelectedPatient(null);
+      setPatientSearch('');
+      setForm((f) => ({
+        ...f,
+        procedureName: '', procedureCode: '', surgeonId: '', assistantId: '',
+        anesthetistId: '', otRoom: '', date: '', startTime: '', endTime: '', nurses: [],
+      }));
+      api('/ot?limit=100').then((r) => {
+        const data = unwrap(r);
+        setCases(Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []);
+      }).catch(() => {});
+    } catch (e: any) {
+      setFormMsg(e?.message || 'Failed to schedule surgery.');
+    }
+    setSaving(false);
+  };
+
   const stats = (() => {
     const total = cases.length;
     const completed = cases.filter((c) => String(c.status).toUpperCase() === 'COMPLETED').length;
@@ -274,6 +383,220 @@ export default function OtPage() {
 
       {!loading && tab === 'schedule' && (
         <>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+            <button type="button" className="btn" onClick={() => setShowSchedule((s) => !s)}>
+              {showSchedule ? 'Close Schedule Form' : '+ Schedule Surgery'}
+            </button>
+          </div>
+
+          {showSchedule && (
+            <div className="card" style={{ marginBottom: 16 }} role="region" aria-label="Schedule surgery">
+              <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 14px' }}>Schedule Surgery</h3>
+
+              <div className="form-grid">
+                <div className="field">
+                  <label className="label">Patient (search by name or MRN)</label>
+                  <input
+                    className="input"
+                    type="search"
+                    placeholder="Search patient…"
+                    value={patientSearch}
+                    onChange={(e) => setPatientSearch(e.target.value)}
+                    aria-label="Search patient"
+                  />
+                  {selectedPatient && (
+                    <div style={{ marginTop: 6, fontSize: 13, fontWeight: 600 }}>
+                      {personName(selectedPatient)}{selectedPatient.mrn ? ` · MRN ${selectedPatient.mrn}` : ''}
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{ marginLeft: 8 }}
+                        onClick={() => { setSelectedPatient(null); setPatientSearch(''); }}
+                      >
+                        Change
+                      </button>
+                    </div>
+                  )}
+                  {!selectedPatient && ptResults.length > 0 && (
+                    <div style={{ border: '1px solid var(--border)', borderRadius: 8, marginTop: 6, maxHeight: 180, overflow: 'auto' }}>
+                      {ptResults.map((p: any) => (
+                        <button
+                          type="button"
+                          key={p.id}
+                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', fontSize: 13, background: 'transparent', border: 'none', cursor: 'pointer' }}
+                          onClick={() => { setSelectedPatient(p); setPatientSearch(''); }}
+                        >
+                          <strong>{personName(p)}</strong>
+                          {p.mrn ? <span style={{ color: 'var(--text-muted)' }}> · MRN {p.mrn}</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="field">
+                  <label className="label">Surgery / Procedure<span style={{ color: 'var(--danger)' }}> *</span></label>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="e.g. Laparoscopic cholecystectomy"
+                    value={form.procedureName}
+                    onChange={(e) => setForm((f) => ({ ...f, procedureName: e.target.value }))}
+                    aria-label="Procedure name"
+                  />
+                </div>
+
+                <div className="field">
+                  <label className="label">Procedure code (optional)</label>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="e.g. CPT-47562"
+                    value={form.procedureCode}
+                    onChange={(e) => setForm((f) => ({ ...f, procedureCode: e.target.value }))}
+                    aria-label="Procedure code"
+                  />
+                </div>
+
+                <div className="field">
+                  <label className="label">OT Type</label>
+                  <select className="input" value={form.otType} onChange={(e) => setForm((f) => ({ ...f, otType: e.target.value }))} aria-label="OT type">
+                    {OT_TYPES.map((t) => (
+                      <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label className="label">Attending Surgeon</label>
+                  <select className="input" value={form.surgeonId} onChange={(e) => setForm((f) => ({ ...f, surgeonId: e.target.value }))} aria-label="Surgeon">
+                    <option value="">Select surgeon…</option>
+                    {doctors.map((d: any) => (
+                      <option key={d.id} value={d.id}>{personName(d.user) || d.id}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label className="label">Assistant Surgeon</label>
+                  <select className="input" value={form.assistantId} onChange={(e) => setForm((f) => ({ ...f, assistantId: e.target.value }))} aria-label="Assistant surgeon">
+                    <option value="">Select assistant…</option>
+                    {doctors.map((d: any) => (
+                      <option key={d.id} value={d.id}>{personName(d.user) || d.id}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label className="label">Anesthetist</label>
+                  <select className="input" value={form.anesthetistId} onChange={(e) => setForm((f) => ({ ...f, anesthetistId: e.target.value }))} aria-label="Anesthetist">
+                    <option value="">Select anesthetist…</option>
+                    {doctors.map((d: any) => (
+                      <option key={d.id} value={d.id}>{personName(d.user) || d.id}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label className="label">Attending Nurses</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      className="input"
+                      type="text"
+                      placeholder="Enter nurse name…"
+                      value={form.nurseInput}
+                      onChange={(e) => setForm((f) => ({ ...f, nurseInput: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addNurse(); } }}
+                      aria-label="Nurse name"
+                    />
+                    <button type="button" className="btn" onClick={addNurse}>Add</button>
+                  </div>
+                  {form.nurses.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                      {form.nurses.map((n: any) => (
+                        <span key={n.id} className="badge" style={{ background: 'var(--primary)', color: '#fff' }}>
+                          {n.name}
+                          <button
+                            type="button"
+                            aria-label={`Remove ${n.name}`}
+                            onClick={() => removeNurse(n.id)}
+                            style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', marginLeft: 6, fontWeight: 700 }}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="field">
+                  <label className="label">OT Room</label>
+                  <select className="input" value={form.otRoom} onChange={(e) => setForm((f) => ({ ...f, otRoom: e.target.value }))} aria-label="OT room">
+                    <option value="">Select room…</option>
+                    {OT_ROOMS.map((r) => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label className="label">Surgery Date<span style={{ color: 'var(--danger)' }}> *</span></label>
+                  <input
+                    className="input"
+                    type="date"
+                    value={form.date}
+                    onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                    aria-label="Surgery date"
+                  />
+                </div>
+
+                <div className="field">
+                  <label className="label">Start Time</label>
+                  <input
+                    className="input"
+                    type="time"
+                    value={form.startTime}
+                    onChange={(e) => setForm((f) => ({ ...f, startTime: e.target.value }))}
+                    aria-label="Start time"
+                  />
+                </div>
+
+                <div className="field">
+                  <label className="label">End Time</label>
+                  <input
+                    className="input"
+                    type="time"
+                    value={form.endTime}
+                    onChange={(e) => setForm((f) => ({ ...f, endTime: e.target.value }))}
+                    aria-label="End time"
+                  />
+                </div>
+              </div>
+
+              {formMsg && (
+                <div className={String(formMsg).toLowerCase().includes('success') ? 'alert alert-success' : 'alert alert-error'} role="status">
+                  {formMsg}
+                </div>
+              )}
+
+              <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+                <button type="button" className="btn" onClick={submitSchedule} disabled={saving}>
+                  {saving ? 'Scheduling…' : 'Schedule Surgery'}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ background: 'var(--border)', color: 'inherit' }}
+                  onClick={() => { setShowSchedule(false); setFormMsg(''); }}
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="table-wrap" style={{ marginBottom: 16 }}>
             <table className="table">
               <thead>
@@ -281,29 +604,43 @@ export default function OtPage() {
                   <th>Patient</th>
                   <th>Procedure</th>
                   <th>Surgeon</th>
+                  <th>Team</th>
                   <th>OT Room</th>
                   <th>Time</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {scheduleList.map((c) => (
-                  <tr key={c.id}>
-                    <td><strong>{personName(c.patient) || c.patientId || '—'}</strong></td>
-                    <td>{c.procedureName || '—'}</td>
-                    <td>{personName(c.surgeon) || c.surgeonId || '—'}</td>
-                    <td>{c.otRoom || 'Unassigned'}</td>
-                    <td>{c.startTime || '—'}{c.endTime ? ` – ${c.endTime}` : ''}</td>
-                    <td>
-                      <span className={`badge ${STATUS_TONES[String(c.status).toUpperCase()] || 'badge-gray'}`}>
-                        {String(c.status || 'UNKNOWN').replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {scheduleList.map((c) => {
+                  const nurses = Array.isArray(c.nurses)
+                    ? c.nurses.map((n: any) => (typeof n === 'string' ? n : n?.name)).filter(Boolean).join(', ')
+                    : '';
+                  const date = c.scheduledDate ? new Date(c.scheduledDate).toLocaleDateString() : '—';
+                  return (
+                    <tr key={c.id}>
+                      <td><strong>{personName(c.patient) || c.patientId || '—'}</strong></td>
+                      <td>{c.procedureName || '—'}</td>
+                      <td>{personName(c.surgeon) || c.surgeonId || '—'}</td>
+                      <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                        {[
+                          c.anesthesiaType ? `Anes: ${c.anesthesiaType}` : '',
+                          personName(c.anesthetist) ? `Anes: ${personName(c.anesthetist)}` : '',
+                          nurses ? `Nurses: ${nurses}` : '',
+                        ].filter(Boolean).join(' · ') || '—'}
+                      </td>
+                      <td>{c.otRoom || 'Unassigned'}</td>
+                      <td>{date} · {c.startTime || '—'}{c.endTime ? ` – ${c.endTime}` : ''}</td>
+                      <td>
+                        <span className={`badge ${STATUS_TONES[String(c.status).toUpperCase()] || 'badge-gray'}`}>
+                          {String(c.status || 'UNKNOWN').replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {!scheduleList.length && (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No OT cases scheduled.</td>
+                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No OT cases scheduled.</td>
                   </tr>
                 )}
               </tbody>

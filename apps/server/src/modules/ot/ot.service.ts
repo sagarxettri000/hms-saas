@@ -16,6 +16,7 @@ export interface CreateOtCaseDto {
   surgeonId?: string;
   assistantId?: string;
   anesthetistId?: string;
+  nurses?: string[] | Array<{ id?: string; name: string }>;
   otRoom?: string;
   scheduledDate?: Date | string;
   startTime?: string;
@@ -87,6 +88,7 @@ export class OtService {
         surgeonId: dto.surgeonId,
         assistantId: dto.assistantId,
         anesthetistId: dto.anesthetistId,
+        nurses: Array.isArray(dto.nurses) ? dto.nurses : undefined,
         otRoom: dto.otRoom,
         scheduledDate: dto.scheduledDate
           ? new Date(dto.scheduledDate)
@@ -131,6 +133,9 @@ export class OtService {
           patient: {
             select: { id: true, firstName: true, lastName: true, mrn: true },
           },
+          surgeon: { include: { user: { select: { firstName: true, lastName: true } } } },
+          assistant: { include: { user: { select: { firstName: true, lastName: true } } } },
+          anesthetist: { include: { user: { select: { firstName: true, lastName: true } } } },
         },
         orderBy: { scheduledDate: "desc" },
         skip: (page - 1) * limit,
@@ -145,7 +150,12 @@ export class OtService {
   async findById(tenantId: string, id: string) {
     const ot = await this.prisma.oTCase.findFirst({
       where: { id, tenantId },
-      include: { patient: true },
+      include: {
+        patient: true,
+        surgeon: { include: { user: { select: { firstName: true, lastName: true } } } },
+        assistant: { include: { user: { select: { firstName: true, lastName: true } } } },
+        anesthetist: { include: { user: { select: { firstName: true, lastName: true } } } },
+      },
     });
     if (!ot) throw new NotFoundException("OT case not found");
     return ot;
@@ -224,6 +234,9 @@ export class OtService {
         patient: {
           select: { id: true, firstName: true, lastName: true, mrn: true },
         },
+        surgeon: { include: { user: { select: { firstName: true, lastName: true } } } },
+        assistant: { include: { user: { select: { firstName: true, lastName: true } } } },
+        anesthetist: { include: { user: { select: { firstName: true, lastName: true } } } },
       },
       orderBy: { scheduledDate: "asc" },
     });

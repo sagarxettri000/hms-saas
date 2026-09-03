@@ -260,7 +260,7 @@ export default function QualityPage() {
         <>
           <div className="toolbar" style={{ justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{incidents.length} incidents</span>
-            <button className="btn btn-sm" onClick={() => setShowCreate(true)}>+ Report Incident</button>
+            <button type="button" className="btn btn-sm" onClick={() => setShowCreate(true)}>+ Report Incident</button>
           </div>
 
           {error && <div className="banner-danger">{error}</div>}

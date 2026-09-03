@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/hooks';
@@ -45,6 +46,10 @@ function daysAdmitted(a: any): number {
   const start = a.admissionDate ? new Date(a.admissionDate).getTime() : Date.now();
   const end = a.dischargeDate ? new Date(a.dischargeDate).getTime() : Date.now();
   return Math.max(0, Math.floor((end - start) / 86400000));
+}
+
+function formatTime(ms: number): string {
+  return new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
 const BED_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
@@ -112,6 +117,29 @@ export default function NursingPage() {
   const [handoverSavedMsg, setHandoverSavedMsg] = useState('');
 
   const [sortBy, setSortBy] = useState<'ward' | 'date'>('ward');
+
+  const [trackerQuery, setTrackerQuery] = useState('');
+  const [trackerFilter, setTrackerFilter] = useState<'all' | 'icu' | 'first3' | 'highrisk' | 'stable'>('all');
+  const [trackingEnrich, setTrackingEnrich] = useState<Record<string, { vitals: any[]; meds: any[] }>>({});
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [trackingError, setTrackingError] = useState('');
+
+  const router = useRouter();
+
+  const gotoQuickAction = (action: 'vitals' | 'notes' | 'medadmin', a: any) => {
+    if (action === 'vitals') {
+      setPatientId(a.patientId);
+      setTab('vitals');
+    } else if (action === 'notes') {
+      setNotesPatientId(a.patientId);
+      setNotesAdmissionId(a.id);
+      setTab('notes');
+    } else if (action === 'medadmin') {
+      setMarPatientId(a.patientId);
+      setMarAdmissionId(a.id);
+      setTab('medadmin');
+    }
+  };
 
   const [board, setBoard] = useState<any>(null);
   const [boardWard, setBoardWard] = useState<string>('all');
@@ -333,6 +361,44 @@ export default function NursingPage() {
     };
   }, [tab, admissions, wardOf]);
 
+  const trackingKeyRef = useRef('');
+
+  const trackingEnrichEffect = useCallback(async () => {
+    if (admissions.length === 0) {
+      setTrackingEnrich({});
+      setTrackingLoading(false);
+      return;
+    }
+    const key = admissions.map((a: any) => a.id).join('|');
+    if (key === trackingKeyRef.current) return;
+    trackingKeyRef.current = key;
+    setTrackingLoading(true);
+    setTrackingError('');
+    const map: Record<string, { vitals: any[]; meds: any[] }> = {};
+    await Promise.allSettled(
+      admissions.map(async (a: any) => {
+        try {
+          const [v, m] = await Promise.all([
+            api(`/encounters/vitals/patient/${a.patientId}`).catch(() => []),
+            api(`/admissions/${a.id}/medications`).catch(() => []),
+          ]);
+          map[a.id] = { vitals: toList(v), meds: toList(m) };
+        } catch {
+          map[a.id] = { vitals: [], meds: [] };
+        }
+      }),
+    );
+    setTrackingEnrich(map);
+    if (Object.keys(map).length === 0 && admissions.length > 0) {
+      setTrackingError('Patient clinical data could not be loaded.');
+    }
+    setTrackingLoading(false);
+  }, [admissions]);
+
+  useEffect(() => {
+    if (tab === 'tracking') trackingEnrichEffect();
+  }, [tab, trackingEnrichEffect]);
+
   const resetVitalsForm = () => {
     setVitalsForm({ bloodPressureSystolic: '', bloodPressureDiastolic: '', temperature: '', pulse: '', respiratoryRate: '', oxygenSaturation: '', weight: '', painScore: '', bloodGlucose: '', notes: '' });
     setShowRecordVitals(false);
@@ -482,6 +548,85 @@ export default function NursingPage() {
 
   const statusBadgeTone = (s: string) =>
     ({ ADMITTED: 'badge-blue', TRANSFERRED: 'badge-purple', PENDING: 'badge-yellow' }[String(s).toUpperCase()] || 'badge-gray');
+
+  const vitalOf = (a: any): any => {
+    const vit = trackingEnrich[a.id]?.vitals;
+    return Array.isArray(vit) ? vit[0] : undefined;
+  };
+
+  const medsOf = (a: any): any[] => {
+    const m = trackingEnrich[a.id]?.meds;
+    return Array.isArray(m) ? m : [];
+  };
+
+  const num = (v: any): number | undefined =>
+    v === null || v === undefined || v === '' ? undefined : Number(v);
+
+  const isCriticalVitals = (a: any): boolean => {
+    const v = vitalOf(a);
+    if (!v) return false;
+    const hr = num(v.pulse);
+    const rr = num(v.respiratoryRate);
+    const spo2 = num(v.oxygenSaturation);
+    const temp = num(v.temperature);
+    if (spo2 !== undefined && spo2 < 90) return true;
+    if (hr !== undefined && (hr < 50 || hr > 120)) return true;
+    if (rr !== undefined && (rr < 8 || rr > 30)) return true;
+    if (temp !== undefined && temp > 39) return true;
+    return false;
+  };
+
+  const isIcu = (a: any): boolean => wardOf(a).toUpperCase().includes('ICU');
+
+  const categoryOf = (a: any): 'icu' | 'first3' | 'highrisk' | 'stable' => {
+    if (isIcu(a)) return 'icu';
+    if (daysAdmitted(a) <= 3) return 'first3';
+    if (isCriticalVitals(a)) return 'highrisk';
+    return 'stable';
+  };
+
+  const priorityOf = (a: any): { label: string; color: string; bg: string } => {
+    if (isIcu(a) || isCriticalVitals(a)) {
+      return { label: 'Critical', color: 'var(--danger)', bg: 'var(--danger-light)' };
+    }
+    if (daysAdmitted(a) <= 3) {
+      return { label: 'High', color: 'var(--warning)', bg: 'var(--warning-light)' };
+    }
+    return { label: 'Normal', color: 'var(--success)', bg: 'var(--success-light)' };
+  };
+
+  const alertsOf = (a: any): string[] => {
+    const alerts: string[] = [];
+    const bed = a.bedAllocations?.[0]?.bed;
+    if (bed?.bedType === 'ISOLATION') alerts.push('Isolation');
+    if (isCriticalVitals(a)) alerts.push('Critical vitals');
+    return alerts;
+  };
+
+  const nextMedOf = (a: any): string => {
+    const now = Date.now();
+    const next = medsOf(a)
+      .filter((m: any) => medStatusGroup(m) === 'DUE' && m.scheduledTime)
+      .map((m: any) => ({ m, t: new Date(m.scheduledTime).getTime() }))
+      .filter((x: any) => x.t >= now)
+      .sort((x: any, y: any) => x.t - y.t)[0];
+    if (!next) return '—';
+    return `${next.m.medicineName}${next.m.dose ? ` ${next.m.dose}` : ''} · ${formatTime(next.t)}`;
+  };
+
+  const lastActivityOf = (a: any): string => {
+    const v = vitalOf(a);
+    if (v?.recordedAt) return `Vitals ${formatTime(new Date(v.recordedAt).getTime())}`;
+    if (a.updatedAt) return `Admission ${formatTime(new Date(a.updatedAt).getTime())}`;
+    return '—';
+  };
+
+  const lastUpdatedOf = (a: any): string => {
+    const v = vitalOf(a);
+    if (v?.recordedAt) return formatDateTime(v.recordedAt);
+    if (a.updatedAt) return formatDateTime(a.updatedAt);
+    return '—';
+  };
 
   const renderSummary = () => (
     <div>
@@ -1218,50 +1363,182 @@ export default function NursingPage() {
     );
   };
 
-  const renderTracking = () => (
-    <div>
-      <div className="toolbar">
-        <select className="input" style={{ maxWidth: 220 }} value={sortBy} onChange={(e) => setSortBy(e.target.value as 'ward' | 'date')}>
-          <option value="ward">Sort by ward</option>
-          <option value="date">Sort by admission date</option>
-        </select>
-        <span style={{ display: 'flex', gap: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-          <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--danger)', borderRadius: 2, marginRight: 5 }} />ICU</span>
-          <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--warning)', borderRadius: 2, marginRight: 5 }} />First 3 days</span>
-          <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--success)', borderRadius: 2, marginRight: 5 }} />Stable</span>
-        </span>
-      </div>
+  const renderTracking = () => {
+    const term = trackerQuery.trim().toLowerCase();
+    const searched = term
+      ? trackedPatients.filter((a: any) => {
+          const bed = `${a.bedAllocations?.[0]?.bed?.bedNumber || ''} ${wardOf(a)}`;
+          const doc = doctorName(a.admittingDoctorId);
+          return [patientName(a.patient), a.patient?.mrn, a.patient?.id, a.admissionNumber, bed, doc]
+            .filter(Boolean)
+            .some((v: string) => String(v).toLowerCase().includes(term));
+        })
+      : trackedPatients;
 
-      {trackedPatients.length === 0 ? (
-        <div className="empty">No admitted patients to track.</div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-          {trackedPatients.map((a) => {
-            const u = urgencyOf(a);
-            const days = daysAdmitted(a);
-            return (
-              <div
-                key={a.id}
-                className="card"
-                style={{ boxShadow: 'none', marginBottom: 0, borderLeft: `4px solid ${u.color}`, background: u.bg }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <strong style={{ fontSize: 14.5 }}>{patientName(a.patient)}</strong>
-                  <span className={`badge ${statusBadgeTone(a.status)}`}>{String(a.status).replace(/_/g, ' ')}</span>
-                </div>
-                <div style={{ fontSize: 12.5, display: 'grid', gap: 3 }}>
-                  <span>Bed/Ward: {a.bedAllocations?.[0]?.bed?.bedNumber || '—'} / {wardOf(a)}</span>
-                  <span>Admitted: {formatDate(a.admissionDate)}</span>
-                  <span>Days admitted: {days}</span>
-                  <span>Doctor: {doctorName(a.admittingDoctorId)}</span>
-                </div>
-              </div>
-            );
-          })}
+    const countOf = (cat: 'icu' | 'first3' | 'highrisk' | 'stable') =>
+      searched.filter((a: any) => categoryOf(a) === cat).length;
+
+    const visible =
+      trackerFilter === 'all'
+        ? searched
+        : searched.filter((a: any) => categoryOf(a) === trackerFilter);
+
+    const chips: { key: 'all' | 'icu' | 'first3' | 'highrisk' | 'stable'; label: string; value: number }[] = [
+      { key: 'all', label: 'Total', value: searched.length },
+      { key: 'icu', label: 'ICU', value: countOf('icu') },
+      { key: 'first3', label: 'First 3 Days', value: countOf('first3') },
+      { key: 'highrisk', label: 'High Risk', value: countOf('highrisk') },
+      { key: 'stable', label: 'Stable', value: countOf('stable') },
+    ];
+
+    return (
+      <div>
+        <div className="toolbar" style={{ flexWrap: 'wrap' }}>
+          <input
+            className="input"
+            type="search"
+            placeholder="Search name, MRN, bed, ward, doctor…"
+            aria-label="Search patients"
+            value={trackerQuery}
+            onChange={(e) => setTrackerQuery(e.target.value)}
+            style={{ maxWidth: 320, flex: '1 1 220px' }}
+          />
+          <select
+            className="input"
+            style={{ maxWidth: 220 }}
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as 'ward' | 'date')}
+            aria-label="Sort patients"
+          >
+            <option value="ward">Sort by ward</option>
+            <option value="date">Sort by admission date</option>
+          </select>
+          <span style={{ display: 'flex', gap: 12, fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--danger)', borderRadius: 2, marginRight: 5 }} />ICU</span>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--warning)', borderRadius: 2, marginRight: 5 }} />First 3 days</span>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--danger)', borderRadius: 2, marginRight: 5 }} />Critical</span>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--success)', borderRadius: 2, marginRight: 5 }} />Stable</span>
+          </span>
         </div>
-      )}
-    </div>
-  );
+
+        <div role="group" aria-label="Patient summary" className="stat-grid" style={{ marginBottom: 16 }}>
+          {chips.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              className="stat-card"
+              onClick={() => setTrackerFilter(c.key)}
+              aria-pressed={trackerFilter === c.key}
+              title={`Filter to ${c.label}`}
+              style={{
+                textAlign: 'left',
+                cursor: 'pointer',
+                border: trackerFilter === c.key ? '2px solid var(--primary)' : '1px solid var(--border)',
+              }}
+            >
+              <div className="stat-label">{c.label}</div>
+              <div className="stat-value">{c.value}</div>
+            </button>
+          ))}
+        </div>
+
+        {trackingLoading ? (
+          <div className="loading">Loading patient data…</div>
+        ) : null}
+
+        {trackingError && (
+          <div className="alert" role="alert" style={{ color: 'var(--danger)' }}>{trackingError}</div>
+        )}
+
+        {!trackingLoading && trackedPatients.length === 0 ? (
+          <div className="empty">No admitted patients to track.</div>
+        ) : !trackingLoading && visible.length === 0 ? (
+          <div className="empty">No patients match your search or filter.</div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+            {visible.map((a) => {
+              const u = urgencyOf(a);
+              const p = priorityOf(a);
+              const days = daysAdmitted(a);
+              const cat = categoryOf(a);
+              const alerts = alertsOf(a);
+              const v = vitalOf(a);
+              const mrn = a.patient?.mrn || a.patient?.id || '—';
+              const bp = v && (v.bloodPressureSystolic || v.bloodPressureDiastolic)
+                ? `${v.bloodPressureSystolic ?? '—'}/${v.bloodPressureDiastolic ?? '—'}`
+                : '—';
+              const hr = v && v.pulse !== undefined && v.pulse !== null ? String(v.pulse) : '—';
+              const spo2 = v && v.oxygenSaturation !== undefined && v.oxygenSaturation !== null
+                ? String(v.oxygenSaturation) : '—';
+              const temp = v && v.temperature !== undefined && v.temperature !== null
+                ? String(v.temperature) : '—';
+              const rr = v && v.respiratoryRate !== undefined && v.respiratoryRate !== null
+                ? String(v.respiratoryRate) : '—';
+              return (
+                <div
+                  key={a.id}
+                  className="card"
+                  style={{ boxShadow: 'none', marginBottom: 0, borderLeft: `4px solid ${cat === 'highrisk' ? 'var(--danger)' : u.color}`, background: u.bg }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
+                    <strong style={{ fontSize: 14.5 }}>{patientName(a.patient)}</strong>
+                    <span className={`badge ${statusBadgeTone(a.status)}`}>{String(a.status).replace(/_/g, ' ')}</span>
+                  </div>
+
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                    <span>MRN {mrn}</span>
+                    {a.admissionNumber && <span style={{ marginLeft: 8 }}>Adm {a.admissionNumber}</span>}
+                  </div>
+
+                  <div className="quick-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 8 }}>
+                    {[
+                      ['BP', bp],
+                      ['HR', hr],
+                      ['SpO₂', spo2],
+                    ].map(([l, x]) => (
+                      <div key={l} style={{ background: 'var(--surface)', borderRadius: 8, padding: '6px 4px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 10.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{l}</div>
+                        <div style={{ fontSize: 14, fontWeight: 700 }}>{x}</div>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                      <div style={{ fontSize: 10.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>Temp / RR</div>
+                      <div style={{ fontSize: 13.5, fontWeight: 700 }}>{temp} / {rr}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                    <span className="badge" style={{ background: p.bg, color: p.color }}>{p.label}</span>
+                    {alerts.map((al) => (
+                      <span key={al} className="badge" style={{ background: '#f59e0b', color: '#fff' }}>{al}</span>
+                    ))}
+                  </div>
+
+                  <div style={{ fontSize: 12.5, display: 'grid', gap: 3, marginBottom: 8 }}>
+                    <span>Bed/Ward: {a.bedAllocations?.[0]?.bed?.bedNumber || '—'} / {wardOf(a)}</span>
+                    <span>Doctor: {doctorName(a.admittingDoctorId)}</span>
+                    <span>Admitted {formatDate(a.admissionDate)} · Day {days || 1}</span>
+                    <span>Next: {nextMedOf(a)}</span>
+                    <span>Last activity: {lastActivityOf(a)}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>Updated {lastUpdatedOf(a)}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                    <button type="button" className="btn btn-sm" onClick={() => router.push(`/patients/${a.patientId}`)}>
+                      View Patient
+                    </button>
+                    <button type="button" className="btn btn-sm" onClick={() => gotoQuickAction('vitals', a)}>Vitals</button>
+                    <button type="button" className="btn btn-sm" onClick={() => gotoQuickAction('notes', a)}>Notes</button>
+                    <button type="button" className="btn btn-sm" onClick={() => gotoQuickAction('medadmin', a)}>Med Admin</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderBoard = () => {
     const summary = board?.summary || {};

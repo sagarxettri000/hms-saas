@@ -505,22 +505,49 @@ function CreateMaintenanceModal({ onClose, onDone, wards, beds }: { onClose: () 
   const [error, setError] = useState('');
   const [allBeds, setAllBeds] = useState<any[]>([]);
   const [loadingBeds, setLoadingBeds] = useState(false);
+  const [allWards, setAllWards] = useState<any[]>([]);
 
   useEffect(() => {
-    setLoadingBeds(true);
-    api('/bed-management/beds?limit=200')
-      .then((res: any) => {
-        const data = res?.data?.data ?? res?.data ?? [];
-        setAllBeds(Array.isArray(data) ? data : data.data ?? []);
-      })
-      .catch(() => setAllBeds([]))
-      .finally(() => setLoadingBeds(false));
+    let active = true;
+    async function loadData() {
+      setLoadingBeds(true);
+      try {
+        const [wardRes, bedRes] = await Promise.all([
+          api('/bed-management/wards?limit=500'),
+          api('/bed-management/beds?limit=1'),
+        ]);
+        if (!active) return;
+        const wardPayload = wardRes?.data ?? wardRes;
+        const wardList = Array.isArray(wardPayload) ? wardPayload : wardPayload?.data ?? [];
+        setAllWards(Array.isArray(wardList) ? wardList : wardList.data ?? []);
+
+        const bedPayload = bedRes?.data ?? bedRes;
+        const total = Number(bedPayload?.total ?? 0);
+        const collected: any[] = [];
+        const pageSize = 500;
+        const pages = Math.max(1, Math.ceil(total / pageSize));
+        for (let p = 1; p <= pages; p++) {
+          const r = await api(`/bed-management/beds?limit=${pageSize}&page=${p}`);
+          const data = r?.data?.data ?? r?.data ?? [];
+          const list = Array.isArray(data) ? data : data.data ?? [];
+          collected.push(...list);
+        }
+        setAllBeds(collected);
+      } catch {
+        if (active) setAllBeds([]);
+      } finally {
+        if (active) setLoadingBeds(false);
+      }
+    }
+    loadData();
+    return () => { active = false; };
   }, []);
 
+  const refWards = allWards.length > 0 ? allWards : wards;
   const bedOptions = allBeds.length > 0 ? allBeds : beds;
   const visibleBeds = values.wardId ? bedOptions.filter((b: any) => b.wardId === values.wardId) : bedOptions;
 
-  const wardGroups = wards
+  const wardGroups = refWards
     .map((w: any) => ({
       ward: w,
       beds: visibleBeds.filter((b: any) => b.wardId === w.id),
@@ -572,8 +599,8 @@ function CreateMaintenanceModal({ onClose, onDone, wards, beds }: { onClose: () 
             <div className="field">
               <label className="label">Ward</label>
               <select className="input" value={values.wardId} onChange={(e) => { setValues({ ...values, wardId: e.target.value, bedId: '' }); }}>
-                <option value="">-- Select ward --</option>
-                {wards.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                <option value="">{loadingBeds ? 'Loading wards...' : '-- Select ward --'}</option>
+                {refWards.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
             </div>
             <div className="field">

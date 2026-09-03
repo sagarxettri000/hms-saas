@@ -162,7 +162,8 @@ export default function DischargeModal({
   async function loadExistingDraft() {
     try {
       const res = await api(`/billing/discharge/bills/draft/${admission.id}`);
-      if (res?.id) applyBill(res);
+      const b = res?.data ?? res;
+      if (b?.id) applyBill(b);
     } catch {
       /* no draft */
     }

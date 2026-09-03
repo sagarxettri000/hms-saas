@@ -11,6 +11,7 @@ import { Observable } from "rxjs";
 import { NotificationsHub, NotificationEvent } from "./notifications.hub";
 import { JwtService } from "@nestjs/jwt";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { Public } from "../../common/decorators/permissions.decorator";
 
 @ApiTags("Notifications")
 @Controller("notifications")
@@ -37,6 +38,7 @@ export class NotificationsStreamController {
   }
 
   @Sse("stream")
+  @Public()
   @ApiOperation({ summary: "SSE stream for real-time notifications" })
   stream(@Query("token") token: string): Observable<MessageEvent> {
     return new Observable<MessageEvent>((subscriber) => {

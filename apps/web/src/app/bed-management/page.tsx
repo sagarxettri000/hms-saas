@@ -520,6 +520,14 @@ function CreateMaintenanceModal({ onClose, onDone, wards, beds }: { onClose: () 
   const bedOptions = allBeds.length > 0 ? allBeds : beds;
   const visibleBeds = values.wardId ? bedOptions.filter((b: any) => b.wardId === values.wardId) : bedOptions;
 
+  const wardGroups = wards
+    .map((w: any) => ({
+      ward: w,
+      beds: visibleBeds.filter((b: any) => b.wardId === w.id),
+    }))
+    .filter((g) => g.beds.length > 0);
+  const ungroupedBeds = visibleBeds.filter((b: any) => !b.wardId);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -572,7 +580,16 @@ function CreateMaintenanceModal({ onClose, onDone, wards, beds }: { onClose: () 
               <label className="label">Bed</label>
               <select className="input" value={values.bedId} onChange={(e) => setValues({ ...values, bedId: e.target.value })}>
                 <option value="">{loadingBeds ? 'Loading beds...' : '-- Select bed --'}</option>
-                {visibleBeds.map((b: any) => <option key={b.id} value={b.id}>{b.bedNumber} ({b.ward?.name || 'N/A'})</option>)}
+                {wardGroups.map((g) => (
+                  <optgroup key={g.ward.id} label={g.ward.name}>
+                    {g.beds.map((b: any) => <option key={b.id} value={b.id}>{b.bedNumber} {b.bedType ? `(${BED_TYPES.find((t) => t.value === b.bedType)?.label || b.bedType})` : ''}</option>)}
+                  </optgroup>
+                ))}
+                {ungroupedBeds.length > 0 && (
+                  <optgroup label={values.wardId ? 'Selected Ward' : 'Other'}>
+                    {ungroupedBeds.map((b: any) => <option key={b.id} value={b.id}>{b.bedNumber} ({b.ward?.name || 'No Ward'})</option>)}
+                  </optgroup>
+                )}
               </select>
             </div>
             <div className="field field-full">

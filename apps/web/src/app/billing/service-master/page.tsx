@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/hooks';
 import type { ApiResponse, Row } from '@/lib/types';
@@ -174,7 +173,7 @@ export default function ServiceMasterPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Service Master</h1>
@@ -375,6 +374,6 @@ export default function ServiceMasterPage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

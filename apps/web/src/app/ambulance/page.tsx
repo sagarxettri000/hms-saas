@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 
 interface CallEvent {
@@ -309,14 +308,14 @@ export default function AmbulancePage() {
 
   if (!loaded) {
     return (
-      <AppShell>
+      <>
         <div className="loading">Loading dispatch board...</div>
-      </AppShell>
+      </>
     );
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page">
         <div className="page-header">
           <div>
@@ -592,6 +591,6 @@ export default function AmbulancePage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </>
   );
 }

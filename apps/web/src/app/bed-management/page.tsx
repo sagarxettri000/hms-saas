@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/hooks';
-import AppShell from '@/components/AppShell';
 
 const BED_TYPES = [
   { value: 'GENERAL', label: 'General' },
@@ -822,7 +821,7 @@ export default function BedManagementPage() {
   const typeStats = dashboard?.byType || [];
 
   return (
-    <AppShell>
+    <>
       <div className="page">
         <div className="page-header">
           <div>
@@ -1274,6 +1273,6 @@ export default function BedManagementPage() {
       {showCreateWard && <CreateWardModal onClose={() => setShowCreateWard(false)} onDone={() => { setShowCreateWard(false); refreshAll(); }} />}
       {showMaintenance && <CreateMaintenanceModal onClose={() => setShowMaintenance(false)} onDone={() => { setShowMaintenance(false); refreshAll(); }} wards={wards} beds={beds} />}
       {showBedDetail && <BedDetailModal bedId={showBedDetail} onClose={() => setShowBedDetail(null)} />}
-    </AppShell>
+    </>
   );
 }

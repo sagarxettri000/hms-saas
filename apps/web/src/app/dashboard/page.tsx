@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import AppShell from '@/components/AppShell';
 import { formatMoney, formatDate, formatDateTime, badgeTone } from '@/lib/hooks';
 
 interface Stat {
@@ -733,7 +732,7 @@ export default function DashboardPage() {
     : 'Workspace';
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1>{greeting}, {userName || 'User'}</h1>
@@ -867,6 +866,6 @@ export default function DashboardPage() {
           </div>
         </>
       )}
-    </AppShell>
+    </>
   );
 }

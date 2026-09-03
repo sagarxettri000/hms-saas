@@ -5,7 +5,6 @@ import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/hooks';
 import { DOCTOR_REF, PATIENT_REF } from '@/lib/options';
 import ModulePage from '@/components/ModulePage';
-import AppShell from '@/components/AppShell';
 
 type Tab = 'orders' | 'tests' | 'summary' | 'samples' | 'tat';
 
@@ -338,21 +337,21 @@ export default function LaboratoryPage() {
   if (detailId) {
     if (loadingDetail)
       return (
-        <AppShell>
+        <>
           <button className="btn btn-secondary btn-sm" onClick={() => setDetailId(null)} style={{ marginBottom: 12 }}>← Back to Laboratory Orders</button>
           <div className="loading">Loading order details...</div>
-        </AppShell>
+        </>
       );
     if (!detail)
       return (
-        <AppShell>
+        <>
           <button className="btn btn-secondary btn-sm" onClick={() => setDetailId(null)} style={{ marginBottom: 12 }}>← Back to Laboratory Orders</button>
           <div className="banner-danger">Order not found</div>
-        </AppShell>
+        </>
       );
 
     return (
-      <AppShell>
+      <>
         <div style={{ marginBottom: 16 }}>
           <div className="row-between">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -526,7 +525,7 @@ export default function LaboratoryPage() {
             </div>
           </div>
         )}
-      </AppShell>
+      </>
     );
   }
 
@@ -607,7 +606,7 @@ export default function LaboratoryPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <TabStrip active={tab} onChange={setTab} />
 
       {tab === 'summary' && (
@@ -860,6 +859,6 @@ export default function LaboratoryPage() {
           )}
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/hooks';
-import AppShell from '@/components/AppShell';
 
 const DISCHARGE_READY_KEY = 'discharge_ready';
 
@@ -456,7 +455,7 @@ export default function WardDashboardPage() {
   })();
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Ward Dashboard</h1>
@@ -556,6 +555,6 @@ export default function WardDashboardPage() {
       {tab === 'discharge' && <DischargeTracker />}
 
       {tab === 'grid' && <BedStatusGrid beds={beds} loading={loadingBeds} />}
-    </AppShell>
+    </>
   );
 }

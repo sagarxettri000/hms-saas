@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 
 export default function ChangePasswordPage() {
@@ -43,7 +42,7 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1>Change Password</h1>
@@ -109,6 +108,6 @@ export default function ChangePasswordPage() {
           </button>
         </form>
       </div>
-    </AppShell>
+    </>
   );
 }

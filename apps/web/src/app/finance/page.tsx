@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import AppShell from '@/components/AppShell';
 import { formatMoney, formatDate, formatDateTime } from '@/lib/hooks';
 
 type Tab = 'overview' | 'receivables' | 'revenue' | 'collections';
@@ -307,7 +306,7 @@ export default function FinancePage() {
   const cashierMax = Math.max(1, ...cashierRows.map((r) => r.total));
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1>Finance</h1>
@@ -727,6 +726,6 @@ export default function FinancePage() {
           )}
         </>
       )}
-    </AppShell>
+    </>
   );
 }

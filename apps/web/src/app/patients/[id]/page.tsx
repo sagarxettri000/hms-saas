@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import AppShell from '@/components/AppShell';
 import EncounterModal from '@/components/EncounterModal';
 import AdmitModal from '@/components/AdmitModal';
 import DischargeModal from '@/components/DischargeModal';
@@ -270,9 +269,9 @@ export default function PatientDetailPage() {
     }
   }
 
-  if (!patient && loading) return <AppShell><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="loading">Loading patient record…</div></AppShell>;
-  if (error && !patient) return <AppShell><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="banner-danger">{error}</div></AppShell>;
-  if (!patient) return <AppShell><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="empty">Patient not found.</div></AppShell>;
+  if (!patient && loading) return <><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="loading">Loading patient record…</div></>;
+  if (error && !patient) return <><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="banner-danger">{error}</div></>;
+  if (!patient) return <><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="empty">Patient not found.</div></>;
 
   const fullName = [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(' ');
   const age = patient.age ?? '—';
@@ -523,7 +522,7 @@ export default function PatientDetailPage() {
   const activeAdmission = (data.admissions || []).find((a: Row) => a.status === 'ADMITTED' && !a.isDischarged);
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <button className="btn btn-ghost btn-sm" onClick={() => router.back()}>
@@ -836,6 +835,6 @@ export default function PatientDetailPage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

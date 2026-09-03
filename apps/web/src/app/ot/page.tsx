@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 
 interface OtCase {
@@ -361,7 +360,7 @@ export default function OtPage() {
   })();
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1>Operation Theatres</h1>
@@ -878,6 +877,6 @@ export default function OtPage() {
           </div>
         </>
       )}
-    </AppShell>
+    </>
   );
 }

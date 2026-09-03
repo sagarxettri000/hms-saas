@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AppShell from '@/components/AppShell';
 import EntityPage from '@/components/EntityPage';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/hooks';
@@ -307,7 +306,7 @@ export default function HrPage() {
   const compliancePct = Math.round((completedPrograms / TRAINING_PROGRAMS.length) * 100);
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1>HR &amp; Staff</h1>
@@ -730,6 +729,6 @@ export default function HrPage() {
           </div>
         </>
       )}
-    </AppShell>
+    </>
   );
 }

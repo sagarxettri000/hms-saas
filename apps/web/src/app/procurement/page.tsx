@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AppShell from '@/components/AppShell';
 import EntityPage from '@/components/EntityPage';
 import { api } from '@/lib/api';
 import { formatDate, formatMoney } from '@/lib/hooks';
@@ -171,7 +170,7 @@ export default function ProcurementPage() {
   };
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1>Procurement</h1>
@@ -430,6 +429,6 @@ export default function ProcurementPage() {
           )}
         </>
       )}
-    </AppShell>
+    </>
   );
 }

@@ -4,7 +4,6 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { formatMoney, formatDate, formatDateTime } from '@/lib/hooks';
-import AppShell from '@/components/AppShell';
 import ReceiptModal from '@/components/ReceiptModal';
 import PatientPrescriptions from '@/components/PatientPrescriptions';
 
@@ -1440,7 +1439,7 @@ function PharmacyPageInner() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Pharmacy</h1>
@@ -1462,7 +1461,7 @@ function PharmacyPageInner() {
       {activeTab === 'stores' && <StoresTab />}
       {activeTab === 'alerts' && <AlertsTab />}
       {activeTab === 'expiry' && <ExpiryTab />}
-    </AppShell>
+    </>
   );
 }
 

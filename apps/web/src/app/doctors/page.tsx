@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 import { formatDate, formatDateTime, formatMoney } from '@/lib/hooks';
 import { GENDERS } from '@/lib/options';
@@ -826,7 +825,7 @@ export default function DoctorsPage() {
   );
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Doctors</h1>
@@ -916,6 +915,6 @@ export default function DoctorsPage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

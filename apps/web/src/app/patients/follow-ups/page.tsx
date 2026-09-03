@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import AppShell from '@/components/AppShell';
 import AsyncSearchSelect from '@/components/AsyncSearchSelect';
 import { formatDate } from '@/lib/hooks';
 import type { ApiResponse, Row } from '@/lib/types';
@@ -151,7 +150,7 @@ export default function FollowUpsPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Follow-ups</h1>
@@ -334,6 +333,6 @@ export default function FollowUpsPage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

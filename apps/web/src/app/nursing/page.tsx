@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/hooks';
 
@@ -1737,7 +1736,7 @@ export default function NursingPage() {
   };
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Nursing</h1>
@@ -1760,6 +1759,6 @@ export default function NursingPage() {
       {tab === 'medadmin' && renderMedAdmin()}
       {tab === 'handover' && renderHandover()}
       {tab === 'tracking' && renderTracking()}
-    </AppShell>
+    </>
   );
 }

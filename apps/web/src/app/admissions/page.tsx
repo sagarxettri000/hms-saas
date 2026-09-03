@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import AppShell from '@/components/AppShell';
 import DischargeModal from '@/components/DischargeModal';
 import { api } from '@/lib/api';
 import { GENDERS } from '@/lib/options';
@@ -220,7 +219,7 @@ export default function AdmissionsPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Admit</h1>
@@ -488,6 +487,6 @@ export default function AdmissionsPage() {
           </div>
         </>
       )}
-    </AppShell>
+    </>
   );
 }

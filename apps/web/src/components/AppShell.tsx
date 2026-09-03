@@ -2,30 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import GlobalSearch from './GlobalSearch';
 import NotificationBell from './NotificationBell';
 import { api } from '@/lib/api';
 
-// Persist sidebar scroll position across route navigations.
-// AppShell (and its sidebar) is mounted inside each page, so without this the
-// sidebar scroll resets to the top every time a menu item is clicked.
-// sessionStorage survives full reloads too (not just SPA navigations).
-const SIDEBAR_SCROLL_KEY = 'hms:sidebar-scroll';
-
-function saveSidebarScroll(v: number) {
-  try {
-    sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(v));
-  } catch {}
-}
-
-function readSidebarScroll(): number {
-  try {
-    return Number(sessionStorage.getItem(SIDEBAR_SCROLL_KEY)) || 0;
-  } catch {
-    return 0;
-  }
-}
+// AppShell renders the persistent app shell. It now lives in the root layout so
+// the sidebar stays mounted across navigations (preserving its scroll position
+// natively with no flicker). Public/auth pages render children without the shell.
+const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password', '/select-tenant'];
 
 const ADMIN = ['HOSPITAL_ADMIN', 'HOSPITAL_OWNER'];
 const SUPER = ['PLATFORM_SUPER_ADMIN', 'IT_ADMIN'];
@@ -134,11 +119,13 @@ function canAccess(item: NavItem, role: string): boolean {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const isPublic = pathname === '/' || PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
   const [userName, setUserName] = useState('');
   const [tenantName, setTenantName] = useState('');
   const [role, setRole] = useState('');
 
   useEffect(() => {
+    if (isPublic) return;
     const tid = localStorage.getItem('tenantId');
     if (!tid) {
       const token = localStorage.getItem('accessToken');
@@ -168,9 +155,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       }).catch(() => {});
     }
     localStorage.clear();
-    try {
-      sessionStorage.removeItem(SIDEBAR_SCROLL_KEY);
-    } catch {}
     router.replace('/login');
   }
 
@@ -181,41 +165,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const denied = currentPage ? !canAccess(currentPage, role) : false;
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const sidebarRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    if (isPublic) return;
     setMenuOpen(false);
   }, [pathname]);
 
-  useLayoutEffect(() => {
-    const el = sidebarRef.current;
-    if (!el) return;
-    const target = readSidebarScroll();
-    if (target <= 0) return;
-    el.scrollTop = target;
-    // Re-apply after layout settles to survive post-mount resets (route change,
-    // hydration, late content height). Without this the sidebar can snap to top.
-    const raf = requestAnimationFrame(() => {
-      el.scrollTop = target;
-    });
-    const timer = setTimeout(() => {
-      el.scrollTop = target;
-    }, 80);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(timer);
-    };
-  }, [pathname]);
+  if (isPublic) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="shell">
       {menuOpen && <div className="sidebar-overlay open" onClick={() => setMenuOpen(false)} />}
       <aside
-        ref={sidebarRef}
         className={`sidebar ${menuOpen ? 'open' : ''}`}
-        onScroll={(e) => {
-          saveSidebarScroll(e.currentTarget.scrollTop);
-        }}
       >
         <div className="sidebar-brand">
           <span className="dot" />

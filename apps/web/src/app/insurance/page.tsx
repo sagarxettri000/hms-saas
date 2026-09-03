@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import AppShell from '@/components/AppShell';
 import EntityPage from '@/components/EntityPage';
 import { formatMoney, formatDate, formatDateTime } from '@/lib/hooks';
 import { PATIENT_REF } from '@/lib/options';
@@ -381,7 +380,7 @@ export default function InsurancePage() {
   const patientPolicyOptions = policies.filter((p) => p.patientId === claimForm.patientId);
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1>Insurance</h1>
@@ -882,6 +881,6 @@ export default function InsurancePage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

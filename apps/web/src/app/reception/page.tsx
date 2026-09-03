@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 
 interface Appointment {
@@ -407,7 +406,7 @@ export default function ReceptionPage() {
   })();
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1>Reception</h1>
@@ -866,6 +865,6 @@ export default function ReceptionPage() {
           </>
         )
       )}
-    </AppShell>
+    </>
   );
 }

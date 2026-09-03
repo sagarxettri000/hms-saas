@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import AppShell from '@/components/AppShell';
 import { badgeTone, formatDateTime, formatMoney, pick } from '@/lib/hooks';
 import type { Row } from '@/lib/types';
 
@@ -84,9 +83,9 @@ export default function DoctorDetailPage() {
     };
   }, [id]);
 
-  if (!doctor && loading) return <AppShell><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="loading">Loading doctor profile…</div></AppShell>;
-  if (error && !doctor) return <AppShell><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="banner-danger">{error}</div></AppShell>;
-  if (!doctor) return <AppShell><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="empty">Doctor not found.</div></AppShell>;
+  if (!doctor && loading) return <><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="loading">Loading doctor profile…</div></>;
+  if (error && !doctor) return <><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="banner-danger">{error}</div></>;
+  if (!doctor) return <><button className="btn btn-secondary btn-sm" onClick={() => router.back()} style={{ marginBottom: 12 }}>← Back</button><div className="empty">Doctor not found.</div></>;
 
   const fullName = [doctor.firstName, doctor.lastName].filter(Boolean).join(' ');
   const d = dashboard as any;
@@ -124,7 +123,7 @@ export default function DoctorDetailPage() {
     : [];
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <button className="btn btn-ghost btn-sm" onClick={() => router.back()}>
@@ -182,6 +181,6 @@ export default function DoctorDetailPage() {
       {active !== 'overview' && !(active === 'appointments' ? appointments.length : schedules.length) && (
         <div className="empty">No records in this section.</div>
       )}
-    </AppShell>
+    </>
   );
 }

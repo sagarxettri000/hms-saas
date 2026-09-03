@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 
 interface Equipment {
@@ -234,14 +233,14 @@ export default function EquipmentPage() {
 
   if (!loaded) {
     return (
-      <AppShell>
+      <>
         <div className="loading">Loading equipment...</div>
-      </AppShell>
+      </>
     );
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page">
         <div className="page-header">
           <div>
@@ -583,6 +582,6 @@ export default function EquipmentPage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </>
   );
 }

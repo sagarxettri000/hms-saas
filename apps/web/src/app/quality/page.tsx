@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/hooks';
 
@@ -242,7 +241,7 @@ export default function QualityPage() {
   }, [incidents]);
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1>Quality Management</h1>
@@ -523,6 +522,6 @@ export default function QualityPage() {
           })}
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

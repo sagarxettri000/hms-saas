@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
-import AppShell from '@/components/AppShell';
 import { formatDateTime } from '@/lib/hooks';
 
 type Tab = 'activity' | 'compliance' | 'anomalies';
@@ -220,7 +219,7 @@ export default function AuditPage() {
   ];
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Audit & Compliance</h1>
@@ -385,6 +384,6 @@ export default function AuditPage() {
           )}
         </>
       )}
-    </AppShell>
+    </>
   );
 }

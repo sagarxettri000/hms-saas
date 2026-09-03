@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/hooks';
 import type { ApiResponse, Row } from '@/lib/types';
@@ -72,7 +71,7 @@ export default function DischargePage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Discharge</h1>
@@ -147,7 +146,6 @@ export default function DischargePage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }
-

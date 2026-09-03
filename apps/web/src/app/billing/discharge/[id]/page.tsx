@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/hooks';
 import type { ApiResponse, Row } from '@/lib/types';
@@ -234,8 +233,8 @@ export default function DischargeWorkspacePage() {
     }
   }
 
-  if (loading) return <AppShell><div className="loading">Loading discharge workspace…</div></AppShell>;
-  if (!admission) return <AppShell><div className="empty"><div className="empty-state">Admission not found.</div></div></AppShell>;
+  if (loading) return <><div className="loading">Loading discharge workspace…</div></>;
+  if (!admission) return <><div className="empty"><div className="empty-state">Admission not found.</div></div></>;
 
   const details = detailCharges;
   const payments = paymentsHistory;
@@ -246,7 +245,7 @@ export default function DischargeWorkspacePage() {
   const patientNameStr = patient ? [patient.firstName, patient.lastName].filter(Boolean).join(' ') : '—';
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <button className="btn btn-secondary btn-sm" style={{ marginBottom: 8 }} onClick={() => router.push('/billing/discharge')}>← Back to Discharge List</button>
@@ -591,6 +590,6 @@ export default function DischargeWorkspacePage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

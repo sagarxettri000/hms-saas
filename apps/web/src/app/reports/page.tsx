@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import AppShell from '@/components/AppShell';
 import ReportTree from '@/components/reports/ReportTree';
 import ReportViewer from '@/components/reports/ReportViewer';
 import { api } from '@/lib/api';
@@ -74,7 +73,7 @@ export default function ReportsPage() {
   }, []);
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1>Analysis & Reports</h1>
@@ -103,6 +102,6 @@ export default function ReportsPage() {
           </main>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

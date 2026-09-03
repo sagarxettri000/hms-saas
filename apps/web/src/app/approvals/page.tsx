@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import AppShell from '@/components/AppShell';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/hooks';
 
@@ -165,7 +164,7 @@ export default function ApprovalsPage() {
   };
 
   return (
-    <AppShell>
+    <>
       <div className="page-header">
         <div>
           <h1>Approvals</h1>
@@ -268,6 +267,6 @@ export default function ApprovalsPage() {
           </table>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

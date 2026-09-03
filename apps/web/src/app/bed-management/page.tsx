@@ -24,7 +24,7 @@ const BED_STATUSES = [
   { value: 'OCCUPIED', label: 'Occupied', color: '#dc2626' },
   { value: 'RESERVED', label: 'Reserved', color: '#d97706' },
   { value: 'CLEANING', label: 'Cleaning', color: '#0891b2' },
-  { value: 'MAINTENANCE', label: 'Maintenance', color: '#7c3aed' },
+  { value: 'MAINTENANCE', label: 'Maintain', color: '#7c3aed' },
   { value: 'BLOCKED', label: 'Blocked', color: '#64748b' },
 ];
 
@@ -503,6 +503,22 @@ function CreateMaintenanceModal({ onClose, onDone, wards, beds }: { onClose: () 
   const [values, setValues] = useState({ type: 'Cleaning', wardId: '', bedId: '', description: '', scheduledAt: '', notes: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [allBeds, setAllBeds] = useState<any[]>([]);
+  const [loadingBeds, setLoadingBeds] = useState(false);
+
+  useEffect(() => {
+    setLoadingBeds(true);
+    api('/bed-management/beds?limit=200')
+      .then((res: any) => {
+        const data = res?.data?.data ?? res?.data ?? [];
+        setAllBeds(Array.isArray(data) ? data : data.data ?? []);
+      })
+      .catch(() => setAllBeds([]))
+      .finally(() => setLoadingBeds(false));
+  }, []);
+
+  const bedOptions = allBeds.length > 0 ? allBeds : beds;
+  const visibleBeds = values.wardId ? bedOptions.filter((b: any) => b.wardId === values.wardId) : bedOptions;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -547,7 +563,7 @@ function CreateMaintenanceModal({ onClose, onDone, wards, beds }: { onClose: () 
             </div>
             <div className="field">
               <label className="label">Ward</label>
-              <select className="input" value={values.wardId} onChange={(e) => setValues({ ...values, wardId: e.target.value })}>
+              <select className="input" value={values.wardId} onChange={(e) => { setValues({ ...values, wardId: e.target.value, bedId: '' }); }}>
                 <option value="">-- Select ward --</option>
                 {wards.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
@@ -555,8 +571,8 @@ function CreateMaintenanceModal({ onClose, onDone, wards, beds }: { onClose: () 
             <div className="field">
               <label className="label">Bed</label>
               <select className="input" value={values.bedId} onChange={(e) => setValues({ ...values, bedId: e.target.value })}>
-                <option value="">-- Select bed --</option>
-                {beds.map((b: any) => <option key={b.id} value={b.id}>{b.bedNumber} ({b.ward?.name || 'N/A'})</option>)}
+                <option value="">{loadingBeds ? 'Loading beds...' : '-- Select bed --'}</option>
+                {visibleBeds.map((b: any) => <option key={b.id} value={b.id}>{b.bedNumber} ({b.ward?.name || 'N/A'})</option>)}
               </select>
             </div>
             <div className="field field-full">

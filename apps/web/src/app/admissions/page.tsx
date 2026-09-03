@@ -71,6 +71,21 @@ export default function AdmissionsPage() {
   const [savingAdmission, setSavingAdmission] = useState(false);
   const [admissionError, setAdmissionError] = useState('');
 
+  async function handleOpenAdmit() {
+    setShowAdmitModal(false);
+    setSelectedPatient(null);
+    setSearchQuery('');
+    setShowNewPatient(false);
+    setSearchResults([]);
+    try {
+      const res: ApiResponse<any> = await api('/patients?limit=10&sortBy=createdAt&sortOrder=desc');
+      const payload = res.data as any;
+      const list = Array.isArray(payload) ? payload : payload.data ?? [];
+      setSearchResults(list);
+    } catch {}
+    document.getElementById('admit-search-input')?.focus();
+  }
+
   const canDischarge = CLINICAL_ROLES.concat(ADMIN_ROLES).includes(role);
 
   useEffect(() => {
@@ -218,7 +233,7 @@ export default function AdmissionsPage() {
           <h1 className="page-title">Admit</h1>
           <p className="page-subtitle">IPD admissions &amp; bed management</p>
         </div>
-        <button className="btn" onClick={() => { setShowAdmitModal(false); setSelectedPatient(null); setSearchQuery(''); setSearchResults([]); setShowNewPatient(false); document.getElementById('admit-search-input')?.focus(); }}>
+        <button className="btn" onClick={handleOpenAdmit}>
           + Admit patient
         </button>
       </div>

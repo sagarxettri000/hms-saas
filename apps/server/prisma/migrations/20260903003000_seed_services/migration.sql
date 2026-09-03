@@ -23,7 +23,7 @@ SELECT
   now(),
   now()
 FROM (SELECT id FROM "tenants") t
-JOIN (VALUES
+CROSS JOIN (VALUES
   ('Room Charges', 'ROOM', 'Bed, ward and room accommodation', 1),
   ('Doctor / Consultant Charges', 'DOCTOR', 'Consultation, specialist and surgeon fees', 2),
   ('Nursing Charges', 'NURSING', 'Nursing care, injections, IV, dressings', 3),
@@ -70,7 +70,7 @@ SELECT
   now(),
   now()
 FROM (SELECT id FROM "tenants") t
-JOIN (VALUES
+CROSS JOIN (VALUES
   -- Room Charges
   ('RM-GW', 'General Ward Room Charge', 'ROOM', 1000, 0, 'PER_DAY', 'per day', true, true, true, 1),
   ('RM-PW', 'Private Room Charge', 'ROOM', 3000, 0, 'PER_DAY', 'per day', true, true, true, 2),

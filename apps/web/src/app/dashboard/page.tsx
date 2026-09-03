@@ -205,6 +205,24 @@ export default function DashboardPage() {
     load(g);
   }, []);
 
+  useEffect(() => {
+    if (!group) return;
+    let timer: number | undefined;
+    const schedule = () => {
+      const now = new Date();
+      const nextMidnight = new Date(now);
+      nextMidnight.setHours(24, 0, 0, 0);
+      timer = window.setTimeout(() => {
+        load(group);
+        schedule();
+      }, Math.max(1000, nextMidnight.getTime() - now.getTime()));
+    };
+    schedule();
+    return () => {
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [group]);
+
   async function load(g: string) {
     setLoading(true);
     setError(null);
@@ -244,11 +262,13 @@ export default function DashboardPage() {
   }
 
   async function loadAdminData(isSuper: boolean) {
-    const [summaryR, todayR, analyticsR, usersStatsR] = await Promise.all([
+    const todayStart = startOfToday().toISOString();
+    const [summaryR, todayR, analyticsR, usersStatsR, todaySummaryR] = await Promise.all([
       safe(api('/reports/summary')),
       safe(api('/appointments/today')),
       safe(api('/billing/analytics')),
       safe(api('/users/stats')),
+      safe(api(`/reports/summary?from=${todayStart}`)),
     ]);
     const s = summaryOf(summaryR);
     const appts = listOf(todayR);
@@ -256,17 +276,17 @@ export default function DashboardPage() {
     const analytics = summaryOf(analyticsR);
     const uStats = unwrapResponse(usersStatsR) || {};
     const totalStaff = uStats.total ?? 0;
-    const activeUsers = uStats.active ?? 0;
+    const todaySum = summaryOf(todaySummaryR);
     const beds = s.bedOccupancy || { occupied: 0, total: 0 };
     const occupancy = beds.total > 0 ? Math.round((beds.occupied / beds.total) * 100) : 0;
 
     setStats([
-      { label: 'Total patients', value: s.patients ?? 0, tone: 'blue', icon: '👤' },
+      { label: "Today's patients", value: todaySum.patients ?? 0, tone: 'blue', icon: '👤' },
+      { label: "Today's admit", value: todaySum.admissions ?? 0, tone: 'green', icon: '🛏' },
       { label: "Today's appointments", value: sum.total ?? appts.length, tone: 'green', icon: '📅' },
-      { label: 'Bed occupancy', value: `${occupancy}%`, tone: occupancy >= 90 ? 'red' : occupancy >= 70 ? 'amber' : 'green', icon: '🛏' },
-      { label: 'Revenue this month', value: formatMoney(analytics.month?.revenue ?? 0), tone: 'purple', icon: '₨' },
+      { label: 'Bed occupancy', value: `${occupancy}%`, tone: occupancy >= 90 ? 'red' : occupancy >= 70 ? 'amber' : 'green', icon: '🛌' },
+      { label: "Today's revenue", value: formatMoney(analytics.today?.revenue ?? 0), tone: 'purple', icon: '₨' },
       { label: 'Total staff', value: totalStaff, tone: 'blue', icon: '👥' },
-      { label: 'Active users', value: activeUsers, tone: 'green', icon: '🟢' },
     ]);
 
     setFocus({
@@ -337,24 +357,27 @@ export default function DashboardPage() {
   }
 
   async function loadReceptionData() {
-    const [todayR, invoicesR, analyticsR, referralsR] = await Promise.all([
+    const todayStart = startOfToday().toISOString();
+    const [todayR, invoicesR, analyticsR, todaySummaryR] = await Promise.all([
       safe(api('/appointments/today')),
       safe(api('/billing/invoices?limit=200&page=1')),
       safe(api('/billing/analytics')),
-      safe(api('/crm/enquiries?limit=1&status=NEW')),
+      safe(api(`/reports/summary?from=${todayStart}`)),
     ]);
     const appts = listOf(todayR);
     const walkIns = appts.filter((a: any) => a.isWalkIn).length;
     const openStatuses = ['DRAFT', 'PENDING', 'PARTIAL', 'OVERDUE'];
     const pendingBills = listOf(invoicesR).filter((i: any) => openStatuses.includes(i.status));
     const analytics = summaryOf(analyticsR);
+    const todaySum = summaryOf(todaySummaryR);
 
     setStats([
+      { label: "Today's patients", value: todaySum.patients ?? 0, tone: 'blue', icon: '👤' },
+      { label: "Today's admit", value: todaySum.admissions ?? 0, tone: 'green', icon: '🛏' },
       { label: "Today's appointments", value: appts.length, tone: 'blue', icon: '📅' },
+      { label: "Today's revenue", value: formatMoney(analytics.today?.revenue ?? 0), tone: 'green', icon: '₨' },
       { label: 'Walk-ins today', value: walkIns, tone: 'purple', icon: '🚶' },
       { label: 'Pending billing', value: pendingBills.length, tone: pendingBills.length > 0 ? 'amber' : 'green', icon: '📄' },
-      { label: 'Collected today', value: formatMoney(analytics.today?.collection ?? 0), tone: 'green', icon: '₨' },
-      { label: 'Pending referrals', value: countOf(referralsR), tone: 'blue', icon: '➦' },
     ]);
 
     setFocus({

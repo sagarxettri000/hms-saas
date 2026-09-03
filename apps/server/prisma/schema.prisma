@@ -3326,6 +3326,7 @@ model AdverseEvent {
   severity     String    @default("MODERATE") // MILD, MODERATE, SEVERE, FATAL
   category     String?
   description  String
+  affectedCount Int? // number of people involved in the incident
   occurredAt   DateTime  @default(now())
   reportedBy   String?
   status       String    @default("OPEN") // OPEN, INVESTIGATING, MITIGATED, CLOSED

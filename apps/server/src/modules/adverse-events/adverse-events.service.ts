@@ -9,6 +9,7 @@ export interface CreateAdverseEventDto {
   severity?: string;
   category?: string;
   description: string;
+  affectedCount?: number;
   occurredAt?: Date;
 }
 
@@ -16,6 +17,7 @@ export interface UpdateAdverseEventDto {
   severity?: string;
   category?: string;
   description?: string;
+  affectedCount?: number;
   status?: string;
   rootCause?: string;
   actionsTaken?: string;
@@ -50,6 +52,7 @@ export class AdverseEventsService {
         severity: dto.severity || "MODERATE",
         category: dto.category,
         description: dto.description,
+        affectedCount: dto.affectedCount,
         occurredAt: dto.occurredAt || new Date(),
         reportedBy: userId,
       },
@@ -120,6 +123,7 @@ export class AdverseEventsService {
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.rootCause !== undefined) data.rootCause = dto.rootCause;
     if (dto.actionsTaken !== undefined) data.actionsTaken = dto.actionsTaken;
+    if (dto.affectedCount !== undefined) data.affectedCount = dto.affectedCount;
 
     if (dto.status !== undefined) {
       data.status = dto.status;

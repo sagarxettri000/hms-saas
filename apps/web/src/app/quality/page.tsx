@@ -12,6 +12,7 @@ interface Incident {
   type?: string;
   severity?: string;
   status?: string;
+  affectedCount?: number;
   patient?: any;
   assignedTo?: string;
   occurredAt?: string;
@@ -102,7 +103,7 @@ export default function QualityPage() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ title: '', description: '', severity: 'MEDIUM', patientId: '' });
+  const [form, setForm] = useState({ title: '', description: '', severity: 'MEDIUM', patientId: '', affectedCount: '' });
 
   const [analysis, setAnalysis] = useState<any>(null);
 
@@ -179,10 +180,11 @@ export default function QualityPage() {
           description: form.description.trim(),
           severity: form.severity,
           patientId: form.patientId || undefined,
+          affectedCount: form.affectedCount ? Number(form.affectedCount) : undefined,
         }),
       });
       setShowCreate(false);
-      setForm({ title: '', description: '', severity: 'MEDIUM', patientId: '' });
+      setForm({ title: '', description: '', severity: 'MEDIUM', patientId: '', affectedCount: '' });
       await loadIncidents();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create incident');
@@ -276,6 +278,7 @@ export default function QualityPage() {
                     <th>Date</th>
                     <th>Patient</th>
                     <th>Type</th>
+                    <th>People Involved</th>
                     <th>Severity</th>
                     <th>Status</th>
                     <th>Assigned To</th>
@@ -291,6 +294,7 @@ export default function QualityPage() {
                         <td>{formatDate(i.occurredAt || i.createdAt)}</td>
                         <td>{personName(i.patient)}</td>
                         <td><strong>{i.type || i.title || '—'}</strong></td>
+                        <td>{i.affectedCount != null ? i.affectedCount : '—'}</td>
                         <td>
                           <span
                             className="badge"
@@ -351,6 +355,17 @@ export default function QualityPage() {
                       value={form.description}
                       onChange={(e) => setForm({ ...form, description: e.target.value })}
                       placeholder="What happened?"
+                    />
+                  </div>
+                  <div className="field">
+                    <label className="label">People Involved</label>
+                    <input
+                      type="number"
+                      min={1}
+                      className="input"
+                      value={form.affectedCount}
+                      onChange={(e) => setForm({ ...form, affectedCount: e.target.value })}
+                      placeholder="e.g. 2"
                     />
                   </div>
                   <div className="field">

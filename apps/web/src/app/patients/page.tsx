@@ -297,9 +297,8 @@ export default function PatientsPage() {
           {
             name: 'allergies',
             label: 'Allergies',
-            type: 'json',
+            type: 'allergies',
             full: true,
-            hint: '[{"allergen":"Penicillin","severity":"SEVERE"}]',
           },
         ]}
       />

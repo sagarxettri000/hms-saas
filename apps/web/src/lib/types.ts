@@ -21,7 +21,8 @@ export type FieldType =
   | 'json'
   | 'checkbox'
   | 'items'
-  | 'searchSelect';
+  | 'searchSelect'
+  | 'allergies';
 
 export interface FormField {
   name: string;

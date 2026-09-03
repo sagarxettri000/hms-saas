@@ -7,6 +7,7 @@ import { badgeTone, formatMoney, pick } from '@/lib/hooks';
 import type { ApiResponse, Column, FormField, ListPayload, Row, Action } from '@/lib/types';
 import PatientPrescriptions from '@/components/PatientPrescriptions';
 import AsyncSearchSelect from '@/components/AsyncSearchSelect';
+import AllergyInput from '@/components/AllergyInput';
 
 interface TabConfig {
   key: string;
@@ -348,6 +349,16 @@ function FieldInput({
       />
     );
   }
+  if (field.name === 'allergies') {
+    return (
+      <AllergyInput
+        value={Array.isArray(value) ? value : []}
+        onChange={onChange}
+        required={field.required}
+        label={field.label}
+      />
+    );
+  }
   if (field.type === 'json') {
     return (
       <textarea
@@ -474,6 +485,14 @@ function CreateModal({
       if (f.type === 'number') value = Number(value);
       if (f.type === 'date') value = new Date(value).toISOString();
       if (f.type === 'items') {
+        if (!Array.isArray(value) || value.length === 0) {
+          if (f.required) throw new Error(`${f.label} is required`);
+          continue;
+        }
+        payload[f.name] = value;
+        continue;
+      }
+      if (f.type === 'allergies') {
         if (!Array.isArray(value) || value.length === 0) {
           if (f.required) throw new Error(`${f.label} is required`);
           continue;
@@ -653,6 +672,14 @@ function EditModal({
       if (f.type === 'number') value = Number(value);
       if (f.type === 'date') value = new Date(value).toISOString();
       if (f.type === 'items') {
+        if (!Array.isArray(value) || value.length === 0) {
+          if (f.required) throw new Error(`${f.label} is required`);
+          continue;
+        }
+        payload[f.name] = value;
+        continue;
+      }
+      if (f.type === 'allergies') {
         if (!Array.isArray(value) || value.length === 0) {
           if (f.required) throw new Error(`${f.label} is required`);
           continue;

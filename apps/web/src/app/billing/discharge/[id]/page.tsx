@@ -46,14 +46,16 @@ export default function DischargeWorkspacePage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [admRes, billRes, depRes, payRes] = await Promise.all([
-        api(`/ipd/admissions/${admissionId}`) as Promise<ApiResponse<Row>>,
+      const admRes = (await api(`/ipd/admissions/${admissionId}`)) as ApiResponse<Row>;
+      const adm = (admRes.data ?? admRes) as Row;
+      const patientId = adm.patientId;
+
+      const [billRes, depRes, payRes] = await Promise.all([
         api(`/billing/discharge/bills/draft/${admissionId}`) as Promise<ApiResponse<any>>,
-        api(`/billing/deposits?patientId=${encodeURIComponent(admissionId)}&limit=50`) as Promise<ApiResponse<any>>,
-        api(`/billing/payments?patientId=${encodeURIComponent(admissionId)}&limit=50`) as Promise<ApiResponse<any>>,
+        api(`/billing/deposits?patientId=${encodeURIComponent(patientId)}&limit=50`) as Promise<ApiResponse<any>>,
+        api(`/billing/payments?patientId=${encodeURIComponent(patientId)}&limit=50`) as Promise<ApiResponse<any>>,
       ]);
 
-      const adm = (admRes.data ?? admRes) as Row;
       setAdmission(adm);
       setPatient((adm.patient as Row) || null);
 

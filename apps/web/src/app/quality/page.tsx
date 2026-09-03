@@ -114,7 +114,7 @@ export default function QualityPage() {
     setError(null);
     try {
       const data = unwrap(await api('/adverse-events?limit=100'));
-      setIncidents(Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []);
+      setIncidents(Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : Array.isArray(data?.data) ? data.data : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load incidents');
     }
@@ -127,12 +127,12 @@ export default function QualityPage() {
 
   useEffect(() => {
     if (tab !== 'kpi') return;
-    api('/adverse-events?limit=500')
-      .then((r) => {
-        const data = unwrap(r);
-        setIncidents(Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []);
-      })
-      .catch(() => {});
+      api('/adverse-events?limit=500')
+        .then((r) => {
+          const data = unwrap(r);
+          setIncidents(Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : Array.isArray(data?.data) ? data.data : []);
+        })
+        .catch(() => {});
     api('/reports/analysis')
       .then((r) => setAnalysis(unwrap(r)))
       .catch(() => {});

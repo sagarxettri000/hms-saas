@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import GlobalSearch from './GlobalSearch';
 import NotificationBell from './NotificationBell';
 import { api } from '@/lib/api';
@@ -187,11 +187,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setMenuOpen(false);
   }, [pathname]);
 
-  useEffect(() => {
-    if (sidebarRef.current) {
-      sidebarRef.current.scrollTop = readSidebarScroll();
-    }
-  }, []);
+  useLayoutEffect(() => {
+    const el = sidebarRef.current;
+    if (!el) return;
+    const target = readSidebarScroll();
+    if (target <= 0) return;
+    el.scrollTop = target;
+    // Re-apply after layout settles to survive post-mount resets (route change,
+    // hydration, late content height). Without this the sidebar can snap to top.
+    const raf = requestAnimationFrame(() => {
+      el.scrollTop = target;
+    });
+    const timer = setTimeout(() => {
+      el.scrollTop = target;
+    }, 80);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+  }, [pathname]);
 
   return (
     <div className="shell">

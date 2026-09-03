@@ -978,6 +978,30 @@ export default function NursingPage() {
           )}
         </div>
 
+        {!marPatientId && !marPatientSearch && admittedPatientOptions.length > 0 && (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div className="card-title">Currently Admitted Patients ({admittedPatientOptions.length})</div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {admittedPatientOptions.map((o: any) => (
+                <button
+                  key={o.patientId}
+                  type="button"
+                  onClick={() => { setMarPatientId(o.patientId); setMarAdmissionId(o.admissionId); setMarPatientSearch(''); }}
+                  style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%', padding: '10px 4px', border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--hover, #f1f5f9)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <span style={{ fontWeight: 600, fontSize: 13.5 }}>{patientName(o.patient)}</span>
+                  {o.patient?.mrn && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>MRN {o.patient.mrn}</span>}
+                  <span className="badge badge-blue" style={{ fontSize: 11 }}>{o.admissionNumber}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>Bed {o.bedNumber}</span>
+                  <span style={{ fontSize: 12, color: 'var(--primary)' }}>View meds ›</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {marPatientId && (
           <div className="toolbar" style={{ marginBottom: 12 }}>
             <select className="input" style={{ maxWidth: 380 }} value={marAdmissionId} onChange={(e) => setMarAdmissionId(e.target.value)}>

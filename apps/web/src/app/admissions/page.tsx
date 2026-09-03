@@ -71,19 +71,12 @@ export default function AdmissionsPage() {
   const [savingAdmission, setSavingAdmission] = useState(false);
   const [admissionError, setAdmissionError] = useState('');
 
-  async function handleOpenAdmit() {
+  function handleOpenAdmit() {
     setShowAdmitModal(false);
     setSelectedPatient(null);
     setSearchQuery('');
-    setShowNewPatient(false);
     setSearchResults([]);
-    try {
-      const res: ApiResponse<any> = await api('/patients?limit=10&sortBy=createdAt&sortOrder=desc');
-      const payload = res.data as any;
-      const list = Array.isArray(payload) ? payload : payload.data ?? [];
-      setSearchResults(list);
-    } catch {}
-    document.getElementById('admit-search-input')?.focus();
+    setShowNewPatient(true);
   }
 
   const canDischarge = CLINICAL_ROLES.concat(ADMIN_ROLES).includes(role);

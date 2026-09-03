@@ -79,12 +79,23 @@ export default function NursingPage() {
   const [patientSearch, setPatientSearch] = useState('');
   const [vitals, setVitals] = useState<any[]>([]);
   const [loadingVitals, setLoadingVitals] = useState(false);
+  const [showRecordVitals, setShowRecordVitals] = useState(false);
+  const [savingVitals, setSavingVitals] = useState(false);
+  const [vitalsForm, setVitalsForm] = useState({
+    bloodPressureSystolic: '', bloodPressureDiastolic: '', temperature: '',
+    pulse: '', respiratoryRate: '', oxygenSaturation: '', weight: '',
+    painScore: '', bloodGlucose: '', notes: '',
+  });
 
   const [notesAdmissionId, setNotesAdmissionId] = useState('');
+  const [notesPatientId, setNotesPatientId] = useState('');
+  const [notesPatientSearch, setNotesPatientSearch] = useState('');
   const [notes, setNotes] = useState<any[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
 
   const [marAdmissionId, setMarAdmissionId] = useState('');
+  const [marPatientId, setMarPatientId] = useState('');
+  const [marPatientSearch, setMarPatientSearch] = useState('');
   const [meds, setMeds] = useState<any[]>([]);
   const [loadingMeds, setLoadingMeds] = useState(false);
 
@@ -320,9 +331,24 @@ export default function NursingPage() {
     };
   }, [tab, admissions, wardOf]);
 
-  const recordVital = async (data: any) => {
-    await api('/encounters/vitals', { method: 'POST', body: JSON.stringify(data) }).catch(() => {});
-    if (patientId) loadVitals(patientId);
+  const resetVitalsForm = () => {
+    setVitalsForm({ bloodPressureSystolic: '', bloodPressureDiastolic: '', temperature: '', pulse: '', respiratoryRate: '', oxygenSaturation: '', weight: '', painScore: '', bloodGlucose: '', notes: '' });
+    setShowRecordVitals(false);
+  };
+
+  const submitVitals = async () => {
+    if (!patientId) return;
+    setSavingVitals(true);
+    const payload: any = { patientId };
+    Object.entries(vitalsForm).forEach(([k, v]) => {
+      if (v !== '' && v != null) payload[k] = k === 'notes' ? v : Number(v);
+    });
+    try {
+      await api('/encounters/vitals', { method: 'POST', body: JSON.stringify(payload) });
+      resetVitalsForm();
+      loadVitals(patientId);
+    } catch {}
+    setSavingVitals(false);
   };
 
   const addNote = async (data: any) => {
@@ -391,6 +417,26 @@ export default function NursingPage() {
         .some((v: string) => String(v).toLowerCase().includes(q)),
     );
   }, [patients, patientSearch]);
+
+  const filterPatientsBy = (q: string) => {
+    const term = q.trim().toLowerCase();
+    if (!term) return patients;
+    return patients.filter((p: any) =>
+      [p.firstName, p.lastName, p.mrn, p.id]
+        .filter(Boolean)
+        .some((v: string) => String(v).toLowerCase().includes(term)),
+    );
+  };
+
+  const notesPatientAdmissions = useMemo(() => {
+    if (!notesPatientId) return [];
+    return admissions.filter((a: any) => a.patientId === notesPatientId);
+  }, [admissions, notesPatientId]);
+
+  const marPatientAdmissions = useMemo(() => {
+    if (!marPatientId) return [];
+    return admissions.filter((a: any) => a.patientId === marPatientId);
+  }, [admissions, marPatientId]);
 
   const trackedPatients = useMemo(() => {
     const rows = [...admissions];
@@ -586,6 +632,62 @@ export default function NursingPage() {
         )}
       </div>
 
+      {patientId && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div className="card-title" style={{ margin: 0 }}>Record Vitals</div>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowRecordVitals(!showRecordVitals)}>
+              {showRecordVitals ? 'Cancel' : '+ Record Vitals'}
+            </button>
+          </div>
+          {showRecordVitals && (
+            <div className="form-grid">
+              {[
+                { key: 'bloodPressureSystolic', label: 'BP Systolic (mmHg)', placeholder: '120' },
+                { key: 'bloodPressureDiastolic', label: 'BP Diastolic (mmHg)', placeholder: '80' },
+                { key: 'temperature', label: 'Temperature (°C)', placeholder: '36.8' },
+                { key: 'pulse', label: 'Pulse (bpm)', placeholder: '72' },
+                { key: 'respiratoryRate', label: 'Resp Rate (/min)', placeholder: '16' },
+                { key: 'oxygenSaturation', label: 'SpO₂ (%)', placeholder: '98' },
+                { key: 'weight', label: 'Weight (kg)', placeholder: '65' },
+                { key: 'painScore', label: 'Pain (0–10)', placeholder: '0' },
+                { key: 'bloodGlucose', label: 'Glucose (mg/dL)', placeholder: '100' },
+              ].map((f) => (
+                <div className="field" key={f.key}>
+                  <label className="label">{f.label}</label>
+                  <input
+                    className="input"
+                    type="number"
+                    step="any"
+                    placeholder={f.placeholder}
+                    value={(vitalsForm as any)[f.key]}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, [f.key]: e.target.value })}
+                  />
+                </div>
+              ))}
+              <div className="field field-full">
+                <label className="label">Notes</label>
+                <textarea
+                  className="textarea"
+                  placeholder="Optional observations..."
+                  value={vitalsForm.notes}
+                  onChange={(e) => setVitalsForm({ ...vitalsForm, notes: e.target.value })}
+                  style={{ minHeight: 60 }}
+                />
+              </div>
+            </div>
+          )}
+          {showRecordVitals && (
+            <div className="form-actions" style={{ marginTop: 10 }}>
+              <button className="btn" onClick={submitVitals} disabled={savingVitals}>
+                {savingVitals ? 'Saving...' : 'Save Vitals'}
+              </button>
+              <button className="btn btn-secondary" onClick={resetVitalsForm}>Cancel</button>
+            </div>
+          )}
+        </div>
+      )}
+
       {patientId && renderVitalsChart()}
       {loadingVitals && <div className="loading">Loading vitals...</div>}
       {vitals.length > 0 && (
@@ -631,16 +733,74 @@ export default function NursingPage() {
     );
   };
 
-  const renderNotes = () => (
+  const renderNotes = () => {
+    const selectedPt = patients.find((p: any) => p.id === notesPatientId);
+    return (
     <div>
-      <div className="toolbar">
-        <select className="input" style={{ maxWidth: 340 }} value={notesAdmissionId} onChange={(e) => setNotesAdmissionId(e.target.value)}>
-          <option value="">Choose admission...</option>
-          {admissions.map((a: any) => (
-            <option key={a.id} value={a.id}>{a.admissionNumber} — {patientName(a.patient)}</option>
-          ))}
-        </select>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title">Select Patient</div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: 380 }}>
+            <input
+              className="input"
+              placeholder="Search by name or MRN..."
+              value={selectedPt ? notesPatientSearch || patientName(selectedPt) : notesPatientSearch}
+              onChange={(e) => {
+                setNotesPatientSearch(e.target.value);
+                if (notesPatientId) { setNotesPatientId(''); setNotesAdmissionId(''); setNotes([]); }
+              }}
+              onFocus={(e) => { if (selectedPt) e.target.select(); }}
+              style={{ paddingRight: 28 }}
+            />
+            {notesPatientSearch && (
+              <button type="button" onClick={() => { setNotesPatientSearch(''); setNotesPatientId(''); setNotesAdmissionId(''); setNotes([]); }}
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
+            )}
+          </div>
+          {selectedPt && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <span style={{ fontWeight: 600 }}>{patientName(selectedPt)}</span>
+              {selectedPt.mrn && <span style={{ color: 'var(--text-muted)' }}>(MRN {selectedPt.mrn})</span>}
+            </div>
+          )}
+        </div>
+        {notesPatientSearch && !notesPatientId && (
+          <div style={{ border: '1px solid var(--border)', borderRadius: 6, marginTop: 6, maxHeight: 220, overflowY: 'auto' }}>
+            {filterPatientsBy(notesPatientSearch).length === 0 ? (
+              <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>No patients found.</div>
+            ) : (
+              filterPatientsBy(notesPatientSearch).slice(0, 50).map((p: any) => (
+                <button key={p.id} type="button"
+                  onClick={() => { setNotesPatientId(p.id); setNotesPatientSearch(''); }}
+                  style={{ display: 'flex', gap: 10, width: '100%', padding: '8px 14px', border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', textAlign: 'left', fontSize: 13 }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--hover, #f1f5f9)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <span style={{ fontWeight: 600 }}>{patientName(p)}</span>
+                  {p.mrn && <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>MRN {p.mrn}</span>}
+                </button>
+              ))
+            )}
+          </div>
+        )}
+        {!notesPatientSearch && !notesPatientId && (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>Type a patient name or MRN to search.</div>
+        )}
       </div>
+
+      {notesPatientId && (
+        <div className="toolbar" style={{ marginBottom: 12 }}>
+          <select className="input" style={{ maxWidth: 380 }} value={notesAdmissionId} onChange={(e) => setNotesAdmissionId(e.target.value)}>
+            <option value="">Choose admission...</option>
+            {notesPatientAdmissions.map((a: any) => (
+              <option key={a.id} value={a.id}>{a.admissionNumber || a.id.slice(0, 8)} — {a.status}</option>
+            ))}
+          </select>
+          {notesPatientAdmissions.length === 0 && (
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No active admissions for this patient.</span>
+          )}
+        </div>
+      )}
 
       {loadingNotes && <div className="loading">Loading notes...</div>}
       {notes.length > 0 && (
@@ -661,9 +821,11 @@ export default function NursingPage() {
       {!loadingNotes && notesAdmissionId && notes.length === 0 && (
         <div className="empty">No nursing notes for this admission.</div>
       )}
-      {!notesAdmissionId && <div className="empty">Select an admission to view and add nursing notes.</div>}
+      {!notesPatientId && <div className="empty">Select a patient to view and add nursing notes.</div>}
+      {notesPatientId && !notesAdmissionId && notesPatientAdmissions.length > 0 && <div className="empty">Select an admission to view notes.</div>}
     </div>
-  );
+    );
+  };
 
   const renderMedAdmin = () => {
     const dayStartMins = 0;
@@ -678,16 +840,73 @@ export default function NursingPage() {
       GIVEN: 'var(--success)',
       SKIPPED: 'var(--danger)',
     };
+    const marSelectedPt = patients.find((p: any) => p.id === marPatientId);
     return (
       <div>
-        <div className="toolbar">
-          <select className="input" style={{ maxWidth: 340 }} value={marAdmissionId} onChange={(e) => setMarAdmissionId(e.target.value)}>
-            <option value="">Choose admission...</option>
-            {admissions.map((a: any) => (
-              <option key={a.id} value={a.id}>{a.admissionNumber} — {patientName(a.patient)}</option>
-            ))}
-          </select>
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-title">Select Patient</div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: 380 }}>
+              <input
+                className="input"
+                placeholder="Search by name or MRN..."
+                value={marSelectedPt ? marPatientSearch || patientName(marSelectedPt) : marPatientSearch}
+                onChange={(e) => {
+                  setMarPatientSearch(e.target.value);
+                  if (marPatientId) { setMarPatientId(''); setMarAdmissionId(''); setMeds([]); }
+                }}
+                onFocus={(e) => { if (marSelectedPt) e.target.select(); }}
+                style={{ paddingRight: 28 }}
+              />
+              {marPatientSearch && (
+                <button type="button" onClick={() => { setMarPatientSearch(''); setMarPatientId(''); setMarAdmissionId(''); setMeds([]); }}
+                  style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
+              )}
+            </div>
+            {marSelectedPt && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                <span style={{ fontWeight: 600 }}>{patientName(marSelectedPt)}</span>
+                {marSelectedPt.mrn && <span style={{ color: 'var(--text-muted)' }}>(MRN {marSelectedPt.mrn})</span>}
+              </div>
+            )}
+          </div>
+          {marPatientSearch && !marPatientId && (
+            <div style={{ border: '1px solid var(--border)', borderRadius: 6, marginTop: 6, maxHeight: 220, overflowY: 'auto' }}>
+              {filterPatientsBy(marPatientSearch).length === 0 ? (
+                <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>No patients found.</div>
+              ) : (
+                filterPatientsBy(marPatientSearch).slice(0, 50).map((p: any) => (
+                  <button key={p.id} type="button"
+                    onClick={() => { setMarPatientId(p.id); setMarPatientSearch(''); }}
+                    style={{ display: 'flex', gap: 10, width: '100%', padding: '8px 14px', border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', textAlign: 'left', fontSize: 13 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--hover, #f1f5f9)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <span style={{ fontWeight: 600 }}>{patientName(p)}</span>
+                    {p.mrn && <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>MRN {p.mrn}</span>}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+          {!marPatientSearch && !marPatientId && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>Type a patient name or MRN to search.</div>
+          )}
         </div>
+
+        {marPatientId && (
+          <div className="toolbar" style={{ marginBottom: 12 }}>
+            <select className="input" style={{ maxWidth: 380 }} value={marAdmissionId} onChange={(e) => setMarAdmissionId(e.target.value)}>
+              <option value="">Choose admission...</option>
+              {marPatientAdmissions.map((a: any) => (
+                <option key={a.id} value={a.id}>{a.admissionNumber || a.id.slice(0, 8)} — {a.status}</option>
+              ))}
+            </select>
+            {marPatientAdmissions.length === 0 && (
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No active admissions for this patient.</span>
+            )}
+          </div>
+        )}
 
         {loadingMeds && <div className="loading">Loading medications...</div>}
 
@@ -780,7 +999,8 @@ export default function NursingPage() {
           </>
         )}
 
-        {!marAdmissionId && !loadingMeds && <div className="empty">Select an admitted patient to view their medication schedule.</div>}
+        {!marPatientId && !loadingMeds && <div className="empty">Select a patient to view their medication schedule.</div>}
+        {marPatientId && !marAdmissionId && marPatientAdmissions.length > 0 && <div className="empty">Select an admission to view medications.</div>}
       </div>
     );
   };

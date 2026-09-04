@@ -38,11 +38,16 @@ export class PrismaService
             const tenant = ctx?.tenantId;
             const bypass = ctx?.bypass === true || !tenant;
             // Only scope to the caller's tenant when RLS is NOT bypassed and a
-            // tenant is known. Parameterize the SET to avoid SQL injection via
-            // the tenant identifier (e.g. a super-admin-supplied X-Tenant-ID).
+            // tenant is known. PostgreSQL does not allow parameters (e.g. $1)
+            // in the SET command, so the value must be inlined. To prevent SQL
+            // injection via a caller-supplied tenant id, sanitize it down to a
+            // safe character set (tenant ids are Prisma cuids) before quoting.
             if (tenant && !bypass) {
+              const safeTenant = String(tenant).replace(/[^a-zA-Z0-9_-]/g, "");
               const [, , result] = await base.$transaction([
-                base.$executeRaw`SET LOCAL app.current_tenant_id = ${tenant}`,
+                base.$executeRawUnsafe(
+                  `SET LOCAL app.current_tenant_id = '${safeTenant}'`,
+                ),
                 base.$executeRaw`SET LOCAL app.rls_bypass = 'false'`,
                 query(args) as Prisma.PrismaPromise<unknown>,
               ]);

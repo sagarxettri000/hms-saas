@@ -73,7 +73,7 @@ export class ReportsService {
           select: { totalAmount: true, paidAmount: true, status: true },
         }),
         this.prisma.appointment.count({
-          where: this.dateWhere(tenantId, "startTime", range),
+          where: this.dateWhere(tenantId, "appointmentDate", range),
         }),
         this.prisma.patient.count({
           where: range.from || range.to

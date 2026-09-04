@@ -1544,7 +1544,40 @@ export class BillingService {
     });
     if (!existing) throw new NotFoundException("Billing service not found");
 
-    const data: any = { ...dto, updatedAt: new Date() };
+    const allowedFields = [
+      "name",
+      "shortName",
+      "categoryId",
+      "category",
+      "departmentId",
+      "description",
+      "serviceType",
+      "unit",
+      "insuranceRate",
+      "patientRate",
+      "corporateRate",
+      "emergencyRate",
+      "nightRate",
+      "weekendRate",
+      "isActive",
+      "taxable",
+      "requiresDoctor",
+      "requiresDepartment",
+      "requiresQuantity",
+      "requiresApproval",
+      "isPackageService",
+      "isRoomCharge",
+      "isPharmacyItem",
+      "isConsumable",
+      "isInventoryItem",
+      "displayOrder",
+    ];
+    const data: any = { updatedAt: new Date() };
+    for (const field of allowedFields) {
+      if (dto[field as keyof UpdateBillingServiceDto] !== undefined) {
+        data[field] = dto[field as keyof UpdateBillingServiceDto];
+      }
+    }
     if (dto.price !== undefined) {
       data.price = this.validateMoney(dto.price, {
         min: 0,

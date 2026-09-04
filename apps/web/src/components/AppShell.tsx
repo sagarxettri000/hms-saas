@@ -20,6 +20,7 @@ const CLINICAL = ['DOCTOR', 'NURSE', 'WARD_INCHARGE', 'ICU_STAFF', 'EMERGENCY_ST
 const CLINICAL_WIDE = [...CLINICAL, ...FRONT, ...ADMIN, ...SUPER, 'ANESTHETIST'];
 const CLINICAL_NO_DOCTOR = CLINICAL_WIDE.filter((r) => r !== 'DOCTOR');
 const CLINICAL_NO_DOCTOR_NURSE = CLINICAL_NO_DOCTOR.filter((r) => r !== 'NURSE');
+const CLINICAL_WIDE_NO_NURSE = CLINICAL_WIDE.filter((r) => r !== 'NURSE');
 const FINANCE = ['RECEPTIONIST', 'RECEPTION_SUPERVISOR', 'FINANCE_MANAGER'];
 const LAB = ['LAB_TECHNICIAN', 'PATHOLOGIST'];
 const RAD = ['RADIOLOGIST', 'RADIOLOGY_TECHNICIAN'];
@@ -47,7 +48,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { label: 'Admit', href: '/admissions', icon: '▣', roles: [...CLINICAL_WIDE, 'DEPARTMENT_HEAD'] },
       { label: 'Beds', href: '/bed-management', icon: '⊞', roles: [...CLINICAL_WIDE] },
       { label: 'Appointments', href: '/appointments', icon: '◷', roles: [...CLINICAL_WIDE, 'DEPARTMENT_HEAD'] },
-      { label: 'Doctors', href: '/doctors', icon: '✚', roles: [...CLINICAL_WIDE] },
+      { label: 'Doctors', href: '/doctors', icon: '✚', roles: [...CLINICAL_WIDE_NO_NURSE] },
       { label: 'Encounters', href: '/encounters', icon: '✎', roles: [...CLINICAL, ...ADMIN, ...SUPER, 'DEPARTMENT_HEAD'] },
       { label: 'Emergency', href: '/emergency', icon: '⚠', roles: [...CLINICAL_WIDE] },
       { label: 'Nursing', href: '/nursing', icon: '♡', roles: ['NURSE', 'OT_NURSE', 'WARD_INCHARGE', 'ICU_STAFF', ...ADMIN, ...SUPER] },

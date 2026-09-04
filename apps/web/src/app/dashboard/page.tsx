@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, safe } from '@/lib/api';
 import { formatMoney, formatDate, formatDateTime, badgeTone } from '@/lib/hooks';
 
 interface Stat {
@@ -53,10 +53,6 @@ function getRoleGroup(role: string): string {
     if (roles.includes(role)) return group;
   }
   return 'ADMIN';
-}
-
-function safe(p: Promise<any>): Promise<any> {
-  return p.catch(() => null);
 }
 
 function unwrapResponse(r: any): any {

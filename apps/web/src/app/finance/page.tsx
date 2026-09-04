@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, unwrap, listOf, objOf, num, safe } from '@/lib/api';
 import { formatMoney, formatDate, formatDateTime } from '@/lib/hooks';
 
 type Tab = 'overview' | 'receivables' | 'revenue' | 'collections';
@@ -9,36 +9,11 @@ type Tab = 'overview' | 'receivables' | 'revenue' | 'collections';
 const UNPAID_STATUSES = ['PENDING', 'PARTIAL', 'OVERDUE'];
 const DAY_MS = 86400000;
 
-function unwrap(r: any): any {
-  return r?.data?.data ?? r?.data ?? r;
-}
-
-function listOf(r: any): any[] {
-  const u = unwrap(r);
-  if (Array.isArray(u)) return u;
-  if (Array.isArray(u?.data)) return u.data;
-  return [];
-}
-
-function objOf(r: any): any {
-  const u = unwrap(r);
-  return u && typeof u === 'object' && !Array.isArray(u) ? u : {};
-}
-
-function num(v: any): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
 function personName(p: any): string {
   if (!p) return '—';
   if (typeof p === 'string') return p;
   const joined = [p.firstName, p.lastName].filter(Boolean).join(' ');
   return joined || p.name || p.id || '—';
-}
-
-function safe(p: Promise<any>): Promise<any> {
-  return p.catch(() => null);
 }
 
 function startOfToday(): Date {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, unwrap } from '@/lib/api';
 
 interface OtCase {
   id: string;
@@ -67,10 +67,6 @@ const CHECKLIST_CATEGORIES: { name: string; items: string[] }[] = [
     ],
   },
 ];
-
-function unwrap(r: any): any {
-  return r?.data?.data ?? r?.data ?? r;
-}
 
 function personName(p: any): string {
   if (!p) return '';

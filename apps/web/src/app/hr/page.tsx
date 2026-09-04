@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import EntityPage from '@/components/EntityPage';
-import { api } from '@/lib/api';
+import { api, unwrap } from '@/lib/api';
 import { formatDate } from '@/lib/hooks';
 
 type Tab = 'staff' | 'shifts' | 'rosters' | 'leaves' | 'departments' | 'attendance' | 'training';
@@ -37,10 +37,6 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 const TRAINING_PROGRAMS = ['Basic Life Support', 'Fire Safety', 'Infection Control', 'Patient Rights', 'Data Privacy'];
-
-function unwrap(r: any): any {
-  return r?.data?.data ?? r?.data ?? r;
-}
 
 function fullName(u: any): string {
   if (!u) return '—';

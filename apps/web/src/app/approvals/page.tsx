@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, unwrap } from '@/lib/api';
 import { formatDate } from '@/lib/hooks';
 
 interface ApprovalAction {
@@ -66,10 +66,6 @@ const STATUS_TONES: Record<string, string> = {
   REJECTED: 'badge-red',
   COMPLETED: 'badge-blue',
 };
-
-function unwrap(r: any): any {
-  return r?.data?.data ?? r?.data ?? r;
-}
 
 function personName(p: any): string {
   if (!p) return '—';

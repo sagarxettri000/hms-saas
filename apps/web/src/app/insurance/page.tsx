@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, unwrap, listOf, safe, num } from '@/lib/api';
 import EntityPage from '@/components/EntityPage';
 import { formatMoney, formatDate, formatDateTime } from '@/lib/hooks';
 import { PATIENT_REF } from '@/lib/options';
@@ -57,26 +57,6 @@ const NEXT_ACTIONS: Record<string, { label: string; next: string; tone: string }
   ],
   APPROVED: [{ label: 'Settle', next: 'SETTLED', tone: 'btn-primary' }],
 };
-
-function unwrap(r: any): any {
-  return r?.data?.data ?? r?.data ?? r;
-}
-
-function listOf(r: any): any[] {
-  const u = unwrap(r);
-  if (Array.isArray(u)) return u;
-  if (Array.isArray(u?.data)) return u.data;
-  return [];
-}
-
-function safe(p: Promise<any>): Promise<any> {
-  return p.catch(() => null);
-}
-
-function num(v: any): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
 
 function personName(p: any): string {
   if (!p) return '—';

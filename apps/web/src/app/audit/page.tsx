@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
+import { api, unwrap, listOf } from '@/lib/api';
 import { formatDateTime } from '@/lib/hooks';
 
 type Tab = 'activity' | 'compliance' | 'anomalies';
@@ -19,17 +19,6 @@ const TAB_LABELS: Record<Tab, string> = {
   compliance: 'Compliance',
   anomalies: 'Anomalies',
 };
-
-function unwrap(r: any): any {
-  return r?.data?.data ?? r?.data ?? r;
-}
-
-function listOf(r: any): any[] {
-  const u = unwrap(r);
-  if (Array.isArray(u)) return u;
-  if (Array.isArray(u?.data)) return u.data;
-  return [];
-}
 
 function personOf(l: any): string {
   if (l.user) {

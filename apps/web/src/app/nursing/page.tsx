@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, unwrap, listOf } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/hooks';
 
 type Tab = 'summary' | 'vitals' | 'notes' | 'medadmin' | 'handover' | 'tracking' | 'board';
@@ -16,18 +16,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'handover', label: 'Shift Handover' },
   { key: 'tracking', label: 'Patient Tracking' },
 ];
-
-function unwrap(r: any): any {
-  return r?.data?.data ?? r?.data ?? r;
-}
-
-function toList(r: any): any[] {
-  const d = unwrap(r);
-  if (Array.isArray(d)) return d;
-  if (Array.isArray(d?.data)) return d.data;
-  if (Array.isArray(d?.items)) return d.items;
-  return [];
-}
 
 function patientName(p: any): string {
   if (!p) return '—';
@@ -192,17 +180,17 @@ export default function NursingPage() {
       api('/bed-management/wards?limit=200'),
       api('/doctors?limit=200'),
     ]);
-    setPatients(p.status === 'fulfilled' ? toList(p.value) : []);
-    setAdmissions(a.status === 'fulfilled' ? toList(a.value) : []);
-    setWards(w.status === 'fulfilled' ? toList(w.value) : []);
-    setDoctors(d.status === 'fulfilled' ? toList(d.value) : []);
+    setPatients(p.status === 'fulfilled' ? listOf(p.value) : []);
+    setAdmissions(a.status === 'fulfilled' ? listOf(a.value) : []);
+    setWards(w.status === 'fulfilled' ? listOf(w.value) : []);
+    setDoctors(d.status === 'fulfilled' ? listOf(d.value) : []);
   }, []);
 
   useEffect(() => {
     loadCore();
     api('/nursing-handovers?limit=200')
       .then((r) => {
-        const rows = toList(r);
+        const rows = listOf(r);
         setHandovers(
           rows.map((row: any) => ({
             id: row.id,
@@ -240,7 +228,7 @@ export default function NursingPage() {
     if (!pid) return;
     setLoadingVitals(true);
     try {
-      setVitals(toList(await api(`/encounters/vitals/patient/${pid}`)));
+      setVitals(listOf(await api(`/encounters/vitals/patient/${pid}`)));
     } catch {
       setVitals([]);
     }
@@ -251,7 +239,7 @@ export default function NursingPage() {
     if (!admId) return;
     setLoadingNotes(true);
     try {
-      setNotes(toList(await api(`/admissions/${admId}/nursing-notes`)));
+      setNotes(listOf(await api(`/admissions/${admId}/nursing-notes`)));
     } catch {
       setNotes([]);
     }
@@ -262,7 +250,7 @@ export default function NursingPage() {
     if (!admId) return;
     setLoadingMeds(true);
     try {
-      setMeds(toList(await api(`/admissions/${admId}/medications`)));
+      setMeds(listOf(await api(`/admissions/${admId}/medications`)));
     } catch {
       setMeds([]);
     }
@@ -302,9 +290,9 @@ export default function NursingPage() {
         if (res.status !== 'fulfilled') return;
         const a = sample[i];
         const [medsR, notesR, vitalsR] = res.value as [any, any, any];
-        const medList = Array.isArray(medsR) ? medsR : toList(medsR);
-        const noteList = Array.isArray(notesR) ? notesR : toList(notesR);
-        const vitalList = Array.isArray(vitalsR) ? vitalsR : toList(vitalsR);
+        const medList = Array.isArray(medsR) ? medsR : listOf(medsR);
+        const noteList = Array.isArray(notesR) ? notesR : listOf(notesR);
+        const vitalList = Array.isArray(vitalsR) ? vitalsR : listOf(vitalsR);
         const label = patientName(a.patient);
         const loc = `${wardOf(a)} · ${a.bedAllocations?.[0]?.bed?.bedNumber || 'No bed'}`;
         medList
@@ -381,7 +369,7 @@ export default function NursingPage() {
             api(`/encounters/vitals/patient/${a.patientId}`).catch(() => []),
             api(`/admissions/${a.id}/medications`).catch(() => []),
           ]);
-          map[a.id] = { vitals: toList(v), meds: toList(m) };
+          map[a.id] = { vitals: listOf(v), meds: listOf(m) };
         } catch {
           map[a.id] = { vitals: [], meds: [] };
         }
@@ -452,7 +440,7 @@ export default function NursingPage() {
         notes: handoverNotes,
       }),
     }).catch(() => {});
-    const rows = toList(await api('/nursing-handovers?limit=200').catch(() => []));
+    const rows = listOf(await api('/nursing-handovers?limit=200').catch(() => []));
     setHandovers(
       rows.map((row: any) => ({
         id: row.id,

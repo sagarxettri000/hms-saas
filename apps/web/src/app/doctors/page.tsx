@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { api } from '@/lib/api';
+import { api, unwrap, listOf } from '@/lib/api';
 import { formatDate, formatDateTime, formatMoney } from '@/lib/hooks';
 import { GENDERS } from '@/lib/options';
 
@@ -33,18 +33,6 @@ const DRUG_INTERACTIONS = [
 
 const REVIEWED_LAB_STATUSES = ['APPROVED', 'VERIFIED', 'COMPLETED', 'REPORTED', 'CANCELLED'];
 const SIGNED_RX_STATUSES = ['APPROVED', 'DISPENSED'];
-
-function unwrap(r: any): any {
-  return r?.data?.data ?? r?.data ?? r;
-}
-
-function toList(r: any): any[] {
-  const d = unwrap(r);
-  if (Array.isArray(d)) return d;
-  if (Array.isArray(d?.data)) return d.data;
-  if (Array.isArray(d?.items)) return d.items;
-  return [];
-}
 
 function personName(p: any): string {
   if (!p) return '—';
@@ -120,7 +108,7 @@ export default function DoctorsPage() {
   const loadDoctors = useCallback(async () => {
     setLoadingDoctors(true);
     try {
-      setDoctors(toList(await api('/doctors?limit=200')));
+      setDoctors(listOf(await api('/doctors?limit=200')));
     } catch {
       setDoctors([]);
     }
@@ -130,7 +118,7 @@ export default function DoctorsPage() {
   const loadSchedules = useCallback(async () => {
     setLoadingSchedules(true);
     try {
-      setSchedules(toList(await api('/doctors/schedules')).filter((s: any) => s.isActive !== false));
+      setSchedules(listOf(await api('/doctors/schedules')).filter((s: any) => s.isActive !== false));
     } catch {
       setSchedules([]);
     }
@@ -139,7 +127,7 @@ export default function DoctorsPage() {
 
   useEffect(() => {
     loadDoctors();
-    api('/departments?limit=200').then((r) => setDepartments(toList(r))).catch(() => {});
+    api('/departments?limit=200').then((r) => setDepartments(listOf(r))).catch(() => {});
   }, [loadDoctors]);
 
   useEffect(() => {
@@ -150,8 +138,8 @@ export default function DoctorsPage() {
       setLoadingAlerts(true);
       Promise.allSettled([api('/encounters/prescriptions?limit=50'), api('/lab/orders?limit=50')])
         .then(([rx, labs]) => {
-          setPrescriptions(rx.status === 'fulfilled' ? toList(rx.value) : []);
-          setLabOrders(labs.status === 'fulfilled' ? toList(labs.value) : []);
+          setPrescriptions(rx.status === 'fulfilled' ? listOf(rx.value) : []);
+          setLabOrders(labs.status === 'fulfilled' ? listOf(labs.value) : []);
         })
         .finally(() => setLoadingAlerts(false));
     }
@@ -161,7 +149,7 @@ export default function DoctorsPage() {
         const [m, enc] = await Promise.allSettled([api('/auth/me'), api('/encounters?limit=50')]);
         const meData = m.status === 'fulfilled' ? unwrap(m.value) : null;
         setMe(meData);
-        setMyEncounters(enc.status === 'fulfilled' ? toList(enc.value) : []);
+        setMyEncounters(enc.status === 'fulfilled' ? listOf(enc.value) : []);
         const profileId = meData?.doctorProfile?.id;
         if (profileId) {
           try {
@@ -283,9 +271,9 @@ export default function DoctorsPage() {
       api(`/encounters/prescriptions/patient/${row.patientId}`),
       api(`/lab/orders?patientId=${row.patientId}&limit=20`),
     ]);
-    setHistVitals(v.status === 'fulfilled' ? toList(v.value) : []);
-    setHistRx(rx.status === 'fulfilled' ? toList(rx.value) : []);
-    setHistLabs(labs.status === 'fulfilled' ? toList(labs.value) : []);
+    setHistVitals(v.status === 'fulfilled' ? listOf(v.value) : []);
+    setHistRx(rx.status === 'fulfilled' ? listOf(rx.value) : []);
+    setHistLabs(labs.status === 'fulfilled' ? listOf(labs.value) : []);
     setLoadingHist(false);
   };
 

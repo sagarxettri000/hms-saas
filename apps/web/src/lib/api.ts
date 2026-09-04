@@ -66,3 +66,33 @@ async function request(path: string, options: RequestInit = {}, retry = true): P
 export function api(path: string, options: RequestInit = {}) {
   return request(path, options);
 }
+
+// Response-unwrapping helpers shared across pages. `api()` returns the full
+// JSON body; endpoints wrap payloads as `{ data: { data, total } }`, `{ data }`
+// or return the value directly. These helpers normalise those shapes.
+
+export function unwrap(r: any): any {
+  return r?.data?.data ?? r?.data ?? r;
+}
+
+export function listOf(r: any): any[] {
+  const u = unwrap(r);
+  if (Array.isArray(u)) return u;
+  if (Array.isArray(u?.data)) return u.data;
+  if (Array.isArray(u?.items)) return u.items;
+  return [];
+}
+
+export function objOf(r: any): any {
+  const u = unwrap(r);
+  return u && typeof u === 'object' && !Array.isArray(u) ? u : {};
+}
+
+export function safe<T>(p: Promise<T>): Promise<T | null> {
+  return p.catch(() => null);
+}
+
+export function num(v: any): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}

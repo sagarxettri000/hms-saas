@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
+import { api, unwrap, listOf, objOf } from '@/lib/api';
 import { formatDateTime } from '@/lib/hooks';
 import { DOCTOR_REF, PATIENT_REF } from '@/lib/options';
 import ModulePage from '@/components/ModulePage';
@@ -46,22 +46,6 @@ const SAMPLE_TONES: Record<string, string> = {
   REJECTED: 'badge-red',
 };
 const COMPLETED_STATUSES = ['RESULT_READY', 'VERIFIED', 'APPROVED', 'REPORTED'];
-
-function unwrap(r: any): any {
-  return r?.data?.data ?? r?.data ?? r;
-}
-
-function listOf(r: any): any[] {
-  const u = unwrap(r);
-  if (Array.isArray(u)) return u;
-  if (Array.isArray(u?.data)) return u.data;
-  return [];
-}
-
-function objOf(r: any): any {
-  const u = unwrap(r);
-  return u && typeof u === 'object' && !Array.isArray(u) ? u : {};
-}
 
 function patientName(p: any): string {
   if (!p) return '—';

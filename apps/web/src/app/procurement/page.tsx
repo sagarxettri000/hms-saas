@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import EntityPage from '@/components/EntityPage';
-import { api } from '@/lib/api';
+import { api, unwrap } from '@/lib/api';
 import { formatDate, formatMoney } from '@/lib/hooks';
 
 type Tab = 'orders' | 'requests' | 'items' | 'transfers' | 'expiry';
@@ -20,10 +20,6 @@ interface StockTransfer {
 interface ExpiryEntry {
   expiryDate: string;
   removed: boolean;
-}
-
-function unwrap(r: any): any {
-  return r?.data?.data ?? r?.data ?? r;
 }
 
 function readLS<T>(key: string, fallback: T): T {

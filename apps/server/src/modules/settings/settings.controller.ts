@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  ParseBoolPipe,
   Param,
   Patch,
   Put,
@@ -56,13 +57,13 @@ export class SettingsController {
   @ApiOperation({ summary: "Set a feature flag" })
   setFeatureFlag(
     @Param("key") key: string,
-    @Body() body: { enabled: boolean },
+    @Body("enabled", ParseBoolPipe) enabled: boolean,
     @Req() req: any,
   ) {
     return this.settingsService.setFeatureFlag(
       req.user.tenantId,
       key,
-      body.enabled,
+      enabled,
       req.user.id,
     );
   }
@@ -79,14 +80,15 @@ export class SettingsController {
   @ApiOperation({ summary: "Configure an integration" })
   setIntegration(
     @Param("provider") provider: string,
-    @Body() body: { config: unknown; enabled: boolean },
+    @Body("config") config: unknown,
+    @Body("enabled", ParseBoolPipe) enabled: boolean,
     @Req() req: any,
   ) {
     return this.settingsService.setIntegration(
       req.user.tenantId,
       provider,
-      body.config,
-      body.enabled,
+      config,
+      enabled,
       req.user.id,
     );
   }

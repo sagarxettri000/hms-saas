@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, API_URL } from '@/lib/api';
+import { api, API_URL, unwrap, listOf } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/hooks';
 import { DOCTOR_REF, PATIENT_REF } from '@/lib/options';
 import AsyncSearchSelect from '@/components/AsyncSearchSelect';
@@ -52,18 +52,6 @@ const ORDER_FLOW = [
   'ORDERED', 'SCHEDULED', 'IN_PROGRESS', 'IMAGES_UPLOADED',
   'REPORTED', 'VERIFIED', 'APPROVED', 'DELIVERED',
 ];
-
-function unwrap(r: any): any {
-  return r?.data?.data ?? r?.data ?? r;
-}
-
-function toList(r: any): any[] {
-  const d = unwrap(r);
-  if (Array.isArray(d)) return d;
-  if (Array.isArray(d?.data)) return d.data;
-  if (Array.isArray(d?.items)) return d.items;
-  return [];
-}
 
 function totalOf(r: any): number {
   const d = r?.data;
@@ -209,8 +197,8 @@ export default function RadiologyPage() {
     setLoading(true);
     try {
       const res: any = await api('/radiology/orders/worklist');
-      setRows(toList(res).map((r: any) => ({ ...r, modalityLabel: MODALITY_LABEL[r.modality] || r.modality })));
-      setTotal(toList(res).length);
+      setRows(listOf(res).map((r: any) => ({ ...r, modalityLabel: MODALITY_LABEL[r.modality] || r.modality })));
+      setTotal(listOf(res).length);
     } catch (e) {
       setRows([]);
       setTotal(0);

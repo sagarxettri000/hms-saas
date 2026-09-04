@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { api, API_URL } from '@/lib/api';
+import { api, API_URL, unwrap, listOf, objOf, safe } from '@/lib/api';
 import { formatDateTime, formatDate, formatMoney } from '@/lib/hooks';
 
 type Tab = 'lookup' | 'dashboard' | 'appointments' | 'results' | 'invoices' | 'records';
@@ -32,26 +32,6 @@ const STATUS_TONES: Record<string, string> = {
   REPORTED: 'badge-gray',
   PROCESSING: 'badge-yellow',
 };
-
-function unwrap(r: any): any {
-  return r?.data?.data ?? r?.data ?? r;
-}
-
-function listOf(r: any): any[] {
-  const u = unwrap(r);
-  if (Array.isArray(u)) return u;
-  if (Array.isArray(u?.data)) return u.data;
-  return [];
-}
-
-function objOf(r: any): any {
-  const u = unwrap(r);
-  return u && typeof u === 'object' && !Array.isArray(u) ? u : {};
-}
-
-function safe(p: Promise<any>): Promise<any> {
-  return p.catch(() => null);
-}
 
 function personName(p: any): string {
   if (!p) return '—';

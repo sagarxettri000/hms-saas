@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, unwrap } from '@/lib/api';
 
 interface Appointment {
   id: string;
@@ -63,10 +63,6 @@ const STATUS_TONES: Record<string, string> = {
 
 const APPOINTMENT_STATUSES = ['ALL', 'SCHEDULED', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW'];
 const VISIT_TYPES = ['OPD', 'FOLLOW_UP', 'EMERGENCY', 'TELECONSULT'];
-
-function unwrap(r: any): any {
-  return r?.data?.data ?? r?.data ?? r;
-}
 
 function personName(p: any): string {
   if (!p) return '';

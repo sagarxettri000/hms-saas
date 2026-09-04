@@ -21,6 +21,7 @@ interface ModulePageProps {
     fields?: FormField[];
     createLabel?: string;
     createRoles?: string[];
+    editable?: boolean;
     actions?: Action[];
     render?: () => React.ReactNode;
   }[];

@@ -17,6 +17,7 @@ interface TabConfig {
   fields?: FormField[];
   createLabel?: string;
   createRoles?: string[];
+  editable?: boolean;
   actions?: Action[];
   render?: () => React.ReactNode;
 }
@@ -955,7 +956,7 @@ export default function EntityPage(props: EntityPageProps) {
   }
 
   const canCreate = Boolean(effectiveFields?.length) && (!effectiveCreateRoles || effectiveCreateRoles.includes(role));
-  const canEdit = Boolean(props.editable && effectiveFields?.length);
+  const canEdit = Boolean((props.editable || tabConfig?.editable) && effectiveFields?.length);
   const effectiveActionsWithEdit = useMemo(() => {
     if (!canEdit) return effectiveActions;
     const editAction: Action = {

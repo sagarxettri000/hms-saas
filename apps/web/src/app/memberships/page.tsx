@@ -14,6 +14,7 @@ export default function MembershipsPage() {
           label: 'Packages',
           endpoint: '/memberships/packages',
           createLabel: 'Add package',
+          editable: true,
           columns: [
             { key: 'name', label: 'Name' },
             { key: 'price', label: 'Price' },

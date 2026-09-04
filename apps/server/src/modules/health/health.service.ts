@@ -6,10 +6,7 @@ export class HealthService {
   constructor(private readonly prisma: PrismaService) {}
 
   async check() {
-    const checks: Record<
-      string,
-      { status: string; latency?: number; error?: string }
-    > = {};
+    const checks: Record<string, { status: string; latency?: number }> = {};
     const startedAt = Date.now();
 
     // Database check
@@ -20,10 +17,9 @@ export class HealthService {
         status: "healthy",
         latency: Date.now() - dbStart,
       };
-    } catch (err) {
+    } catch {
       checks.database = {
         status: "unhealthy",
-        error: (err as Error).message,
       };
     }
 
@@ -40,7 +36,6 @@ export class HealthService {
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
       latency: Date.now() - startedAt,
-      environment: process.env.NODE_ENV || "development",
       version: "1.0.0",
     };
   }

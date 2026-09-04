@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
+import { randomInt } from "node:crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UserRole } from "@hms/shared";
 
@@ -424,7 +425,7 @@ export class UsersService {
       "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%";
     let password = "";
     for (let i = 0; i < 12; i++) {
-      password += chars[Math.floor(Math.random() * chars.length)];
+      password += chars[randomInt(chars.length)];
     }
     return password;
   }

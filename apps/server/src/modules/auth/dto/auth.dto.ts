@@ -5,7 +5,13 @@ import {
   MinLength,
   IsOptional,
   IsBoolean,
+  Matches,
 } from "class-validator";
+
+const PASSWORD_PATTERN =
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+const PASSWORD_MESSAGE =
+  "Password must be at least 8 characters and include an uppercase letter, lowercase letter, number, and special character";
 
 export class LoginDto {
   @ApiProperty({ example: "admin@hospital.com" })
@@ -47,6 +53,7 @@ export class RegisterDto {
   @ApiProperty()
   @IsString()
   @MinLength(8)
+  @Matches(PASSWORD_PATTERN, { message: PASSWORD_MESSAGE })
   password!: string;
 
   @ApiProperty()
@@ -88,6 +95,7 @@ export class ResetPasswordDto {
   @ApiProperty()
   @IsString()
   @MinLength(8)
+  @Matches(PASSWORD_PATTERN, { message: PASSWORD_MESSAGE })
   password!: string;
 }
 
@@ -99,6 +107,7 @@ export class ChangePasswordDto {
   @ApiProperty()
   @IsString()
   @MinLength(8)
+  @Matches(PASSWORD_PATTERN, { message: PASSWORD_MESSAGE })
   newPassword!: string;
 }
 

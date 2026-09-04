@@ -358,10 +358,12 @@ export default function DoctorsPage() {
           <div className="stat-label">Active</div>
           <div className="stat-value" style={{ color: 'var(--success)' }}>{docStats.active}</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-label">Avg Consultation Fee</div>
-          <div className="stat-value">{docStats.avgFee ? formatMoney(docStats.avgFee) : '—'}</div>
-        </div>
+        {role !== 'NURSE' && (
+          <div className="stat-card">
+            <div className="stat-label">Avg Consultation Fee</div>
+            <div className="stat-value">{docStats.avgFee ? formatMoney(docStats.avgFee) : '—'}</div>
+          </div>
+        )}
         <div className="stat-card">
           <div className="stat-label">Departments Covered</div>
           <div className="stat-value">{docStats.depts}</div>

@@ -1,6 +1,5 @@
 'use client';
 
-import AppShell from './AppShell';
 import EntityPage from './EntityPage';
 import type { Column, FormField, Action, Row } from '@/lib/types';
 
@@ -34,9 +33,5 @@ interface ModulePageProps {
 }
 
 export default function ModulePage(props: ModulePageProps) {
-  return (
-    <AppShell>
-      <EntityPage {...props} />
-    </AppShell>
-  );
+  return <EntityPage {...props} />;
 }

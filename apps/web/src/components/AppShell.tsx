@@ -126,24 +126,41 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isPublic) return;
-    const tid = localStorage.getItem('tenantId');
-    if (!tid) {
-      const token = localStorage.getItem('accessToken');
-      if (!token) { router.replace('/login'); return; }
-      api('/tenants?limit=1')
-        .then((res: any) => {
-          const list = res?.data?.data ?? (Array.isArray(res?.data) ? res.data : []);
-          if (list.length > 0) {
-            localStorage.setItem('tenantId', list[0].id);
-            localStorage.setItem('tenantName', list[0].name);
-            setTenantName(list[0].name);
-          }
-        })
-        .catch(() => {});
-    }
-    setUserName(localStorage.getItem('userName') || '');
+    const token = localStorage.getItem('accessToken');
+    if (!token) { router.replace('/login'); return; }
+    // Apply whatever identity we already have so the UI is never blank.
+    setUserName(localStorage.getItem('userName') || 'User');
     setTenantName(localStorage.getItem('tenantName') || 'Workspace');
     setRole(localStorage.getItem('role') || '');
+    // Reconcile identity/role from the server so the sidebar's role-gated items
+    // render correctly for every session (even stale localStorage).
+    let cancelled = false;
+    async function syncIdentity() {
+      try {
+        const res: any = await api('/auth/me');
+        if (cancelled || !res?.data) return;
+        const u = res.data;
+        const fullName = [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
+        if (fullName) {
+          localStorage.setItem('userName', fullName);
+          setUserName(fullName);
+        }
+        if (u.role) {
+          localStorage.setItem('role', u.role);
+          setRole(u.role);
+        }
+        if (u.tenantId) localStorage.setItem('tenantId', u.tenantId);
+        const tenantName = u.tenant?.name;
+        if (tenantName) {
+          localStorage.setItem('tenantName', tenantName);
+          setTenantName(tenantName);
+        }
+      } catch {
+        // Keep the local values already applied above.
+      }
+    }
+    syncIdentity();
+    return () => { cancelled = true; };
   }, []);
 
   function handleLogout() {

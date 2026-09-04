@@ -906,7 +906,11 @@ export default function EntityPage(props: EntityPageProps) {
       );
       const payload = res.data as any;
       setTable({
-        rows: Array.isArray(payload) ? payload : payload.data ?? [],
+        rows: Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.items)
+            ? payload.items
+            : payload.data ?? [],
         total: Array.isArray(payload) ? payload.length : payload.total ?? 0,
         loading: false,
       });

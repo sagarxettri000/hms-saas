@@ -3,15 +3,36 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PortalService } from "./portal.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
-import { TenantScoped } from "../../common/decorators/permissions.decorator";
+import { Roles, TenantScoped } from "../../common/decorators/permissions.decorator";
+import { UserRole } from "@hms/shared";
 
-// No @Permissions decorator here — the portal is patient self-service.
-// Access is scoped to the authenticated patient via TenantGuard + JwtAuthGuard;
-// MRN/ patientId params are resolved server-side against req.user.
+// The portal exposes patient clinical/financial data keyed by patientId. There is
+// currently no patient<->user-account link, so the patientId is caller-supplied.
+// To prevent any authenticated staff role from reading arbitrary patients' PHI,
+// access is restricted to the staff roles that legitimately manage patient care
+// (plus PATIENT for future self-service once patient accounts are wired up).
+// Tenant isolation is still enforced by TenantGuard + the { patientId, tenantId }
+// filters in PortalService.
 @ApiTags("Patient Portal")
 @Controller("portal")
 @UseGuards(JwtAuthGuard, TenantGuard)
 @TenantScoped()
+@Roles(
+  UserRole.PATIENT,
+  UserRole.DOCTOR,
+  UserRole.NURSE,
+  UserRole.WARD_INCHARGE,
+  UserRole.ICU_STAFF,
+  UserRole.EMERGENCY_STAFF,
+  UserRole.RECEPTIONIST,
+  UserRole.RECEPTION_SUPERVISOR,
+  UserRole.DEPARTMENT_HEAD,
+  UserRole.FINANCE_MANAGER,
+  UserRole.HOSPITAL_ADMIN,
+  UserRole.HOSPITAL_OWNER,
+  UserRole.IT_ADMIN,
+  UserRole.PLATFORM_SUPER_ADMIN,
+)
 export class PortalController {
   constructor(private readonly portalService: PortalService) {}
 

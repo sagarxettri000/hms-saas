@@ -37,18 +37,19 @@ export class PrismaService
             const ctx = RlsContext.get();
             const tenant = ctx?.tenantId;
             const bypass = ctx?.bypass === true || !tenant;
-            if (tenant) {
+            // Only scope to the caller's tenant when RLS is NOT bypassed and a
+            // tenant is known. Parameterize the SET to avoid SQL injection via
+            // the tenant identifier (e.g. a super-admin-supplied X-Tenant-ID).
+            if (tenant && !bypass) {
               const [, , result] = await base.$transaction([
-                base.$executeRawUnsafe(
-                  `SET LOCAL app.current_tenant_id = '${tenant}'`,
-                ),
-                base.$executeRawUnsafe(`SET LOCAL app.rls_bypass = 'false'`),
+                base.$executeRaw`SET LOCAL app.current_tenant_id = ${tenant}`,
+                base.$executeRaw`SET LOCAL app.rls_bypass = 'false'`,
                 query(args) as Prisma.PrismaPromise<unknown>,
               ]);
               return result;
             }
             const [, result] = await base.$transaction([
-              base.$executeRawUnsafe(`SET LOCAL app.rls_bypass = 'true'`),
+              base.$executeRaw`SET LOCAL app.rls_bypass = 'true'`,
               query(args) as Prisma.PrismaPromise<unknown>,
             ]);
             return result;

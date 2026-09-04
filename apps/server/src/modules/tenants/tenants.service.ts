@@ -132,8 +132,11 @@ export class TenantsService {
             lastName: dto.adminLastName,
             role: "HOSPITAL_ADMIN",
             status: "ACTIVE",
-            emailVerifiedAt: new Date(),
-            mustChangePassword: !dto.adminPassword,
+            // Unauthenticated onboarding: do NOT claim the email is verified and
+            // force the admin to set their own password on first login so an
+            // anonymous caller cannot obtain a live, usable admin account.
+            emailVerifiedAt: null,
+            mustChangePassword: true,
           },
         });
         if (!dto.adminPassword) temporaryPassword = password;

@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { ThrottlerGuard } from "@nestjs/throttler";
+import { Throttle, ThrottlerGuard } from "@nestjs/throttler";
 import {
   TenantsService,
   CreateTenantDto,
@@ -34,6 +34,9 @@ export class TenantsController {
   @Post()
   @Public()
   @UseGuards(ThrottlerGuard)
+  // Public (unauthenticated) onboarding: keep the limit low to discourage
+  // scraping/abuse that provisions many tenants + admin accounts at once.
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: "Create a new tenant (hospital onboarding)" })
   create(@Body() dto: CreateTenantDto) {
     return this.tenantsService.create(dto);

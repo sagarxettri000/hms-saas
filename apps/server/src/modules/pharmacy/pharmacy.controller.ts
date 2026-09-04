@@ -52,6 +52,13 @@ export class PharmacyController {
     return this.pharmacyService.createMedicine(req.user.tenantId, dto);
   }
 
+  @Post("medicines/import")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Import medicines from CSV rows" })
+  importMedicines(@Body() body: { rows: CreateMedicineDto[] }, @Req() req: any) {
+    return this.pharmacyService.importMedicines(req.user.tenantId, body.rows);
+  }
+
   @Get("medicines/:id")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Get medicine" })

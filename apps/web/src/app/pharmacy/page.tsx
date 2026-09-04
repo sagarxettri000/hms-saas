@@ -228,6 +228,244 @@ function AddMedicineModal({ onClose, onDone }: { onClose: () => void; onDone: ()
   );
 }
 
+function MedicineCsvImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<{ imported: number; errors: { row: number; error: string }[] } | null>(null);
+
+  const COLUMN_MAP: Record<string, string> = {
+    'name': 'name', 'medicine name': 'name', 'medicine': 'name', 'medicine_name': 'name',
+    'generic name': 'genericName', 'genericname': 'genericName', 'generic_name': 'genericName',
+    'brand name': 'brandName', 'brand': 'brandName', 'brandname': 'brandName', 'brand_name': 'brandName',
+    'category': 'category', 'sku': 'sku', 'barcode': 'barcode', 'unit': 'unit',
+    'dosage form': 'form', 'form': 'form', 'dosage': 'form',
+    'strength': 'strength',
+    'purchase rate': 'purchaseRate', 'purchaserate': 'purchaseRate', 'purchase_rate': 'purchaseRate',
+    'cost price': 'purchaseRate', 'cp': 'purchaseRate',
+    'sales rate': 'salesRate', 'salesrate': 'salesRate', 'sales_rate': 'salesRate',
+    'selling price': 'salesRate', 'price': 'salesRate', 'sp': 'salesRate',
+    'reorder level': 'reorderLevel', 'reorderlevel': 'reorderLevel', 'reorder_level': 'reorderLevel',
+    'low stock': 'reorderLevel',
+    'requires prescription': 'requiresPrescription', 'requiresprescription': 'requiresPrescription',
+    'rx': 'requiresPrescription', 'prescription required': 'requiresPrescription',
+  };
+
+  function parseCsv(text: string): { headers: string[]; rows: Record<string, string>[] } {
+    const clean = text.replace(/^\uFEFF/, '');
+    const lines: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < clean.length; i++) {
+      const ch = clean[i];
+      if (ch === '"') {
+        if (inQuotes && clean[i + 1] === '"') { current += '"'; i++; }
+        else { inQuotes = !inQuotes; }
+      } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+        if (ch === '\r' && clean[i + 1] === '\n') i++;
+        lines.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    if (current.trim()) lines.push(current);
+
+    if (lines.length < 2) return { headers: [], rows: [] };
+
+    const rawHeaders = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
+    const mappedHeaders = rawHeaders.map((h) => COLUMN_MAP[h.toLowerCase()] || h);
+
+    const data: Record<string, string>[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const vals: string[] = [];
+      let val = '';
+      let inQ = false;
+      for (let j = 0; j < lines[i].length; j++) {
+        const ch = lines[i][j];
+        if (ch === '"') {
+          if (inQ && lines[i][j + 1] === '"') { val += '"'; j++; }
+          else { inQ = !inQ; }
+        } else if (ch === ',' && !inQ) {
+          vals.push(val);
+          val = '';
+        } else {
+          val += ch;
+        }
+      }
+      vals.push(val);
+
+      const row: Record<string, string> = {};
+      mappedHeaders.forEach((h, idx) => { row[h] = (vals[idx] || '').replace(/^"|"$/g, '').trim(); });
+      const hasData = Object.values(row).some((v) => v.length > 0);
+      if (hasData) data.push(row);
+    }
+
+    return { headers: mappedHeaders, rows: data };
+  }
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    setResult(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const parsed = parseCsv(text);
+      setHeaders(parsed.headers);
+      setRows(parsed.rows);
+    };
+    reader.readAsText(f);
+  }
+
+  function toDto(r: Record<string, string>) {
+    const num = (v: string | undefined) => (Number(v) > 0 ? Number(v) : undefined);
+    const truthy = (v: string | undefined) => v && (String(v).toLowerCase() === 'true' || String(v).toLowerCase() === 'yes');
+    return {
+      name: r['name'] || '',
+      genericName: r['genericName'] || undefined,
+      brandName: r['brandName'] || undefined,
+      category: r['category'] || undefined,
+      sku: r['sku'] || undefined,
+      form: r['form'] || undefined,
+      strength: r['strength'] || undefined,
+      unit: r['unit'] || undefined,
+      purchaseRate: num(r['purchaseRate']),
+      salesRate: num(r['salesRate']),
+      reorderLevel: num(r['reorderLevel']),
+      requiresPrescription: r['requiresPrescription']?.length ? truthy(r['requiresPrescription']) : true,
+    };
+  }
+
+  async function handleImport() {
+    if (rows.length === 0) return;
+    setImporting(true);
+    try {
+      const payload = rows.map(toDto);
+      const res: any = await api('/pharmacy/medicines/import', {
+        method: 'POST',
+        body: JSON.stringify({ rows: payload }),
+      });
+      const data = res?.data?.data ?? res?.data ?? res;
+      setResult(data);
+      if (data?.imported > 0) onDone();
+    } catch (err: any) {
+      setResult({ imported: 0, errors: [{ row: 0, error: err.message || 'Import failed' }] });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function downloadTemplate() {
+    const csv = 'name,genericName,category,form,strength,unit,purchaseRate,salesRate,reorderLevel,requiresPrescription\nParacetamol,Acetaminophen,Antibiotics,Tablet,500mg,Strip,50,80,20,true\nAmoxicillin,Amoxicillin,Antibiotics,Capsule,250mg,Strip,80,120,15,true';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'medicine-import-template.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 760, maxHeight: '85vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0 }}>Import Medicines from CSV</h2>
+          <button className="btn btn-ghost" onClick={onClose} style={{ fontSize: 18 }}>×</button>
+        </div>
+
+        {!result ? (
+          <>
+            <div style={{ marginTop: 8, fontSize: 13, color: 'var(--text-muted)' }}>
+              Use the template below as a guide. Required column: <b>name</b>. Numbers (purchaseRate, salesRate, reorderLevel) are parsed automatically.
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="file" accept=".csv,.tsv,.txt" onChange={handleFile} style={{ flex: 1 }} />
+              <button className="btn btn-secondary" onClick={downloadTemplate} style={{ whiteSpace: 'nowrap' }}>
+                Download Template
+              </button>
+            </div>
+
+            {file && (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '8px 0 0' }}>
+                {file.name} — {rows.length} rows detected
+              </p>
+            )}
+
+            {headers.length > 0 && rows.length > 0 && (
+              <>
+                <div style={{ marginTop: 16, fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
+                  Preview (first 5 of {rows.length} rows):
+                </div>
+                <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+                  <table className="table" style={{ fontSize: 12 }}>
+                    <thead>
+                      <tr>{headers.map((h) => <th key={h}>{h}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {rows.slice(0, 5).map((row, i) => (
+                        <tr key={i}>{headers.map((h) => <td key={h}>{row[h] || '—'}</td>)}</tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+                  <button className="btn" onClick={handleImport} disabled={importing}>
+                    {importing ? 'Importing...' : `Import ${rows.length} Medicines`}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {rows.length === 0 && file && (
+              <div style={{ marginTop: 16, padding: '12px 16px', borderRadius: 8, background: 'var(--amber-bg, #fffbeb)', border: '1px solid var(--amber, #f59e0b)', fontSize: 13, color: '#92400e' }}>
+                No valid rows found. Make sure your CSV has a header row and comma-separated values.
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ marginTop: 16 }}>
+            <div style={{
+              padding: 16, borderRadius: 8,
+              background: result.imported > 0 ? 'var(--green-bg, #f0fdf4)' : 'var(--red-bg, #fef2f2)',
+              border: `1px solid ${result.imported > 0 ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)'}`,
+            }}>
+              <p style={{ fontWeight: 600, margin: '0 0 4px' }}>
+                {result.imported} medicine{result.imported !== 1 ? 's' : ''} imported successfully
+              </p>
+              {result.errors.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 4px' }}>
+                    {result.errors.length} row{result.errors.length !== 1 ? 's' : ''} failed:
+                  </p>
+                  {result.errors.slice(0, 10).map((err, i) => (
+                    <p key={i} style={{ fontSize: 12, margin: 0, color: 'var(--red, #ef4444)' }}>
+                      Row {err.row}: {err.error}
+                    </p>
+                  ))}
+                  {result.errors.length > 10 && (
+                    <p style={{ fontSize: 12, margin: '4px 0 0', color: 'var(--text-muted)' }}>
+                      ...and {result.errors.length - 10} more errors
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => { setResult(null); setFile(null); setRows([]); setHeaders([]); onClose(); }}>
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MedicinesTab() {
   const [medicines, setMedicines] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -235,6 +473,7 @@ function MedicinesTab() {
   const [category, setCategory] = useState('');
   const [sort, setSort] = useState('name-asc');
   const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -299,6 +538,7 @@ function MedicinesTab() {
           <option value="price-desc">Price (High first)</option>
         </select>
         <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add Medicine</button>
+        <button className="btn btn-secondary" onClick={() => setShowImport(true)}>Import CSV</button>
         <button className="btn btn-secondary" onClick={load}>Refresh</button>
       </div>
 
@@ -353,6 +593,7 @@ function MedicinesTab() {
       )}
 
       {showAdd && <AddMedicineModal onClose={() => setShowAdd(false)} onDone={() => { setShowAdd(false); load(); }} />}
+      {showImport && <MedicineCsvImportModal onClose={() => setShowImport(false)} onDone={() => { setShowImport(false); load(); }} />}
     </>
   );
 }

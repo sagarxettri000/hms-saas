@@ -132,6 +132,43 @@ export class PharmacyService {
     });
   }
 
+  async importMedicines(
+    tenantId: string,
+    rows: CreateMedicineDto[],
+  ): Promise<{ imported: number; errors: { row: number; error: string }[] }> {
+    if (!rows || rows.length === 0) {
+      throw new BadRequestException("No rows to import");
+    }
+    const errors: { row: number; error: string }[] = [];
+    let imported = 0;
+
+    for (let i = 0; i < rows.length; i++) {
+      const dto = rows[i];
+      try {
+        if (!dto.name || !String(dto.name).trim()) {
+          errors.push({ row: i + 1, error: "name is required" });
+          continue;
+        }
+        const { tenantId: _t, ...clean } = dto as any;
+        await this.prisma.medicine.create({
+          data: {
+            tenantId,
+            ...clean,
+            purchaseRate: dto.purchaseRate || 0,
+            salesRate: dto.salesRate || 0,
+            reorderLevel: dto.reorderLevel || 0,
+            requiresPrescription: dto.requiresPrescription ?? true,
+          },
+        });
+        imported++;
+      } catch (e: any) {
+        errors.push({ row: i + 1, error: e.message || "Unknown error" });
+      }
+    }
+
+    return { imported, errors };
+  }
+
   async findMedicines(
     tenantId: string,
     params: {

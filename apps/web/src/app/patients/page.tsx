@@ -1,10 +1,19 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import ModulePage from '@/components/ModulePage';
 import { api } from '@/lib/api';
 import { BLOOD_GROUPS, GENDERS, MARITAL_STATUS, PATIENT_TYPES } from '@/lib/options';
+
+const REGISTRATION_ROLES = [
+  'RECEPTIONIST',
+  'RECEPTION_SUPERVISOR',
+  'HOSPITAL_ADMIN',
+  'HOSPITAL_OWNER',
+  'PLATFORM_SUPER_ADMIN',
+  'IT_ADMIN',
+];
 
 function CsvImportModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
   const [file, setFile] = useState<File | null>(null);
@@ -236,6 +245,13 @@ export default function PatientsPage() {
   const router = useRouter();
   const [showImport, setShowImport] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [role, setRole] = useState('');
+
+  useEffect(() => {
+    setRole(localStorage.getItem('role') || '');
+  }, []);
+
+  const canRegister = REGISTRATION_ROLES.includes(role);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
@@ -247,14 +263,19 @@ export default function PatientsPage() {
         subtitle="Patient registry & master index"
         endpoint="/patients"
         createLabel="Register patient"
+        createRoles={REGISTRATION_ROLES}
         headerActions={(load) => (
           <>
-            <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
-              Import CSV
-            </button>
-            <button className="btn btn-secondary" onClick={() => router.push('/patients/follow-ups')}>
-              Follow Up
-            </button>
+            {canRegister && (
+              <>
+                <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
+                  Import CSV
+                </button>
+                <button className="btn btn-secondary" onClick={() => router.push('/patients/follow-ups')}>
+                  Follow Up
+                </button>
+              </>
+            )}
           </>
         )}
         columns={[

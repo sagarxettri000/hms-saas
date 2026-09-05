@@ -127,6 +127,9 @@ export default function PatientDetailPage() {
   const canAdmit = CLINICAL_ROLES.concat(FRONT_ROLES).concat(ADMIN_ROLES).includes(role);
   const canDischarge = canManageClinical;
   const canManageEncounters = canManageClinical;
+  const canFollowup = FRONT_ROLES
+    .concat(['HOSPITAL_ADMIN', 'HOSPITAL_OWNER', 'PLATFORM_SUPER_ADMIN', 'IT_ADMIN'])
+    .includes(role);
 
   const PATIENT_FIELDS: FormField[] = [
     { name: 'firstName', label: 'First name', required: true },
@@ -619,7 +622,7 @@ export default function PatientDetailPage() {
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 className="card-title" style={{ margin: 0 }}>Follow-up</h3>
-              {canManageClinical && (
+              {canFollowup && (
                 <button className="btn btn-secondary btn-sm" onClick={openScheduleFollowup}>+ Follow up</button>
               )}
             </div>
@@ -657,7 +660,7 @@ export default function PatientDetailPage() {
       {active === 'appointments' && <SectionTable title="Appointments" rows={data.appointments || []} columns={apptCols} />}
       {active === 'followup' && (
         <>
-          {canManageClinical && (
+          {canFollowup && (
             <div style={{ marginBottom: 12, textAlign: 'right' }}>
               <button className="btn" onClick={openScheduleFollowup}>+ Follow up</button>
             </div>

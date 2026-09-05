@@ -22,6 +22,15 @@ export default function FollowUpsPage() {
   const [status, setStatus] = useState('');
   const [flash, setFlash] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+
+  useEffect(() => {
+    const r = localStorage.getItem('role') || '';
+    if (
+      !['RECEPTIONIST', 'RECEPTION_SUPERVISOR', 'HOSPITAL_ADMIN', 'HOSPITAL_OWNER', 'PLATFORM_SUPER_ADMIN', 'IT_ADMIN'].includes(r)
+    ) {
+      router.replace('/patients');
+    }
+  }, [router]);
   const [createPatientId, setCreatePatientId] = useState('');
   const [selectedDoctorIds, setSelectedDoctorIds] = useState<string[]>([]);
   const [doctorOptions, setDoctorOptions] = useState<Row[]>([]);

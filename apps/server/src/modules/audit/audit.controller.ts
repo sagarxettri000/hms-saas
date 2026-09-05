@@ -4,15 +4,24 @@ import { AuditService } from "./audit.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
+import { RolesGuard } from "../../common/guards/roles.guard";
 import {
   Permissions,
+  Roles,
   TenantScoped,
 } from "../../common/decorators/permissions.decorator";
-import { PermissionAction } from "@hms/shared";
+import { PermissionAction, UserRole } from "@hms/shared";
 
 @ApiTags("Audit")
 @Controller("audit")
-@UseGuards(JwtAuthGuard, PermissionsGuard, TenantGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, TenantGuard, RolesGuard)
+@Roles(
+  UserRole.HOSPITAL_ADMIN,
+  UserRole.HOSPITAL_OWNER,
+  UserRole.PLATFORM_SUPER_ADMIN,
+  UserRole.IT_ADMIN,
+  UserRole.AUDITOR,
+)
 @TenantScoped()
 @ApiBearerAuth()
 export class AuditController {

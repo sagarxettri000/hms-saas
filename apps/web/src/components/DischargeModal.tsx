@@ -55,10 +55,15 @@ export default function DischargeModal({
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [step, setStep] = useState<'discharge' | 'billing' | 'receipt'>('discharge');
+  const [step, setStep] = useState<'discharge' | 'billing' | 'receipt' | 'done'>('discharge');
   const [values, setValues] = useState<Record<string, any>>({ dischargeType: 'RECOVERED' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [billingDenied, setBillingDenied] = useState(false);
+
+  useEffect(() => {
+    setBillingDenied(['DOCTOR', 'NURSE'].includes(localStorage.getItem('role') || ''));
+  }, []);
 
   // Discharge bill + charges
   const [bill, setBill] = useState<any>(null);
@@ -131,6 +136,10 @@ export default function DischargeModal({
       if (values.dischargeSummary) body.dischargeSummary = values.dischargeSummary;
       if (values.finalDiagnosis) body.finalDiagnosis = values.finalDiagnosis;
       await api(`/admissions/${admission.id}/discharge`, { method: 'POST', body: JSON.stringify(body) });
+      if (billingDenied) {
+        setStep('done');
+        return;
+      }
       setStep('billing');
       initialiseBill();
     } catch (err) {
@@ -404,6 +413,19 @@ export default function DischargeModal({
               <button type="submit" className="btn" disabled={saving}>{saving ? 'Discharging...' : 'Continue'}</button>
             </div>
           </form>
+        )}
+
+        {/* Completion (discharge recorded; billing is handled elsewhere) */}
+        {step === 'done' && (
+          <div>
+            <div className="alert alert-success" style={{ marginBottom: 12 }}>
+              Patient discharge recorded successfully.
+            </div>
+            <p className="note">Discharge billing and settlement are handled by the reception / finance team.</p>
+            <div className="form-actions">
+              <button className="btn" onClick={onDone}>Done</button>
+            </div>
+          </div>
         )}
 
         {/* Step 2: Discharge billing (manual service selection) */}

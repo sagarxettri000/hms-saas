@@ -14,7 +14,6 @@ const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-passwor
 
 const ADMIN = ['HOSPITAL_ADMIN', 'HOSPITAL_OWNER'];
 const SUPER = ['PLATFORM_SUPER_ADMIN', 'IT_ADMIN'];
-const MANAGER = [...SUPER, ...ADMIN, 'DEPARTMENT_HEAD'];
 const FRONT = ['RECEPTIONIST', 'RECEPTION_SUPERVISOR'];
 const CLINICAL = ['DOCTOR', 'NURSE', 'WARD_INCHARGE', 'ICU_STAFF', 'EMERGENCY_STAFF'];
 const CLINICAL_WIDE = [...CLINICAL, ...FRONT, ...ADMIN, ...SUPER, 'ANESTHETIST'];
@@ -81,10 +80,10 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { label: 'Insurance', href: '/insurance', icon: '◈', roles: [...FINANCE, ...ADMIN, ...SUPER, ...INSURANCE] },
       { label: 'Memberships', href: '/memberships', icon: '★', roles: [...FINANCE, ...ADMIN, ...SUPER, ...FRONT] },
       { label: 'Doctor Share', href: '/doctor-share', icon: '➗', roles: [...ADMIN, ...SUPER] },
-      { label: 'Accounting', href: '/accounting', icon: '⇄', roles: [...FINANCE, ...ADMIN, ...SUPER] },
-      { label: 'Reports', href: '/reports', icon: '▦', roles: [...ADMIN, ...SUPER, 'AUDITOR', 'QUALITY_MANAGER', 'FINANCE_MANAGER', 'RECEPTIONIST', 'RECEPTION_SUPERVISOR', 'DEPARTMENT_HEAD'] },
-      { label: 'Procurement', href: '/procurement', icon: '↦', roles: [...INVENTORY, ...ADMIN, ...SUPER] },
-      { label: 'CRM', href: '/crm', icon: '⊞', roles: [...FRONT, 'DEPARTMENT_HEAD', ...ADMIN, ...SUPER] },
+      { label: 'Accounting', href: '/accounting', icon: '⇄', roles: [...ADMIN, ...SUPER] },
+      { label: 'Reports', href: '/reports', icon: '▦', roles: [...ADMIN, ...SUPER] },
+      { label: 'Procurement', href: '/procurement', icon: '↦', roles: [...ADMIN, ...SUPER] },
+      { label: 'CRM', href: '/crm', icon: '⊞', roles: [...ADMIN, ...SUPER] },
     ],
   },
   {
@@ -98,16 +97,16 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'People',
     items: [
-      { label: 'Departments', href: '/departments', icon: '❏', roles: [...MANAGER, 'HR_MANAGER'] },
-      { label: 'HR & Staff', href: '/hr', icon: '☷', roles: [...ADMIN, ...SUPER, 'HR_MANAGER', 'FINANCE_MANAGER'] },
+      { label: 'Departments', href: '/departments', icon: '❏', roles: [...ADMIN, ...SUPER] },
+      { label: 'HR & Staff', href: '/hr', icon: '☷', roles: [...ADMIN, ...SUPER] },
     ],
   },
   {
     title: 'System',
     items: [
-      { label: 'Notifications', href: '/notifications', icon: '◐' },
-      { label: 'Audit Logs', href: '/audit', icon: '▤', roles: [...ADMIN, ...SUPER, 'AUDITOR'] },
-      { label: 'Tenants', href: '/tenants', icon: '▦', roles: [...SUPER] },
+      { label: 'Notifications', href: '/notifications', icon: '◐', roles: [...ADMIN, ...SUPER] },
+      { label: 'Audit Logs', href: '/audit', icon: '▤', roles: [...ADMIN, ...SUPER] },
+      { label: 'Tenants', href: '/tenants', icon: '▦', roles: [...ADMIN, ...SUPER] },
       { label: 'Webhooks & Keys', href: '/webhooks', icon: '⇌', roles: [...ADMIN, ...SUPER] },
       { label: 'Settings', href: '/settings', icon: '⚙', roles: [...ADMIN, ...SUPER] },
     ],

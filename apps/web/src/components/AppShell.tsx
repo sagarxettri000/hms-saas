@@ -115,6 +115,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
 ];
 
 function canAccess(item: NavItem, role: string): boolean {
+  if (role === 'HOSPITAL_ADMIN' || role === 'HOSPITAL_OWNER') return true;
   return !item.roles || item.roles.includes(role);
 }
 

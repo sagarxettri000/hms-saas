@@ -304,9 +304,23 @@ export default function DashboardPage() {
             { label: 'Settings', href: '/settings', icon: '⚙' },
           ]
         : [
+            { label: 'Register patient', href: '/patients', icon: '👤' },
+            { label: 'Book appointment', href: '/appointments', icon: '📅' },
+            { label: 'Patients', href: '/patients', icon: '☺' },
+            { label: 'Billing', href: '/billing', icon: '💳' },
+            { label: 'Service Master', href: '/billing/service-master', icon: '☰' },
+            { label: 'Admit patient', href: '/admissions', icon: '🛏' },
+            { label: 'Beds & Wards', href: '/bed-management', icon: '⊞' },
+            { label: 'Pharmacy', href: '/pharmacy?tab=medicines', icon: '💊' },
+            { label: 'Laboratory', href: '/laboratory', icon: '🔬' },
+            { label: 'Radiology', href: '/radiology', icon: '▤' },
+            { label: 'Insurance', href: '/insurance', icon: '◈' },
+            { label: 'Memberships', href: '/memberships', icon: '★' },
+            { label: 'Accounting', href: '/accounting', icon: '⇄' },
             { label: 'Reports & analytics', href: '/reports', icon: '📊' },
             { label: 'HR & staff', href: '/hr', icon: '👥' },
-            { label: 'Billing', href: '/billing', icon: '💳' },
+            { label: 'Users & roles', href: '/settings', icon: '⚙' },
+            { label: 'Tenants', href: '/tenants', icon: '▦' },
           ],
     );
   }

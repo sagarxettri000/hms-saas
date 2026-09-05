@@ -28,9 +28,15 @@ export class SuperAdminGuard implements CanActivate {
       throw new ForbiddenException("Authentication required");
     }
 
-    if (user.role !== "PLATFORM_SUPER_ADMIN") {
+    const allowedRoles = [
+      "PLATFORM_SUPER_ADMIN",
+      "HOSPITAL_ADMIN",
+      "HOSPITAL_OWNER",
+    ];
+
+    if (!allowedRoles.includes(user.role)) {
       throw new ForbiddenException(
-        "Only platform super admins can access this resource",
+        "Only platform super admins and hospital admins can access this resource",
       );
     }
 

@@ -329,6 +329,16 @@ export class UsersService {
       data.role = dto.role;
     }
 
+    if (dto.password) {
+      if (String(dto.password).length < 8) {
+        throw new BadRequestException(
+          "Password must be at least 8 characters",
+        );
+      }
+      data.passwordHash = await bcrypt.hash(String(dto.password), 12);
+      data.mustChangePassword = false;
+    }
+
     return this.prisma.user.update({
       where: { id },
       data,

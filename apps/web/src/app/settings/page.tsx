@@ -81,6 +81,7 @@ export default function SettingsPage() {
           label: 'Users',
           endpoint: '/users',
           createLabel: 'Add user',
+          editable: true,
           createRoles: ['HOSPITAL_ADMIN', 'HOSPITAL_OWNER', 'PLATFORM_SUPER_ADMIN', 'IT_ADMIN'],
           columns: [
             {

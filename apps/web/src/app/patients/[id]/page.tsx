@@ -130,6 +130,9 @@ export default function PatientDetailPage() {
   const canFollowup = FRONT_ROLES
     .concat(['HOSPITAL_ADMIN', 'HOSPITAL_OWNER', 'PLATFORM_SUPER_ADMIN', 'IT_ADMIN'])
     .includes(role);
+  const canSeeBilling = FRONT_ROLES
+    .concat(['FINANCE_MANAGER', 'HOSPITAL_ADMIN', 'HOSPITAL_OWNER', 'PLATFORM_SUPER_ADMIN', 'IT_ADMIN', 'INSURANCE_OFFICER'])
+    .includes(role);
 
   const PATIENT_FIELDS: FormField[] = [
     { name: 'firstName', label: 'First name', required: true },
@@ -304,7 +307,7 @@ export default function PatientDetailPage() {
     { key: 'vitals', label: `Vitals (${data.vitals?.length ?? 0})` },
     { key: 'prescriptions', label: `Prescriptions (${data.prescriptions?.length ?? 0})` },
     { key: 'lab', label: `Lab (${data.labs?.length ?? 0})` },
-    { key: 'billing', label: `Billing (${data.invoices?.length ?? 0})` },
+    ...(canSeeBilling ? [{ key: 'billing', label: `Billing (${data.invoices?.length ?? 0})` }] : []),
     { key: 'admissions', label: `Admit (${data.admissions?.length ?? 0})` },
     { key: 'appointments', label: `Appointments (${data.appointments?.length ?? 0})` },
     { key: 'followup', label: `Follow-up (${followups.length})` },
@@ -539,7 +542,9 @@ export default function PatientDetailPage() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn" onClick={openEdit}>✎ Edit</button>
-          <button className="btn" onClick={() => router.push(`/billing?patientId=${patient.id}`)}>₨ Billing</button>
+          {canSeeBilling && (
+            <button className="btn" onClick={() => router.push(`/billing?patientId=${patient.id}`)}>₨ Billing</button>
+          )}
           {canManageEncounters && (
             <button className="btn" onClick={() => setShowEncounter(true)}>+ Start encounter</button>
           )}
@@ -603,22 +608,24 @@ export default function PatientDetailPage() {
               <p className="muted">No known allergies.</p>
             )}
           </div>
-          <div className="card">
-            <h3 className="card-title">Financial</h3>
-            <dl className="kv">
-              <dt>Unpaid bills</dt>
-              <dd>
-                {formatMoney(
-                  (data.invoices || []).reduce(
-                    (s: number, i: Row) => s + Math.max(0, Number(i.totalAmount || 0) - Number(i.paidAmount || 0)),
-                    0,
-                  ),
-                )}
-              </dd>
-              <dt>Insurance claims</dt><dd>{(data.claims || []).length}</dd>
-              <dt>Total admits</dt><dd>{(data.admissions || []).length}</dd>
-            </dl>
-          </div>
+          {canSeeBilling && (
+            <div className="card">
+              <h3 className="card-title">Financial</h3>
+              <dl className="kv">
+                <dt>Unpaid bills</dt>
+                <dd>
+                  {formatMoney(
+                    (data.invoices || []).reduce(
+                      (s: number, i: Row) => s + Math.max(0, Number(i.totalAmount || 0) - Number(i.paidAmount || 0)),
+                      0,
+                    ),
+                  )}
+                </dd>
+                <dt>Insurance claims</dt><dd>{(data.claims || []).length}</dd>
+                <dt>Total admits</dt><dd>{(data.admissions || []).length}</dd>
+              </dl>
+            </div>
+          )}
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 className="card-title" style={{ margin: 0 }}>Follow-up</h3>

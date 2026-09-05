@@ -164,15 +164,15 @@ export default function PatientDetailPage() {
     let activeFlag = true;
     Promise.all([
       api(`/patients/${id}`),
-      api(`/encounters?patientId=${id}&limit=50`),
-      api(`/encounters/vitals/patient/${id}`),
-      api(`/encounters/prescriptions/patient/${id}`),
-      api(`/lab/orders?patientId=${id}&limit=50`),
-      api(`/billing/invoices?patientId=${id}&limit=50`),
-      api(`/admissions?patientId=${id}&limit=50`),
-      api(`/appointments?patientId=${id}&limit=50`),
-      api(`/insurance/claims?patientId=${id}&limit=50`),
-      api(`/follow-ups?patientId=${id}&limit=50`),
+      api(`/encounters?patientId=${id}&limit=50`).catch(() => ({})),
+      api(`/encounters/vitals/patient/${id}`).catch(() => ({})),
+      api(`/encounters/prescriptions/patient/${id}`).catch(() => ({})),
+      api(`/lab/orders?patientId=${id}&limit=50`).catch(() => ({})),
+      api(`/billing/invoices?patientId=${id}&limit=50`).catch(() => ({})),
+      api(`/admissions?patientId=${id}&limit=50`).catch(() => ({})),
+      api(`/appointments?patientId=${id}&limit=50`).catch(() => ({})),
+      api(`/insurance/claims?patientId=${id}&limit=50`).catch(() => ({})),
+      api(`/follow-ups?patientId=${id}&limit=50`).catch(() => ({})),
     ])
       .then(([pat, enc, vitals, rx, labs, inv, adm, appts, claims, followups]) => {
         if (!activeFlag) return;

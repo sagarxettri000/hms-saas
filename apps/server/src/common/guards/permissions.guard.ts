@@ -45,8 +45,12 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException("User has no permissions defined");
     }
 
-    // Platform super admin bypasses all permission checks
-    if (user.role === "PLATFORM_SUPER_ADMIN") {
+    // Platform super admins and tenant admins bypass all permission checks
+    if (
+      user.role === "PLATFORM_SUPER_ADMIN" ||
+      user.role === "HOSPITAL_ADMIN" ||
+      user.role === "HOSPITAL_OWNER"
+    ) {
       return true;
     }
 

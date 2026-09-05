@@ -710,6 +710,7 @@ function BedDetailModal({ bedId, onClose }: { bedId: string; onClose: () => void
 }
 
 export default function BedManagementPage() {
+  const [role, setRole] = useState('');
   const [tab, setTab] = useState('dashboard');
   const [dashboard, setDashboard] = useState<any>(null);
   const [loadingDash, setLoadingDash] = useState(true);
@@ -735,6 +736,12 @@ export default function BedManagementPage() {
   const [showCreateWard, setShowCreateWard] = useState(false);
   const [showMaintenance, setShowMaintenance] = useState(false);
   const [showBedDetail, setShowBedDetail] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRole(localStorage.getItem('role') || '');
+  }, []);
+
+  const canManageBeds = ['RECEPTIONIST', 'RECEPTION_SUPERVISOR', 'HOSPITAL_ADMIN', 'HOSPITAL_OWNER', 'PLATFORM_SUPER_ADMIN', 'IT_ADMIN'].includes(role);
 
   const loadDashboard = useCallback(() => {
     setLoadingDash(true);
@@ -980,7 +987,9 @@ export default function BedManagementPage() {
                 <option value="">All Types</option>
                 {BED_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
+              {canManageBeds && (
               <button className="btn" onClick={() => setShowCreateBed(true)}>+ Add Bed</button>
+            )}
             </div>
 
             {filterWard || filterStatus || filterType || searchBeds ? (
@@ -1083,7 +1092,9 @@ export default function BedManagementPage() {
         {tab === 'wards' && (
           <>
             <div className="toolbar" style={{ marginBottom: 16 }}>
+              {canManageBeds && (
               <button className="btn" onClick={() => setShowCreateWard(true)}>+ Add Ward</button>
+            )}
             </div>
             {loadingWards ? (
               <div className="loading">Loading wards...</div>

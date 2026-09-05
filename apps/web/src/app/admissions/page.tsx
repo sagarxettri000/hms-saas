@@ -79,6 +79,7 @@ export default function AdmissionsPage() {
   }
 
   const canDischarge = CLINICAL_ROLES.concat(ADMIN_ROLES).includes(role);
+  const canAdmitAction = ['RECEPTIONIST', 'RECEPTION_SUPERVISOR', 'HOSPITAL_ADMIN', 'HOSPITAL_OWNER', 'PLATFORM_SUPER_ADMIN', 'IT_ADMIN'].includes(role);
 
   useEffect(() => {
     setRole(localStorage.getItem('role') || '');
@@ -225,9 +226,11 @@ export default function AdmissionsPage() {
           <h1 className="page-title">Admit</h1>
           <p className="page-subtitle">IPD admissions &amp; bed management</p>
         </div>
-        <button className="btn" onClick={handleOpenAdmit}>
-          + Admit patient
-        </button>
+        {canAdmitAction && (
+          <button className="btn" onClick={handleOpenAdmit}>
+            + Admit patient
+          </button>
+        )}
       </div>
 
       {flash && <div className="alert alert-success">{flash}</div>}

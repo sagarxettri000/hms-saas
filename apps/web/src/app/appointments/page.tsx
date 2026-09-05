@@ -5,6 +5,15 @@ import DaySchedule from '@/components/DaySchedule';
 import { formatDateTime } from '@/lib/hooks';
 import { APPOINTMENT_TYPES, DOCTOR_REF, GENDERS, PATIENT_REF } from '@/lib/options';
 
+const REGISTRATION_ROLES = [
+  'RECEPTIONIST',
+  'RECEPTION_SUPERVISOR',
+  'HOSPITAL_ADMIN',
+  'HOSPITAL_OWNER',
+  'PLATFORM_SUPER_ADMIN',
+  'IT_ADMIN',
+];
+
 export default function AppointmentsPage() {
   return (
     <ModulePage
@@ -12,6 +21,7 @@ export default function AppointmentsPage() {
       subtitle="Outpatient appointments & scheduling"
       endpoint="/appointments"
       createLabel="Book appointment"
+      createRoles={REGISTRATION_ROLES}
       columns={[
         {
           key: 'patient',

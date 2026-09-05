@@ -26,7 +26,9 @@ import { DischargeBillingService } from "./discharge-billing.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
+import { ForbidRolesGuard } from "../../common/guards/forbid-roles.guard";
 import {
+  ForbidRoles,
   Permissions,
   Roles,
   TenantScoped,
@@ -35,7 +37,8 @@ import { PermissionAction, UserRole } from "@hms/shared";
 
 @ApiTags("Billing")
 @Controller("billing")
-@UseGuards(JwtAuthGuard, PermissionsGuard, TenantGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, TenantGuard, ForbidRolesGuard)
+@ForbidRoles(UserRole.DOCTOR, UserRole.NURSE)
 @TenantScoped()
 @ApiBearerAuth()
 export class BillingController {

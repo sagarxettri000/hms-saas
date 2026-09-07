@@ -1046,32 +1046,33 @@ h3 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
+  background: transparent;
+  border-radius: var(--radius);
   flex: 0 0 auto;
 }
 
 .dash-icon-tile.dash-tone-blue {
-  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  color: #3b82f6;
 }
 
 .dash-icon-tile.dash-tone-green {
-  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #16a34a;
 }
 
 .dash-icon-tile.dash-tone-purple {
-  background: linear-gradient(135deg, #a855f7, #8b5cf6);
+  color: #8b5cf6;
 }
 
 .dash-icon-tile.dash-tone-amber {
-  background: linear-gradient(135deg, #f59e0b, #ea580c);
+  color: #ea580c;
 }
 
 .dash-icon-tile.dash-tone-red {
-  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #dc2626;
 }
 
 .dash-icon-tile.dash-tone-gray {
-  background: linear-gradient(135deg, #94a3b8, #64748b);
+  color: #64748b;
 }
 
 .dash-delta {

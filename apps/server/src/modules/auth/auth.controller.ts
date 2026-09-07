@@ -92,7 +92,8 @@ export class AuthController {
 
   @Post("change-password")
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiBearerAuth()
   @ApiOperation({ summary: "Change current user password" })
   changePassword(@Body() dto: ChangePasswordDto, @Req() req: any) {
@@ -125,7 +126,8 @@ export class AuthController {
   }
 
   @Post("2fa/enable")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiBearerAuth()
   @ApiOperation({ summary: "Verify a code and enable 2FA" })
   enableTwoFactor(@Body() dto: EnableTwoFactorDto, @Req() req: any) {
@@ -133,7 +135,8 @@ export class AuthController {
   }
 
   @Post("2fa/disable")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiBearerAuth()
   @ApiOperation({ summary: "Disable 2FA with a verification code" })
   disableTwoFactor(@Body() dto: DisableTwoFactorDto, @Req() req: any) {

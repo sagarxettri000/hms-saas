@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { formatMoney, formatDateTime } from '@/lib/hooks';
-import PaymentModal from '@/components/PaymentModal';
+import { formatMoney, formatDateTime } from '@/lib/hooks';import PaymentModal from '@/components/PaymentModal';
 import ReceiptModal from '@/components/ReceiptModal';
 
 const ALLOWED_ROLES = [
@@ -19,6 +18,10 @@ function toList(res: any): any[] {
   const d = res?.data?.data ?? res?.data ?? res;
   if (Array.isArray(d)) return d;
   return d?.data ?? [];
+}
+
+function safe<T>(p: Promise<T>): Promise<T | null> {
+  return p.catch(() => null);
 }
 
 function toObj(res: any): any {
@@ -52,9 +55,9 @@ export default function PharmacyDashboardPage() {
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
-      api('/pharmacy/summary'),
-      api('/pharmacy/alerts'),
-      api('/pharmacy/sales?limit=8'),
+      safe(api('/pharmacy/summary')),
+      safe(api('/pharmacy/alerts')),
+      safe(api('/pharmacy/sales?limit=8')),
     ])
       .then(([summaryRes, alertsRes, salesRes]: any[]) => {
         const s = toObj(summaryRes) || {};
@@ -73,7 +76,6 @@ export default function PharmacyDashboardPage() {
         setLowStock(Array.isArray(alerts.lowStock) ? alerts.lowStock : []);
         setExpiring(Array.isArray(alerts.nearExpiry) ? alerts.nearExpiry : []);
       })
-      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 

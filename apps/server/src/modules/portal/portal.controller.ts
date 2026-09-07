@@ -5,6 +5,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
 import { Roles, TenantScoped } from "../../common/decorators/permissions.decorator";
 import { UserRole } from "@hms/shared";
+import { BookAppointmentDto } from "./dto/book-appointment.dto";
 
 // The portal exposes patient clinical/financial data keyed by patientId. There is
 // currently no patient<->user-account link, so the patientId is caller-supplied.
@@ -62,7 +63,7 @@ export class PortalController {
 
   @Post("appointments")
   @ApiOperation({ summary: "Book an appointment" })
-  async bookAppointment(@Body() dto: any, @Req() req: any) {
+  async bookAppointment(@Body() dto: BookAppointmentDto, @Req() req: any) {
     return this.portalService.bookAppointment(req.user.tenantId, dto);
   }
 }

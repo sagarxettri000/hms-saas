@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
@@ -54,6 +55,8 @@ export interface InviteUserDto {
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   private static readonly ROLE_RANK: Record<string, number> = {
@@ -170,7 +173,9 @@ export class UsersService {
             employmentStatus: "ACTIVE",
           },
         })
-        .catch(() => {});
+        .catch((err) =>
+          this.logger.warn("staffProfile create failed", err),
+        );
 
       // Create doctor profile if role is DOCTOR
       if (dto.role === "DOCTOR") {
@@ -183,7 +188,9 @@ export class UsersService {
               isActive: true,
             },
           })
-          .catch(() => {});
+          .catch((err: unknown) =>
+            this.logger.warn("doctorProfile create failed", err),
+          );
       }
     }
 

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
@@ -61,6 +62,8 @@ const ORDER_FLOW: Record<string, string[]> = {
 
 @Injectable()
 export class LaboratoryService {
+  private readonly logger = new Logger(LaboratoryService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
@@ -355,7 +358,9 @@ export class LaboratoryService {
             status: "COLLECTED",
           },
         })
-        .catch(() => {});
+        .catch((err) =>
+          this.logger.warn("labSample create failed", err),
+        );
     }
 
     await this.logAudit(tenantId, userId, "UPDATE", "LabOrder", id, {
@@ -464,7 +469,9 @@ export class LaboratoryService {
         where: { id: orderId },
         data: { status: "RESULT_READY", processedAt: new Date() },
       })
-      .catch(() => {});
+      .catch((err) =>
+        this.logger.warn("labOrder status update after result failed", err),
+      );
 
     await this.logAudit(tenantId, userId, "UPDATE", "LabOrder", orderId, {
       action: "RESULT_ENTERED",
@@ -553,7 +560,9 @@ export class LaboratoryService {
             referenceType: "LabOrder",
             referenceId: orderId,
           })
-          .catch(() => {});
+          .catch((err) =>
+            this.logger.warn("critical lab result notification failed", err),
+          );
       }
     } catch {}
   }

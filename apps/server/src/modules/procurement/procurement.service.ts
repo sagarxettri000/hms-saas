@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
@@ -62,6 +63,8 @@ export interface CreateGoodsReceiptDto {
 
 @Injectable()
 export class ProcurementService {
+  private readonly logger = new Logger(ProcurementService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ---------- Suppliers ----------
@@ -392,14 +395,18 @@ export class ProcurementService {
             },
             data: { receivedQuantity: { increment: item.quantity } },
           })
-          .catch(() => {});
+          .catch((err) =>
+            this.logger.warn("purchaseOrderItem receivedQuantity update failed", err),
+          );
       }
       await this.prisma.purchaseOrder
         .update({
           where: { id: dto.purchaseOrderId },
           data: { status: "PARTIAL_RECEIVED" },
         })
-        .catch(() => {});
+        .catch((err) =>
+          this.logger.warn("purchaseOrder PARTIAL_RECEIVED update failed", err),
+        );
     }
 
     return receipt;

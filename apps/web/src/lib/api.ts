@@ -51,7 +51,11 @@ async function request(path: string, options: RequestInit = {}, retry = true): P
     }
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
-    if (window.location.pathname !== '/login') window.location.replace('/login');
+    const sessionRole =
+      typeof window !== 'undefined' ? localStorage.getItem('role') : null;
+    const target =
+      sessionRole === 'PHARMACIST' ? '/pharmacy-login' : '/login';
+    if (window.location.pathname !== target) window.location.replace(target);
     throw new Error('Session expired. Please sign in again.');
   }
 

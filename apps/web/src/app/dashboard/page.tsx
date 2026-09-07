@@ -1137,7 +1137,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <button className="btn btn-light" onClick={() => router.push('/pharmacy?tab=billing')}>
-                  Start dispensing →
+                  Billing →
                 </button>
               </div>
 

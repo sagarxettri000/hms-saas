@@ -2345,8 +2345,8 @@ model Invoice {
   tenantId             String
   tenant               Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   invoiceNumber        String
-  patientId            String
-  patient              Patient         @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  patientId            String?
+  patient              Patient?        @relation(fields: [patientId], references: [id], onDelete: SetNull)
   admissionId          String?
   admission            Admission?      @relation(fields: [admissionId], references: [id], onDelete: SetNull)
   encounterId          String?
@@ -2370,6 +2370,8 @@ model Invoice {
   paidAmount           Decimal         @default(0) @db.Decimal(14, 2)
   dueAmount            Decimal         @default(0) @db.Decimal(14, 2)
   isCredit             Boolean         @default(false)
+  customerName         String?
+  customerPhone        String?
   schemeId             String?
   scheme               BillingScheme?  @relation(fields: [schemeId], references: [id], onDelete: SetNull)
   printCount           Int             @default(0)
@@ -2455,8 +2457,8 @@ model Payment {
   id              String        @id @default(cuid())
   tenantId        String
   tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  patientId       String
-  patient         Patient       @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  patientId       String?
+  patient         Patient?      @relation(fields: [patientId], references: [id], onDelete: SetNull)
   invoiceId       String?
   invoice         Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   paymentNumber   String
@@ -2489,8 +2491,8 @@ model Refund {
   id              String        @id @default(cuid())
   tenantId        String
   tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  patientId       String
-  patient         Patient       @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  patientId       String?
+  patient         Patient?      @relation(fields: [patientId], references: [id], onDelete: SetNull)
   paymentId       String?
   payment         Payment?      @relation(fields: [paymentId], references: [id], onDelete: SetNull)
   invoiceId       String?

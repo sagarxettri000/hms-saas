@@ -10,11 +10,11 @@ import PatientPrescriptions from '@/components/PatientPrescriptions';
 
 const REMOVED_KEY = 'pharmacy_expiry_removed';
 
-const VALID_TABS = ['medicines', 'dispensing', 'bills', 'stores', 'alerts', 'expiry'];
+const VALID_TABS = ['medicines', 'billing', 'bills', 'stores', 'alerts', 'expiry'];
 
 const TAB_LABELS: Record<string, string> = {
   medicines: 'Medicines',
-  dispensing: 'Dispensing',
+  billing: 'Billing',
   bills: 'Bills',
   stores: 'Stores',
   alerts: 'Alerts',
@@ -868,10 +868,9 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
   const [error, setError] = useState('');
   const [stores, setStores] = useState<any[]>([]);
   const [patientList, setPatientList] = useState<any[]>([]);
-  const [showAddPatient, setShowAddPatient] = useState(false);
-  const [newPatient, setNewPatient] = useState({ firstName: '', lastName: '', mobile: '', gender: 'MALE' });
-  const [savingPatient, setSavingPatient] = useState(false);
-  const [patientError, setPatientError] = useState('');
+  const [isWalkIn, setIsWalkIn] = useState(false);
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [discount, setDiscount] = useState(0);
   const [tax, setTax] = useState(0);
   const [payMethod, setPayMethod] = useState('CASH');
@@ -932,14 +931,16 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
   const grandTotal = Math.max(0, subtotal + taxAmount - discount);
 
   async function submit() {
-    if (items.length === 0 || !patientId || !storeId) return;
+    if (items.length === 0 || (!patientId && !customerName.trim()) || !storeId) return;
     setSubmitting(true);
     setError('');
     try {
       const saleRes = await api('/pharmacy/sale', {
         method: 'POST',
         body: JSON.stringify({
-          patientId,
+          ...(patientId ? { patientId } : {}),
+          customerName: patientId ? undefined : (customerName.trim() || undefined),
+          customerPhone: patientId ? undefined : (customerPhone.trim() || undefined),
           storeId,
           items: items.map((it) => ({
             medicineId: it.medicineId,
@@ -972,24 +973,6 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
     }
   }
 
-  async function handleAddPatient() {
-    if (!newPatient.firstName.trim()) { setPatientError('First name is required'); return; }
-    setSavingPatient(true);
-    setPatientError('');
-    try {
-      const res = await api('/patients', { method: 'POST', body: JSON.stringify(newPatient) });
-      const pat = toObj(res);
-      setPatientList((prev) => [...prev, pat]);
-      setPatientId(pat.id);
-      setShowAddPatient(false);
-      setNewPatient({ firstName: '', lastName: '', mobile: '', gender: 'MALE' });
-    } catch (err: any) {
-      setPatientError(err.message || 'Failed to add patient');
-    } finally {
-      setSavingPatient(false);
-    }
-  }
-
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 900, width: '92%' }} onClick={(e) => e.stopPropagation()}>
@@ -1003,9 +986,25 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
             <div className="card-title">Billing Details</div>
             <div className="form-grid">
               <div className="field">
-                <label className="label">Patient *</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <select className="input" style={{ flex: 1 }} value={patientId} onChange={(e) => setPatientId(e.target.value)}>
+                <label className="label">Customer *</label>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${!isWalkIn ? 'btn-primary' : ''}`}
+                    onClick={() => { setIsWalkIn(false); setCustomerName(''); setCustomerPhone(''); }}
+                  >
+                    Hospital Patient
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${isWalkIn ? 'btn-primary' : ''}`}
+                    onClick={() => { setIsWalkIn(true); setPatientId(''); }}
+                  >
+                    + New Walk-in Customer
+                  </button>
+                </div>
+                {!isWalkIn ? (
+                  <select className="input" value={patientId} onChange={(e) => setPatientId(e.target.value)}>
                     <option value="">Select patient</option>
                     {patientList.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -1013,8 +1012,24 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
                       </option>
                     ))}
                   </select>
-                  <button className="btn btn-sm" onClick={() => setShowAddPatient(true)}>+ Add</button>
-                </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      className="input"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="Customer name"
+                      style={{ flex: 1 }}
+                    />
+                    <input
+                      className="input"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      placeholder="Phone (optional)"
+                      style={{ width: 140 }}
+                    />
+                  </div>
+                )}
               </div>
               <div className="field">
                 <label className="label">Store *</label>
@@ -1024,7 +1039,7 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
                 </select>
               </div>
               <div className="field field-full">
-                {patientId && <PatientPrescriptions patientId={patientId} />}
+                {!isWalkIn && patientId && <PatientPrescriptions patientId={patientId} />}
               </div>
               <div className="field field-full">
                 <label className="label">Medicine</label>
@@ -1122,7 +1137,7 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
                 <button
                   className="btn btn-primary"
                   style={{ width: '100%', marginTop: 8 }}
-                  disabled={submitting || items.length === 0 || !patientId || !storeId}
+                  disabled={submitting || items.length === 0 || (!patientId && !customerName.trim()) || !storeId}
                   onClick={submit}
                 >
                   {submitting ? 'Processing...' : 'Create Invoice & Receipt'}
@@ -1133,44 +1148,6 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
         </div>
 
         {error && <div className="alert alert-error" style={{ marginTop: 12 }}>{error}</div>}
-
-        {showAddPatient && (
-          <div className="modal-backdrop" onClick={() => setShowAddPatient(false)}>
-            <div className="modal" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h3 className="modal-title">Add New Patient</h3>
-                <button className="modal-close" onClick={() => setShowAddPatient(false)}>x</button>
-              </div>
-              <div className="field">
-                <label className="label">First Name *</label>
-                <input className="input" value={newPatient.firstName} onChange={(e) => setNewPatient({ ...newPatient, firstName: e.target.value })} />
-              </div>
-              <div className="field">
-                <label className="label">Last Name</label>
-                <input className="input" value={newPatient.lastName} onChange={(e) => setNewPatient({ ...newPatient, lastName: e.target.value })} />
-              </div>
-              <div className="field">
-                <label className="label">Mobile</label>
-                <input className="input" value={newPatient.mobile} onChange={(e) => setNewPatient({ ...newPatient, mobile: e.target.value })} />
-              </div>
-              <div className="field">
-                <label className="label">Gender</label>
-                <select className="input" value={newPatient.gender} onChange={(e) => setNewPatient({ ...newPatient, gender: e.target.value })}>
-                  <option value="MALE">Male</option>
-                  <option value="FEMALE">Female</option>
-                  <option value="OTHER">Other</option>
-                </select>
-              </div>
-              {patientError && <div className="alert alert-error">{patientError}</div>}
-              <div className="form-actions">
-                <button className="btn btn-secondary" onClick={() => setShowAddPatient(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={handleAddPatient} disabled={savingPatient}>
-                  {savingPatient ? 'Saving...' : 'Add Patient'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1408,9 +1385,15 @@ function BillsTab() {
                   <tr key={b.id}>
                     <td className="mono">{b.invoiceNumber}</td>
                     <td>
-                      {b.patient?.firstName} {b.patient?.lastName}
-                      {b.patient?.mrn ? <span className="mono" style={{ marginLeft: 6, fontSize: 12, color: 'var(--text-muted)' }}>{b.patient.mrn}</span> : null}
-                    </td>
+                    {b.patient ? (
+                      <>
+                        {b.patient.firstName} {b.patient.lastName}
+                        {b.patient.mrn ? <span className="mono" style={{ marginLeft: 6, fontSize: 12, color: 'var(--text-muted)' }}>{b.patient.mrn}</span> : null}
+                      </>
+                    ) : (
+                      <span>{b.customerName || 'Walk-in Customer'}{b.customerPhone ? ` · ${b.customerPhone}` : ''}</span>
+                    )}
+                  </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{formatDate(b.issuedDate)}</td>
                     <td style={{ textAlign: 'center' }}>{b.items?.length ?? 0}</td>
                     <td style={{ fontWeight: 600 }}>{formatMoney(b.totalAmount)}</td>
@@ -1447,7 +1430,6 @@ function StoresTab() {
   const [stores, setStores] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1465,7 +1447,6 @@ function StoresTab() {
   return (
     <>
       <div className="toolbar" style={{ marginBottom: 16 }}>
-        <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add Store</button>
         <button className="btn btn-secondary" onClick={load}>Refresh</button>
       </div>
 
@@ -1511,72 +1492,7 @@ function StoresTab() {
           </table>
         </div>
       )}
-
-      {showAdd && <AddStoreModal onClose={() => setShowAdd(false)} onDone={() => { setShowAdd(false); load(); }} />}
     </>
-  );
-}
-
-function AddStoreModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [values, setValues] = useState({ name: '', code: '', type: 'MAIN', location: '' });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!values.name.trim()) return;
-    setSaving(true);
-    setError('');
-    try {
-      await api('/pharmacy/stores', { method: 'POST', body: JSON.stringify(values) });
-      onDone();
-    } catch (err: any) {
-      setError(err.message || 'Failed to create store');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3 className="modal-title">Add Pharmacy Store</h3>
-          <button className="modal-close" onClick={onClose}>x</button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className="field">
-            <label className="label">Name *</label>
-            <input className="input" value={values.name} onChange={(e) => setValues({ ...values, name: e.target.value })} required />
-          </div>
-          <div className="field">
-            <label className="label">Code</label>
-            <input className="input" value={values.code} onChange={(e) => setValues({ ...values, code: e.target.value })} />
-          </div>
-          <div className="field">
-            <label className="label">Type</label>
-            <select className="input" value={values.type} onChange={(e) => setValues({ ...values, type: e.target.value })}>
-              <option value="MAIN">Main</option>
-              <option value="SUB">Sub</option>
-              <option value="OT">OT</option>
-              <option value="WARD">Ward</option>
-              <option value="EMERGENCY">Emergency</option>
-            </select>
-          </div>
-          <div className="field">
-            <label className="label">Location</label>
-            <input className="input" value={values.location} onChange={(e) => setValues({ ...values, location: e.target.value })} />
-          </div>
-          {error && <div className="alert alert-error">{error}</div>}
-          <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Saving...' : 'Create Store'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 }
 
@@ -1878,7 +1794,7 @@ function PharmacyPageInner() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Pharmacy</h1>
-          <p className="page-subtitle">Medicines, dispensing & billing, stores, alerts and expiry management</p>
+          <p className="page-subtitle">Medicines, billing, stores, alerts and expiry management</p>
         </div>
       </div>
 
@@ -1891,7 +1807,7 @@ function PharmacyPageInner() {
       </div>
 
       {activeTab === 'medicines' && <MedicinesTab />}
-      {activeTab === 'dispensing' && <DispensingTab />}
+      {activeTab === 'billing' && <DispensingTab />}
       {activeTab === 'bills' && <BillsTab />}
       {activeTab === 'stores' && <StoresTab />}
       {activeTab === 'alerts' && <AlertsTab />}

@@ -724,7 +724,7 @@ export class BillingService {
       );
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      if (invoice.isCredit) {
+      if (invoice.isCredit && invoice.patientId) {
         await this.addCreditBalance(
           tx,
           tenantId,
@@ -736,7 +736,7 @@ export class BillingService {
         type: "INVOICE",
         direction: "DEBIT",
         amount: Number(invoice.totalAmount),
-        patientId: invoice.patientId,
+        patientId: invoice.patientId ?? undefined,
         invoiceId: id,
         referenceType: "invoice",
         referenceId: id,
@@ -834,7 +834,7 @@ export class BillingService {
           },
         });
 
-        if (invoice.isCredit) {
+        if (invoice.isCredit && invoice.patientId) {
           await this.addCreditBalance(tx, tenantId, invoice.patientId, -amount);
         }
 
@@ -842,7 +842,7 @@ export class BillingService {
           type: "PAYMENT",
           direction: "CREDIT",
           amount,
-          patientId: invoice.patientId,
+          patientId: invoice.patientId ?? undefined,
           invoiceId: invoice.id,
           referenceType: "payment",
           referenceId: payment.id,
@@ -918,12 +918,15 @@ export class BillingService {
       throw new NotFoundException("Invoice not found");
 
     const patientId =
-      payment?.patientId || invoice?.patientId || dto.patientId!;
-    const patient = await this.prisma.patient.findFirst({
-      where: { id: patientId, tenantId, deletedAt: null },
-    });
-    if (!patient) throw new NotFoundException("Patient not found");
-    const resolvedPatientId = patient.id;
+      payment?.patientId || invoice?.patientId || dto.patientId || null;
+    let resolvedPatientId: string | null = null;
+    if (patientId) {
+      const patient = await this.prisma.patient.findFirst({
+        where: { id: patientId, tenantId, deletedAt: null },
+      });
+      if (!patient) throw new NotFoundException("Patient not found");
+      resolvedPatientId = patient.id;
+    }
 
     if (payment || invoice) {
       const refundable = await this.getRefundableAmount(
@@ -1042,9 +1045,9 @@ export class BillingService {
       await this.recordFinancialTransaction(tx, tenantId, {
         type: "REFUND",
         direction: "DEBIT",
-        amount: Number(refund.amount),
-        patientId: refund.patientId,
-        invoiceId: refund.invoiceId || undefined,
+amount: Number(refund.amount),
+          patientId: refund.patientId ?? undefined,
+          invoiceId: refund.invoiceId || undefined,
         referenceType: "refund",
         referenceId: refund.id,
         method: refund.refundMethod as any,

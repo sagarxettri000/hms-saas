@@ -13,7 +13,7 @@ export default function Home() {
       return;
     }
     const role = typeof window !== 'undefined' ? localStorage.getItem('role') || '' : '';
-    router.replace(role === 'PHARMACIST' ? '/pharmacy?tab=dispensing' : '/dashboard');
+    router.replace(role === 'PHARMACIST' ? '/pharmacy?tab=billing' : '/dashboard');
   }, [router]);
 
   return (

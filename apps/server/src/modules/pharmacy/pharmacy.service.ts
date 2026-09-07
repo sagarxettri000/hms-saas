@@ -103,7 +103,9 @@ export interface SaleItemDto {
 }
 
 export interface CreatePharmacySaleDto {
-  patientId: string;
+  patientId?: string;
+  customerName?: string;
+  customerPhone?: string;
   storeId: string;
   prescriptionId?: string;
   paymentMethod?: string;
@@ -717,7 +719,7 @@ export class PharmacyService {
         const payment = await tx.payment.create({
           data: {
             tenantId,
-            patientId: dto.patientId,
+            patientId: patient ? dto.patientId : undefined,
             invoiceId: invoice.id,
             paymentNumber,
             amount: totalAmount,
@@ -744,7 +746,7 @@ export class PharmacyService {
             type: "PAYMENT",
             direction: "CREDIT",
             amount: totalAmount,
-            patientId: dto.patientId,
+            patientId: patient ? dto.patientId : undefined,
             invoiceId: invoice.id,
             referenceType: "payment",
             referenceId: payment.id,
@@ -824,10 +826,24 @@ export class PharmacyService {
     });
     if (!store) throw new NotFoundException("Store not found");
 
-    const patient = await this.prisma.patient.findFirst({
-      where: { id: dto.patientId, tenantId },
-    });
-    if (!patient) throw new NotFoundException("Patient not found");
+    let patient: { id: string; firstName: string; lastName: string; mrn?: string | null } | null = null;
+    if (dto.patientId) {
+      patient = await this.prisma.patient.findFirst({
+        where: { id: dto.patientId, tenantId },
+        select: { id: true, firstName: true, lastName: true, mrn: true },
+      });
+      if (!patient) throw new NotFoundException("Patient not found");
+    } else if (dto.customerName) {
+      patient = null;
+    } else {
+      throw new BadRequestException(
+        "Either a patient or a walk-in customer name is required",
+      );
+    }
+
+    const customerLabel = patient
+      ? `${patient.firstName} ${patient.lastName}`
+      : dto.customerName?.trim() || "Walk-in customer";
 
     return this.prisma.$transaction(async (tx) => {
       const invoiceItems: any[] = [];
@@ -905,7 +921,7 @@ export class PharmacyService {
             batchNumber: item.batchNumber || inventoryItem.batchNumber || undefined,
             expiryDate: inventoryItem.expiryDate,
             referenceType: "PHARMACY_SALE",
-            remarks: `Sold to ${patient.firstName} ${patient.lastName}`,
+            remarks: `Sold to ${customerLabel}`,
             createdBy: userId,
           },
         });
@@ -955,7 +971,9 @@ export class PharmacyService {
         data: {
           tenantId,
           invoiceNumber,
-          patientId: dto.patientId,
+          patientId: patient ? dto.patientId : undefined,
+          customerName: !patient ? (dto.customerName || undefined) : undefined,
+          customerPhone: !patient ? (dto.customerPhone || undefined) : undefined,
           type: "PHARMACY",
           status: status as any,
           subtotal,
@@ -986,7 +1004,7 @@ export class PharmacyService {
         const payment = await tx.payment.create({
           data: {
             tenantId,
-            patientId: dto.patientId,
+            patientId: patient ? dto.patientId : undefined,
             invoiceId: invoice.id,
             paymentNumber,
             amount: totalAmount,
@@ -1013,7 +1031,7 @@ export class PharmacyService {
             type: "PAYMENT",
             direction: "CREDIT",
             amount: totalAmount,
-            patientId: dto.patientId,
+            patientId: patient ? dto.patientId : undefined,
             invoiceId: invoice.id,
             referenceType: "payment",
             referenceId: payment.id,
@@ -1037,7 +1055,7 @@ export class PharmacyService {
           type: "INVOICE",
           direction: "CREDIT",
           amount: totalAmount,
-          patientId: dto.patientId,
+          patientId: patient ? dto.patientId : undefined,
           invoiceId: invoice.id,
           referenceType: "invoice",
           referenceId: invoice.id,
@@ -1073,7 +1091,9 @@ export class PharmacyService {
         payment: paymentId
           ? await tx.payment.findUnique({ where: { id: paymentId } })
           : undefined,
-        patientName: `${patient.firstName} ${patient.lastName}`,
+        patientName: customerLabel,
+        customerName: dto.customerName,
+        customerPhone: dto.customerPhone,
         storeName: store.name,
         totalAmount,
         paidAmount,

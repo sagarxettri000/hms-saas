@@ -342,7 +342,7 @@ export default function DashboardPage() {
       { label: "Today's appointments", value: sum.total ?? appts.length, tone: 'blue', icon: '📅', href: '/appointments' },
       { label: 'My patients in queue', value: queue, tone: queue > 0 ? 'purple' : 'green', icon: '🩺', href: '/appointments' },
       { label: 'Pending encounters', value: countOf(activeEncR), tone: 'blue', icon: '📋', href: '/encounters' },
-      { label: 'Pending prescriptions', value: pendingRx, tone: pendingRx > 0 ? 'amber' : 'green', icon: '💊', href: '/pharmacy?tab=dispensing' },
+      { label: 'Pending prescriptions', value: pendingRx, tone: pendingRx > 0 ? 'amber' : 'green', icon: '💊', href: '/pharmacy?tab=billing' },
       { label: 'Pending lab orders', value: lab.pendingOrders ?? 0, tone: (lab.pendingOrders ?? 0) > 0 ? 'amber' : 'green', icon: '🔬', href: '/laboratory' },
     ]);
 
@@ -553,8 +553,8 @@ export default function DashboardPage() {
     });
 
     setQuickLinks([
-      { label: 'Dispense medicines', href: '/pharmacy?tab=dispensing', icon: '📋' },
-      { label: 'Walk-in sales', href: '/pharmacy?tab=dispensing', icon: '₨' },
+      { label: 'Dispense medicines', href: '/pharmacy?tab=billing', icon: '📋' },
+      { label: 'Walk-in sales', href: '/pharmacy?tab=billing', icon: '₨' },
       { label: 'Stock alerts', href: '/pharmacy?tab=alerts', icon: '⚠' },
     ]);
   }

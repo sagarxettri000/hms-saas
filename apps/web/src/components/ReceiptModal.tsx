@@ -88,6 +88,12 @@ export default function ReceiptModal({
   }
 
   const patient = data.patient ?? {};
+  const billedName = data.customerName
+    ? data.customerName
+    : [patient.firstName, patient.lastName].filter(Boolean).join(' ') || '—';
+  const billedMeta = data.customerPhone
+    ? data.customerPhone
+    : [patient.mrn, patient.phone].filter(Boolean).join(' · ') || '';
   const items: Row[] = Array.isArray(data.items) ? data.items : [];
   const payments: Row[] = Array.isArray(data.payments) ? data.payments : [];
   const paidAmount = Number(data.paidAmount || 0);
@@ -141,10 +147,10 @@ export default function ReceiptModal({
             <div className="receipt-patient">
               <div className="label">Billed to</div>
               <div style={{ fontWeight: 600 }}>
-                {[patient.firstName, patient.lastName].filter(Boolean).join(' ') || '—'}
+                {billedName}
               </div>
               <div className="muted">
-                {[patient.mrn, patient.phone].filter(Boolean).join(' · ') || ''}
+                {billedMeta || ''}
               </div>
             </div>
           </div>

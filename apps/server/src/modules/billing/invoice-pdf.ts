@@ -84,7 +84,9 @@ interface InvoiceData {
   dueAmount: any;
   isCredit: boolean;
   printCount: number;
-  patient: { firstName: string; middleName?: string; lastName: string; mrn?: string; phone?: string; email?: string; gender?: string; dateOfBirth?: any };
+  patient?: { firstName: string; middleName?: string; lastName: string; mrn?: string; phone?: string; email?: string; gender?: string; dateOfBirth?: any } | null;
+  customerName?: string;
+  customerPhone?: string;
   admission?: { id: string; department?: { name?: string } };
   items: { serviceName: string; description?: string; quantity: any; rate: any; discountAmount?: any; taxAmount?: any; lineTotal: any; doctorId?: string }[];
   payments: { paymentNumber: string; amount: any; method: string; paidAt: any; status: string; transactionId?: string; referenceNumber?: string }[];
@@ -108,8 +110,9 @@ function tenantAddress(t: TenantData): string {
   return parts.join(", ");
 }
 
-function patientName(p: InvoiceData["patient"]): string {
-  return [p.firstName, p.middleName, p.lastName].filter(Boolean).join(" ");
+function patientName(p?: InvoiceData["patient"] | null): string {
+  if (!p) return "Walk-in Customer";
+  return [p.firstName, p.middleName, p.lastName].filter(Boolean).join(" ") || "Walk-in Customer";
 }
 
 function headerBlock(p: PdfPage, title: string, hospital: TenantData) {
@@ -187,11 +190,12 @@ export function buildInvoicePdf(
   p.gap(4);
   p.text(MARGIN, p.y, "PATIENT DETAILS", 9, "0.4 0.4 0.4");
   p.gap(14);
-  infoRow(p, "Name:", patientName(inv.patient), MARGIN, p.y);
-  if (inv.patient.mrn) infoRow(p, "MRN:", inv.patient.mrn, MARGIN + 260, p.y);
+  infoRow(p, "Name:", inv.patient ? patientName(inv.patient) : (inv.customerName || "Walk-in Customer"), MARGIN, p.y);
+  if (inv.patient?.mrn) infoRow(p, "MRN:", inv.patient.mrn, MARGIN + 260, p.y);
   p.gap(14);
-  if (inv.patient.phone) infoRow(p, "Phone:", inv.patient.phone, MARGIN, p.y);
-  if (inv.patient.gender) infoRow(p, "Gender:", inv.patient.gender, MARGIN + 260, p.y);
+  if (inv.patient?.phone) infoRow(p, "Phone:", inv.patient.phone, MARGIN, p.y);
+  else if (inv.customerPhone) infoRow(p, "Phone:", inv.customerPhone, MARGIN, p.y);
+  if (inv.patient?.gender) infoRow(p, "Gender:", inv.patient.gender, MARGIN + 260, p.y);
   p.gap(14);
   if (inv.admission?.department?.name) {
     infoRow(p, "Department:", inv.admission.department.name, MARGIN, p.y);
@@ -323,8 +327,8 @@ export function buildReceiptPdf(
   p.gap(4);
   p.text(MARGIN, p.y, "PATIENT DETAILS", 9, "0.4 0.4 0.4");
   p.gap(14);
-  infoRow(p, "Name:", patientName(inv.patient), MARGIN, p.y);
-  if (inv.patient.mrn) infoRow(p, "MRN:", inv.patient.mrn, MARGIN + 260, p.y);
+  infoRow(p, "Name:", inv.patient ? patientName(inv.patient) : (inv.customerName || "Walk-in Customer"), MARGIN, p.y);
+  if (inv.patient?.mrn) infoRow(p, "MRN:", inv.patient.mrn, MARGIN + 260, p.y);
   p.gap(20);
 
   // Payment details

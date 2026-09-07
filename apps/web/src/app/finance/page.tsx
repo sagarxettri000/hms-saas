@@ -237,7 +237,7 @@ export default function FinancePage() {
         if (!did) continue;
         stats[did] = stats[did] || { revenue: 0, patients: new Set<string>() };
         stats[did].revenue += num(item.lineTotal);
-        stats[did].patients.add(inv.patientId);
+        if (inv.patientId) stats[did].patients.add(inv.patientId);
       }
     }
     const incomeMap = analytics.doctorIncome || {};

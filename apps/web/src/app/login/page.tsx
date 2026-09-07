@@ -72,7 +72,7 @@ export default function LoginPage() {
       } else {
         router.push(
           res.data.user.role === 'PHARMACIST'
-            ? '/pharmacy?tab=dispensing'
+            ? '/pharmacy?tab=billing'
             : '/dashboard',
         );
       }

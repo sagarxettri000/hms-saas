@@ -463,7 +463,7 @@ export async function doctorWiseIncome(ctx: ExecContext): Promise<ExecResult> {
       cur.services += 1;
       byDoc.set(item.doctorId, cur);
       if (!patients.has(item.doctorId)) patients.set(item.doctorId, new Set());
-      patients.get(item.doctorId)!.add(inv.patientId);
+      if (inv.patientId) patients.get(item.doctorId)!.add(inv.patientId);
     }
   }
 
@@ -578,7 +578,7 @@ export async function doctorVsDept(ctx: ExecContext): Promise<ExecResult> {
       cur.services += 1;
       byKey.set(key, cur);
       if (!patients.has(key)) patients.set(key, new Set());
-      patients.get(key)!.add(inv.patientId);
+      if (inv.patientId) patients.get(key)!.add(inv.patientId);
       if (item.doctorId) docIds.add(item.doctorId);
       if (item.departmentId) deptIds.add(item.departmentId);
     }
@@ -631,7 +631,7 @@ export async function wardVsDept(ctx: ExecContext): Promise<ExecResult> {
       cur.services += 1;
       byKey.set(key, cur);
       if (!patients.has(key)) patients.set(key, new Set());
-      patients.get(key)!.add(inv.patientId);
+      if (inv.patientId) patients.get(key)!.add(inv.patientId);
       if (item.departmentId) deptIds.add(item.departmentId);
     }
   }

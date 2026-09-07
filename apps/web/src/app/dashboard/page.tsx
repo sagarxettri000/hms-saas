@@ -1,9 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, safe } from '@/lib/api';
 import { formatMoney, formatDate, formatDateTime, badgeTone } from '@/lib/hooks';
+import {
+  BarList,
+  DashboardSkeletons,
+  DeltaText,
+  IconTile,
+  LabPipeline,
+  Leaderboard,
+  OccupancyBar,
+  Sparkline,
+  StockHealth,
+  TrendChart,
+  WidgetCard,
+  deltaOf,
+  toneColor,
+} from './DashboardWidgets';
 
 interface Stat {
   label: string;
@@ -11,6 +26,8 @@ interface Stat {
   tone?: 'blue' | 'green' | 'purple' | 'amber' | 'red';
   icon?: string;
   href?: string;
+  spark?: number[];
+  delta?: { current: number; previous: number; money?: boolean };
 }
 
 interface FocusTable {
@@ -18,6 +35,7 @@ interface FocusTable {
   headers: string[];
   rows: (string | number)[][];
   badgeCol?: number;
+  href?: string;
 }
 
 interface QuickLink {
@@ -74,6 +92,12 @@ function listOf(r: any): any[] {
   return [];
 }
 
+function toList(v: any): any[] {
+  if (v == null) return [];
+  if (Array.isArray(v)) return v;
+  return [];
+}
+
 function countOf(r: any): number {
   const u = unwrapResponse(r);
   if (u == null) return 0;
@@ -94,6 +118,31 @@ function startOfToday(): Date {
   d.setHours(0, 0, 0, 0);
   return d;
 }
+
+function startOfYesterday(): Date {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  GENERAL: 'General',
+  PHARMACY: 'Pharmacy',
+  LAB: 'Laboratory',
+  LABORATORY: 'Laboratory',
+  RADIOLOGY: 'Radiology',
+  DISCHARGE: 'Discharge',
+  IPD: 'Inpatient',
+  OPD: 'Outpatient',
+};
+
+const METHOD_LABELS: Record<string, string> = {
+  CASH: 'Cash',
+  CARD: 'Card',
+  BANK: 'Bank',
+  ONLINE: 'Online',
+};
 
 function startOfMonth(): Date {
   const n = new Date();
@@ -185,6 +234,14 @@ export default function DashboardPage() {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadingRef = useRef(false);
+  const [finance, setFinance] = useState<any>(null);
+  const [yesterday, setYesterday] = useState<any>(null);
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [stockHealth, setStockHealth] = useState<any>(null);
+  const [labPipeline, setLabPipeline] = useState<any>(null);
+  const [bedsState, setBedsState] = useState<any>({ occupied: 0, total: 0 });
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -218,15 +275,40 @@ export default function DashboardPage() {
     };
   }, [group]);
 
+  useEffect(() => {
+    if (!group) return;
+    const iv = window.setInterval(() => {
+      if (!loadingRef.current) load(group);
+    }, 60000);
+    return () => window.clearInterval(iv);
+  }, [group]);
+
   async function load(g: string) {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
     setError(null);
     try {
-      await Promise.all([loadGroupData(g), loadActivity()]);
+      await Promise.all([loadGroupData(g), loadActivity(), loadExtras(g)]);
     } catch {
       setError('Some dashboard data could not be loaded');
     }
+    loadingRef.current = false;
     setLoading(false);
+  }
+
+  async function loadExtras(g: string) {
+    if (!['ADMIN', 'FINANCE', 'RECEPTION'].includes(g)) return;
+    const from = startOfYesterday().toISOString();
+    const to = startOfToday().toISOString();
+    const [yesterdayR, doctorsR, usersR] = await Promise.all([
+      safe(api(`/reports/summary?from=${from}&to=${to}`)),
+      safe(api('/doctors?limit=200')),
+      safe(api('/users?limit=200')),
+    ]);
+    setYesterday(summaryOf(yesterdayR));
+    setDoctors(listOf(doctorsR));
+    setUsers(listOf(usersR));
   }
 
   async function loadActivity() {
@@ -258,12 +340,13 @@ export default function DashboardPage() {
 
   async function loadAdminData(isSuper: boolean) {
     const todayStart = startOfToday().toISOString();
-    const [summaryR, todayR, analyticsR, usersStatsR, todaySummaryR] = await Promise.all([
+    const [summaryR, todayR, analyticsR, usersStatsR, todaySummaryR, alertsR] = await Promise.all([
       safe(api('/reports/summary')),
       safe(api('/appointments/today')),
       safe(api('/billing/analytics')),
       safe(api('/users/stats')),
       safe(api(`/reports/summary?from=${todayStart}`)),
+      safe(api('/pharmacy/alerts')),
     ]);
     const s = summaryOf(summaryR);
     const appts = listOf(todayR);
@@ -274,20 +357,62 @@ export default function DashboardPage() {
     const todaySum = summaryOf(todaySummaryR);
     const beds = s.bedOccupancy || { occupied: 0, total: 0 };
     const occupancy = beds.total > 0 ? Math.round((beds.occupied / beds.total) * 100) : 0;
+    const pharmAlerts = summaryOf(alertsR);
+    const pharmLow = toList(pharmAlerts?.lowStock).length;
+    const pharmOut = toList(pharmAlerts?.outOfStock).length;
+
+    setFinance(analytics);
+    setBedsState(beds);
+
+    const revSpark = (analytics.trend || []).slice(-14).map((t: any) => Number(t.revenue) || 0);
 
     setStats([
-      { label: "Today's patients", value: todaySum.patients ?? 0, tone: 'blue', icon: '👤' },
-      { label: "Today's admit", value: todaySum.admissions ?? 0, tone: 'green', icon: '🛏' },
-      { label: "Today's appointments", value: sum.total ?? appts.length, tone: 'green', icon: '📅' },
+      {
+        label: "Today's patients",
+        value: todaySum.patients ?? 0,
+        tone: 'blue',
+        icon: '👤',
+        delta: { current: todaySum.patients ?? 0, previous: yesterday?.patients ?? 0 },
+      },
+      {
+        label: "Today's admit",
+        value: todaySum.admissions ?? 0,
+        tone: 'green',
+        icon: '🛏',
+        delta: { current: todaySum.admissions ?? 0, previous: yesterday?.admissions ?? 0 },
+      },
+      {
+        label: "Today's appointments",
+        value: sum.total ?? appts.length,
+        tone: 'green',
+        icon: '📅',
+        delta: { current: sum.total ?? appts.length, previous: yesterday?.appointments ?? 0 },
+      },
       { label: 'Bed occupancy', value: `${occupancy}%`, tone: occupancy >= 90 ? 'red' : occupancy >= 70 ? 'amber' : 'green', icon: '🛌' },
-      { label: "Today's revenue", value: formatMoney(analytics.today?.revenue ?? 0), tone: 'purple', icon: '₨' },
+      {
+        label: "Today's revenue",
+        value: formatMoney(analytics.today?.revenue ?? 0),
+        tone: 'purple',
+        icon: '₨',
+        spark: revSpark,
+        delta: { current: analytics.today?.revenue ?? 0, previous: yesterday?.totalRevenue ?? 0, money: true },
+      },
       { label: 'Total staff', value: totalStaff, tone: 'blue', icon: '👥' },
     ]);
+
+    setStockHealth({
+      pct: s.totalMedicines > 0 ? ((s.totalMedicines - pharmLow - pharmOut) / s.totalMedicines) * 100 : 100,
+      low: pharmLow,
+      out: pharmOut,
+      expiring: pharmAlerts?.summary?.nearExpiryCount ?? 0,
+      total: s.totalMedicines ?? 0,
+    });
 
     setFocus({
       title: "Today's schedule",
       headers: ['Patient', 'Doctor', 'Time', 'Status'],
       badgeCol: 3,
+      href: '/appointments',
       rows: appts.slice(0, 8).map((a: any) => [
         personName(a.patient),
         a.doctor?.user ? personName(a.doctor.user) : '—',
@@ -346,10 +471,18 @@ export default function DashboardPage() {
       { label: 'Pending lab orders', value: lab.pendingOrders ?? 0, tone: (lab.pendingOrders ?? 0) > 0 ? 'amber' : 'green', icon: '🔬', href: '/laboratory' },
     ]);
 
+    setLabPipeline({
+      pending: lab.pendingOrders ?? 0,
+      collected: lab.sampleCollected ?? 0,
+      completed: lab.completedToday ?? 0,
+      total: lab.totalOrders ?? 0,
+    });
+
     setFocus({
       title: 'Patient queue today',
       headers: ['Patient', 'Department', 'Time', 'Status'],
       badgeCol: 3,
+      href: '/appointments',
       rows: appts.slice(0, 8).map((a: any) => [
         personName(a.patient),
         a.department?.name || '—',
@@ -380,11 +513,40 @@ export default function DashboardPage() {
     const analytics = summaryOf(analyticsR);
     const todaySum = summaryOf(todaySummaryR);
 
+    setFinance(analytics);
+
+    const revSpark = (analytics.trend || []).slice(-14).map((t: any) => Number(t.revenue) || 0);
+
     setStats([
-      { label: "Today's patients", value: todaySum.patients ?? 0, tone: 'blue', icon: '👤' },
-      { label: "Today's admit", value: todaySum.admissions ?? 0, tone: 'green', icon: '🛏' },
-      { label: "Today's appointments", value: appts.length, tone: 'blue', icon: '📅' },
-      { label: "Today's revenue", value: formatMoney(analytics.today?.revenue ?? 0), tone: 'green', icon: '₨' },
+      {
+        label: "Today's patients",
+        value: todaySum.patients ?? 0,
+        tone: 'blue',
+        icon: '👤',
+        delta: { current: todaySum.patients ?? 0, previous: yesterday?.patients ?? 0 },
+      },
+      {
+        label: "Today's admit",
+        value: todaySum.admissions ?? 0,
+        tone: 'green',
+        icon: '🛏',
+        delta: { current: todaySum.admissions ?? 0, previous: yesterday?.admissions ?? 0 },
+      },
+      {
+        label: "Today's appointments",
+        value: appts.length,
+        tone: 'blue',
+        icon: '📅',
+        delta: { current: appts.length, previous: yesterday?.appointments ?? 0 },
+      },
+      {
+        label: "Today's revenue",
+        value: formatMoney(analytics.today?.revenue ?? 0),
+        tone: 'green',
+        icon: '₨',
+        spark: revSpark,
+        delta: { current: analytics.today?.revenue ?? 0, previous: yesterday?.totalRevenue ?? 0, money: true },
+      },
       { label: 'Walk-ins today', value: walkIns, tone: 'purple', icon: '🚶' },
       { label: 'Pending billing', value: pendingBills.length, tone: pendingBills.length > 0 ? 'amber' : 'green', icon: '📄' },
     ]);
@@ -393,6 +555,7 @@ export default function DashboardPage() {
       title: 'Bills awaiting payment',
       headers: ['Invoice', 'Patient', 'Amount due', 'Status'],
       badgeCol: 3,
+      href: '/billing',
       rows: pendingBills.slice(0, 8).map((i: any) => [
         i.invoiceNumber || i.id,
         personName(i.patient),
@@ -423,18 +586,31 @@ export default function DashboardPage() {
     const refundsThisMonth = listOf(refundsR).filter((r: any) => isThisMonth(r.refundedAt));
     const refundTotal = refundsThisMonth.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
 
+    setFinance(a);
+
+    const revSpark = (a.trend || []).slice(-14).map((t: any) => Number(t.revenue) || 0);
+    const colSpark = (a.trend || []).slice(-14).map((t: any) => Number(t.collection) || 0);
+
     setStats([
-      { label: 'Total revenue', value: formatMoney(a.month?.revenue ?? 0), tone: 'green', icon: '📈' },
+      { label: 'Total revenue', value: formatMoney(a.month?.revenue ?? 0), tone: 'green', icon: '📈', spark: revSpark },
       { label: 'Pending payments', value: formatMoney(outstanding), tone: outstanding > 0 ? 'red' : 'green', icon: '⏳' },
       { label: 'Outstanding invoices', value: unpaid.length, tone: unpaid.length > 0 ? 'amber' : 'green', icon: '📄' },
       { label: 'Refunds this month', value: formatMoney(refundTotal), tone: 'purple', icon: '↩' },
-      { label: 'Collections today', value: formatMoney(a.today?.collection ?? 0), tone: 'green', icon: '₨' },
+      {
+        label: 'Collections today',
+        value: formatMoney(a.today?.collection ?? 0),
+        tone: 'green',
+        icon: '₨',
+        spark: colSpark,
+        delta: { current: a.today?.collection ?? 0, previous: yesterday?.collected ?? 0, money: true },
+      },
     ]);
 
     setFocus({
       title: 'Largest unpaid invoices',
       headers: ['Invoice', 'Patient', 'Amount due', 'Issued', 'Status'],
       badgeCol: 4,
+      href: '/billing',
       rows: unpaid.slice(0, 8).map((i: any) => [
         i.invoiceNumber || i.id,
         personName(i.patient),
@@ -459,6 +635,13 @@ export default function DashboardPage() {
     ]);
     const s = summaryOf(summaryR);
 
+    setLabPipeline({
+      pending: s.pendingOrders ?? 0,
+      collected: s.sampleCollected ?? 0,
+      completed: s.completedToday ?? 0,
+      total: s.totalOrders ?? 0,
+    });
+
     setStats([
       { label: 'Total orders', value: s.totalOrders ?? 0, tone: 'blue', icon: '🧪' },
       { label: 'Pending results', value: s.pendingOrders ?? 0, tone: (s.pendingOrders ?? 0) > 0 ? 'amber' : 'green', icon: '⏳' },
@@ -471,6 +654,7 @@ export default function DashboardPage() {
       title: 'Recent lab orders',
       headers: ['Order', 'Patient', 'Ordered', 'Status'],
       badgeCol: 3,
+      href: '/laboratory',
       rows: listOf(recentR).slice(0, 8).map((o: any) => [
         o.orderNumber || o.id,
         personName(o.patient),
@@ -506,6 +690,7 @@ export default function DashboardPage() {
       title: 'Recent imaging orders',
       headers: ['Order', 'Patient', 'Modality', 'Ordered', 'Status'],
       badgeCol: 4,
+      href: '/radiology',
       rows: listOf(recentR).slice(0, 8).map((o: any) => [
         o.orderNumber || o.id,
         personName(o.patient),
@@ -532,9 +717,21 @@ export default function DashboardPage() {
     const alerts = summaryOf(alertsR);
     const pharmacyRevenue = summaryOf(analyticsR)?.today?.revenueByType?.PHARMACY ?? 0;
     const lowStock = Array.isArray(alerts.lowStock) ? alerts.lowStock : [];
+    const outOfStock = Array.isArray(alerts.outOfStock) ? alerts.outOfStock : [];
+    const totalMedicines = s.totalMedicines ?? 0;
+    const lowCount = lowStock.length;
+    const outCount = outOfStock.length;
+
+    setStockHealth({
+      pct: totalMedicines > 0 ? ((totalMedicines - lowCount - outCount) / totalMedicines) * 100 : 100,
+      low: lowCount,
+      out: outCount,
+      expiring: alerts.summary?.nearExpiryCount ?? 0,
+      total: totalMedicines,
+    });
 
     setStats([
-      { label: 'Total medicines', value: s.totalMedicines ?? 0, tone: 'blue', icon: '💊' },
+      { label: 'Total medicines', value: totalMedicines, tone: 'blue', icon: '💊' },
       { label: 'Low stock items', value: s.lowStockCount ?? alerts.summary?.lowStockCount ?? 0, tone: (s.lowStockCount ?? 0) > 0 ? 'amber' : 'green', icon: '⚠' },
       { label: 'Dispensed today', value: s.dispensedToday ?? 0, tone: 'green', icon: '✅' },
       { label: 'Revenue today', value: formatMoney(pharmacyRevenue), tone: 'green', icon: '₨' },
@@ -544,6 +741,7 @@ export default function DashboardPage() {
     setFocus({
       title: 'Low stock items',
       headers: ['Medicine', 'Store', 'Stock', 'Reorder level'],
+      href: '/pharmacy?tab=alerts',
       rows: lowStock.slice(0, 8).map((item: any) => [
         item.medicine?.name || item.name || '—',
         item.store?.name || '—',
@@ -587,6 +785,7 @@ export default function DashboardPage() {
       title: 'Leave requests awaiting approval',
       headers: ['Employee', 'Type', 'From', 'To', 'Status'],
       badgeCol: 4,
+      href: '/hr',
       rows: (pendingLeaves.length > 0 ? pendingLeaves : leaves.slice(0, 8)).slice(0, 8).map((l: any) => [
         personName(l.user),
         String(l.type || '—'),
@@ -614,11 +813,22 @@ export default function DashboardPage() {
     const openPoStatuses = ['DRAFT', 'SENT', 'CONFIRMED', 'PARTIAL_RECEIVED'];
     const pendingPos = listOf(posR).filter((p: any) => openPoStatuses.includes(p.status));
     const receivedThisMonth = listOf(grnR).filter((g: any) => isThisMonth(g.receivedDate)).length;
+    const invCount = countOf(invR);
+    const lowCount = alerts.summary?.lowStockCount ?? 0;
+    const outCount = alerts.summary?.outOfStockCount ?? 0;
+
+    setStockHealth({
+      pct: invCount > 0 ? ((invCount - lowCount - outCount) / invCount) * 100 : 100,
+      low: lowCount,
+      out: outCount,
+      expiring: alerts.summary?.nearExpiryCount ?? 0,
+      total: invCount,
+    });
 
     setStats([
-      { label: 'Total items', value: countOf(invR), tone: 'blue', icon: '📦' },
-      { label: 'Low stock alerts', value: alerts.summary?.lowStockCount ?? 0, tone: (alerts.summary?.lowStockCount ?? 0) > 0 ? 'amber' : 'green', icon: '⚠' },
-      { label: 'Out of stock', value: alerts.summary?.outOfStockCount ?? 0, tone: (alerts.summary?.outOfStockCount ?? 0) > 0 ? 'red' : 'green', icon: '🚫' },
+      { label: 'Total items', value: invCount, tone: 'blue', icon: '📦' },
+      { label: 'Low stock alerts', value: lowCount, tone: lowCount > 0 ? 'amber' : 'green', icon: '⚠' },
+      { label: 'Out of stock', value: outCount, tone: outCount > 0 ? 'red' : 'green', icon: '🚫' },
       { label: 'Pending purchase orders', value: pendingPos.length, tone: pendingPos.length > 0 ? 'amber' : 'green', icon: '↦' },
       { label: 'Received this month', value: receivedThisMonth, tone: 'green', icon: '📥' },
     ]);
@@ -627,6 +837,7 @@ export default function DashboardPage() {
       title: 'Purchase orders in flight',
       headers: ['PO', 'Supplier', 'Order date', 'Amount', 'Status'],
       badgeCol: 4,
+      href: '/procurement',
       rows: pendingPos.slice(0, 8).map((p: any) => [
         p.poNumber || p.id,
         personName(p.supplier),
@@ -666,6 +877,7 @@ export default function DashboardPage() {
       title: 'Open adverse events',
       headers: ['Type', 'Severity', 'Occurred', 'Status'],
       badgeCol: 3,
+      href: '/adverse-events',
       rows: listOf(openR).slice(0, 8).map((e: any) => [
         humanEntity(e.type),
         String(e.severity || '—'),
@@ -714,6 +926,7 @@ export default function DashboardPage() {
       title: 'Latest encounters',
       headers: ['Patient', 'Doctor', 'Department', 'Date', 'Status'],
       badgeCol: 4,
+      href: '/encounters',
       rows: listOf(recentEncR).slice(0, 8).map((e: any) => [
         personName(e.patient),
         e.doctor?.user ? personName(e.doctor.user) : '—',
@@ -741,12 +954,67 @@ export default function DashboardPage() {
     ? role.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase())
     : 'Workspace';
 
+  const todayLabel = new Date().toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const finRole = group === 'ADMIN' || group === 'FINANCE' || group === 'RECEPTION';
+  const trend = (finance?.trend || []).map((t: any) => ({
+    date: t.date,
+    revenue: Number(t.revenue) || 0,
+    collection: Number(t.collection) || 0,
+  }));
+  const revenueByType = Object.entries(finance?.today?.revenueByType || {}).map(([k, v]) => ({
+    label: TYPE_LABELS[k] || String(k).replace(/_/g, ' '),
+    value: Number(v) || 0,
+  }));
+  const collectionByMethod = Object.entries(finance?.today?.collectionByMethod || {}).map(([k, v]) => ({
+    label: METHOD_LABELS[k] || String(k).replace(/_/g, ' '),
+    value: Number(v) || 0,
+  }));
+  const doctorRows = Object.entries(finance?.doctorIncome || {})
+    .sort((a: any, b: any) => Number(b[1]) - Number(a[1]))
+    .slice(0, 5)
+    .map(([id, amt]: any) => {
+      const byId = doctors.find((x: any) => x.id === id);
+      const byUser = doctors.find((x: any) => x.user?.id === id);
+      const d = byId || byUser;
+      const name = d?.user
+        ? [d.user.firstName, d.user.middleName, d.user.lastName].filter(Boolean).join(' ')
+        : d?.name || d?.user?.email || 'Doctor';
+      return {
+        label: name,
+        sublabel: d?.specialization || d?.department?.name || 'Physician',
+        value: formatMoney(Number(amt) || 0),
+      };
+    });
+  const cashierRows = Object.entries(finance?.userCollection || {})
+    .sort((a: any, b: any) => Number(b[1]?.total || 0) - Number(a[1]?.total || 0))
+    .slice(0, 5)
+    .map(([id, u]: any) => {
+      const usr = users.find((x: any) => x.id === id);
+      const name = usr ? [usr.firstName, usr.lastName].filter(Boolean).join(' ') || usr.email || 'Staff' : 'Staff';
+      const cash = Number(u?.CASH || 0);
+      return {
+        label: name,
+        sublabel:
+          cash > 0 ? `Cash ${formatMoney(cash)}` : `${u?.total ?? 0} transactions`,
+        value: formatMoney(Number(u?.total) || 0),
+      };
+    });
+  const beds = bedsState;
+  const bedsPct = beds?.total > 0 ? Math.round((beds.occupied / beds.total) * 100) : 0;
+
   return (
     <>
       <div className="page-header">
         <div>
           <h1>{greeting}, {userName || 'User'}</h1>
-          <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 13 }}>{roleLabel} dashboard</p>
+          <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 13 }}>
+            {roleLabel} dashboard · {todayLabel}
+          </p>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={() => load(group)} disabled={loading}>
           Refresh
@@ -755,8 +1023,8 @@ export default function DashboardPage() {
 
       {error && <div className="banner-danger">{error}</div>}
 
-      {loading ? (
-        <div className="loading">Loading your workspace…</div>
+      {loading && stats.length === 0 ? (
+        <DashboardSkeletons stats={6} cards={2} />
       ) : (
         <>
           <div className="stat-grid">
@@ -779,12 +1047,121 @@ export default function DashboardPage() {
                 }
                 style={s.href ? { cursor: 'pointer' } : undefined}
               >
-                {s.icon && <span style={{ fontSize: 20 }}>{s.icon}</span>}
+                <div className="dash-stat-top">
+                  <IconTile glyph={s.icon} tone={s.tone} />
+                  {s.spark && s.spark.length > 1 && (
+                    <Sparkline values={s.spark} color={toneColor(s.tone)} />
+                  )}
+                </div>
                 <p className="stat-label">{s.label}</p>
                 <p className={`stat-value stat-${s.tone || 'blue'}`}>{s.value}</p>
+                {s.delta && (
+                  <DeltaText delta={deltaOf(s.delta.current, s.delta.previous)} money={s.delta.money} />
+                )}
               </div>
             ))}
           </div>
+
+          {finRole && finance && (
+            <div className="dash-widget-grid">
+              <WidgetCard title="Revenue vs collections · 30 days">
+                <TrendChart data={trend} />
+              </WidgetCard>
+              <WidgetCard title="Collections today by method">
+                <BarList data={collectionByMethod} />
+              </WidgetCard>
+              <WidgetCard title="Revenue today by type">
+                <BarList data={revenueByType} />
+              </WidgetCard>
+              <WidgetCard
+                title="Top doctors by revenue"
+                action={
+                  <a className="dash-link" href="/reports">
+                    View all
+                  </a>
+                }
+              >
+                <Leaderboard rows={doctorRows} empty="No physician revenue recorded yet." />
+              </WidgetCard>
+              <WidgetCard
+                title="Cashier collections"
+                action={
+                  <a className="dash-link" href="/billing">
+                    View all
+                  </a>
+                }
+              >
+                <Leaderboard rows={cashierRows} empty="No collections recorded yet." />
+              </WidgetCard>
+            </div>
+          )}
+
+          {group === 'ADMIN' && (
+            <div className="dash-widget-grid">
+              <WidgetCard title="Bed occupancy">
+                <OccupancyBar occupied={beds?.occupied ?? 0} total={beds?.total ?? 0} pct={bedsPct} />
+              </WidgetCard>
+              {stockHealth && (
+                <WidgetCard
+                  title="Pharmacy stock health"
+                  action={
+                    <a className="dash-link" href="/pharmacy?tab=alerts">
+                      View alerts
+                    </a>
+                  }
+                >
+                  <StockHealth
+                    pct={stockHealth.pct}
+                    low={stockHealth.low}
+                    out={stockHealth.out}
+                    expiring={stockHealth.expiring}
+                    total={stockHealth.total}
+                  />
+                </WidgetCard>
+              )}
+            </div>
+          )}
+
+          {stockHealth && group !== 'ADMIN' && ['PHARMACY', 'INVENTORY'].includes(group) && (
+            <div className="dash-widget-grid">
+              <WidgetCard
+                title="Stock health"
+                action={
+                  <a className="dash-link" href="/pharmacy?tab=alerts">
+                    View alerts
+                  </a>
+                }
+              >
+                <StockHealth
+                  pct={stockHealth.pct}
+                  low={stockHealth.low}
+                  out={stockHealth.out}
+                  expiring={stockHealth.expiring}
+                  total={stockHealth.total}
+                />
+              </WidgetCard>
+            </div>
+          )}
+
+          {labPipeline && ['CLINICAL', 'LAB'].includes(group) && (
+            <div className="dash-widget-grid">
+              <WidgetCard
+                title="Lab order pipeline today"
+                action={
+                  <a className="dash-link" href="/laboratory">
+                    View lab
+                  </a>
+                }
+              >
+                <LabPipeline
+                  pending={labPipeline.pending}
+                  collected={labPipeline.collected}
+                  completed={labPipeline.completed}
+                  total={labPipeline.total}
+                />
+              </WidgetCard>
+            </div>
+          )}
 
           <div
             style={{
@@ -811,8 +1188,17 @@ export default function DashboardPage() {
 
               {focus && focus.rows.length > 0 ? (
                 <>
-                  <h2 className="section-title">{focus.title}</h2>
-                  <div className="table-wrap">
+                  <div className="row-between">
+                    <h2 className="section-title" style={{ marginBottom: 0 }}>
+                      {focus.title}
+                    </h2>
+                    {focus.href && (
+                      <a className="dash-link" href={focus.href}>
+                        View all
+                      </a>
+                    )}
+                  </div>
+                  <div className="table-wrap" style={{ marginTop: 12 }}>
                     <table className="table">
                       <thead>
                         <tr>

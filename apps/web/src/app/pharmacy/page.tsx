@@ -1508,22 +1508,19 @@ function AlertsTab() {
 
   const load = useCallback(() => {
     setLoading(true);
-    Promise.all([
-      api('/pharmacy/alerts').catch(() => null),
-      api('/pharmacy/inventory?limit=200').catch(() => null),
-    ])
-      .then(([alertRes, invRes]: any[]) => {
-        if (alertRes) setAlerts(alertRes?.data ?? alertRes);
-        if (invRes) {
-          const items = toList(invRes)
-            .filter((i: any) => {
-              const days = daysUntil(i.expiryDate);
-              return i.expiryDate && days !== null && days <= 60;
-            })
-            .sort((a: any, b: any) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
-          setExpiryAlerts(items);
-        }
+    api('/pharmacy/alerts')
+      .then((alertRes: any) => {
+        const data = alertRes?.data ?? alertRes;
+        setAlerts(data);
+        const expiring = toList(data?.nearExpiry)
+          .filter((i: any) => {
+            const days = daysUntil(i.expiryDate);
+            return i.expiryDate && days !== null;
+          })
+          .sort((a: any, b: any) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+        setExpiryAlerts(expiring);
       })
+      .catch(() => setAlerts(null))
       .finally(() => setLoading(false));
   }, []);
 
@@ -1565,9 +1562,9 @@ function AlertsTab() {
     await loadLog();
   }
 
-  const lowStockCount = alerts?.summary?.lowStockCount || alerts?.lowStock?.length || 0;
-  const nearExpiryCount = alerts?.summary?.nearExpiryCount || expiryAlerts.length || 0;
-  const outOfStockCount = alerts?.summary?.outOfStockCount || alerts?.outOfStock?.length || 0;
+  const lowStockCount = toList(alerts?.lowStock).length;
+  const nearExpiryCount = expiryAlerts.length;
+  const outOfStockCount = toList(alerts?.outOfStock).length;
 
   return (
     <>

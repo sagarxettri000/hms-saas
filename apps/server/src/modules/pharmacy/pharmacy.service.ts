@@ -1128,15 +1128,16 @@ export class PharmacyService {
   // ---------- Stock Alerts ----------
 
   async getStockAlerts(tenantId: string) {
-    const thirtyDaysFromNow = new Date();
-    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const sixtyDaysFromNow = new Date();
+    sixtyDaysFromNow.setDate(sixtyDaysFromNow.getDate() + 60);
 
-    const [rawLowStock, nearExpiryItems, outOfStockItems] = await Promise.all([
+    const [stockedItems, nearExpiryItems, outOfStockItems] = await Promise.all([
       this.prisma.inventoryItem.findMany({
         where: {
           tenantId,
+          isActive: true,
           currentStock: { gt: 0 },
-          reorderLevel: { not: null, gt: 0 },
+          OR: [{ reorderLevel: { not: null } }, { minStock: { not: null } }],
         },
         include: { store: true, medicine: true },
         orderBy: { currentStock: "asc" },
@@ -1144,7 +1145,8 @@ export class PharmacyService {
       this.prisma.inventoryItem.findMany({
         where: {
           tenantId,
-          expiryDate: { not: null, lte: thirtyDaysFromNow },
+          isActive: true,
+          expiryDate: { not: null, lte: sixtyDaysFromNow },
           currentStock: { gt: 0 },
         },
         include: { store: true, medicine: true },
@@ -1153,15 +1155,17 @@ export class PharmacyService {
       this.prisma.inventoryItem.findMany({
         where: {
           tenantId,
+          isActive: true,
           currentStock: { lte: 0 },
         },
         include: { store: true, medicine: true },
       }),
     ]);
 
-    const lowStockItems = rawLowStock.filter(
-      (item) => Number(item.currentStock) <= Number(item.reorderLevel)
-    );
+    const lowStockItems = stockedItems.filter((item) => {
+      const threshold = Number(item.reorderLevel ?? item.minStock);
+      return Number(item.currentStock) <= threshold;
+    });
 
     return {
       lowStock: lowStockItems,

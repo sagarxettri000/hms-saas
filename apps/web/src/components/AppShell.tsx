@@ -68,11 +68,11 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Pharmacy',
     items: [
-      { label: 'Billing', href: '/pharmacy?tab=billing', icon: '₨', cls: 'pharma', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER] },
-      { label: 'Medicines', href: '/pharmacy?tab=medicines', icon: '☤', cls: 'pharma', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER] },
-      { label: 'Bills', href: '/pharmacy?tab=bills', icon: '▧', cls: 'pharma', roles: [...PHARMACY, ...ADMIN, ...SUPER] },
-      { label: 'Stores & Stock', href: '/pharmacy?tab=stores', icon: '▥', cls: 'pharma', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER] },
-      { label: 'Stock Alerts', href: '/pharmacy?tab=alerts', icon: '▲', cls: 'pharma', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER] },
+      { label: 'Billing', href: '/pharmacy?tab=billing', icon: '₨', cls: 'tone-blue', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER] },
+      { label: 'Medicines', href: '/pharmacy?tab=medicines', icon: '☤', cls: 'tone-purple', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER] },
+      { label: 'Bills', href: '/pharmacy?tab=bills', icon: '▧', cls: 'tone-amber', roles: [...PHARMACY, ...ADMIN, ...SUPER] },
+      { label: 'Stores & Stock', href: '/pharmacy?tab=stores', icon: '▥', cls: 'tone-cyan', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER] },
+      { label: 'Stock Alerts', href: '/pharmacy?tab=alerts', icon: '▲', cls: 'tone-rose', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER] },
     ],
   },
   {

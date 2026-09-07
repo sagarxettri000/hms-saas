@@ -554,7 +554,7 @@ export default function DashboardPage() {
 
     setQuickLinks([
       { label: 'Dispense medicines', href: '/pharmacy?tab=dispensing', icon: '📋' },
-      { label: 'Walk-in sales', href: '/pharmacy?tab=sales', icon: '₨' },
+      { label: 'Walk-in sales', href: '/pharmacy?tab=dispensing', icon: '₨' },
       { label: 'Stock alerts', href: '/pharmacy?tab=alerts', icon: '⚠' },
     ]);
   }

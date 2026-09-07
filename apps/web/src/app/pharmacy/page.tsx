@@ -10,12 +10,11 @@ import PatientPrescriptions from '@/components/PatientPrescriptions';
 
 const REMOVED_KEY = 'pharmacy_expiry_removed';
 
-const VALID_TABS = ['medicines', 'dispensing', 'sales', 'bills', 'stores', 'alerts', 'expiry'];
+const VALID_TABS = ['medicines', 'dispensing', 'bills', 'stores', 'alerts', 'expiry'];
 
 const TAB_LABELS: Record<string, string> = {
   medicines: 'Medicines',
   dispensing: 'Dispensing',
-  sales: 'Sales',
   bills: 'Bills',
   stores: 'Stores',
   alerts: 'Alerts',
@@ -776,6 +775,7 @@ function DispensingTab() {
   const [loading, setLoading] = useState(true);
   const [dispenseTarget, setDispenseTarget] = useState<any>(null);
   const [receipt, setReceipt] = useState<any>(null);
+  const [walkIn, setWalkIn] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -794,7 +794,10 @@ function DispensingTab() {
     <>
       <div className="toolbar" style={{ marginBottom: 16 }}>
         <span className="note">{prescriptions.length} pending prescription(s)</span>
-        <button className="btn btn-secondary" onClick={load}>Refresh</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button className="btn btn-primary" onClick={() => setWalkIn(true)}>+ Walk-in Sale</button>
+          <button className="btn btn-secondary" onClick={load}>Refresh</button>
+        </div>
       </div>
 
       {loading ? (
@@ -844,8 +847,332 @@ function DispensingTab() {
           onReceipt={setReceipt}
         />
       )}
+      {walkIn && (
+        <WalkInSaleModal
+          onClose={() => setWalkIn(false)}
+          onReceipt={setReceipt}
+        />
+      )}
       {receipt && <ReceiptModal invoice={receipt} onClose={() => setReceipt(null)} />}
     </>
+  );
+}
+
+function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceipt: (invoice: any) => void }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [search, setSearch] = useState('');
+  const [patientId, setPatientId] = useState('');
+  const [storeId, setStoreId] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [stores, setStores] = useState<any[]>([]);
+  const [patientList, setPatientList] = useState<any[]>([]);
+  const [showAddPatient, setShowAddPatient] = useState(false);
+  const [newPatient, setNewPatient] = useState({ firstName: '', lastName: '', mobile: '', gender: 'MALE' });
+  const [savingPatient, setSavingPatient] = useState(false);
+  const [patientError, setPatientError] = useState('');
+  const [discount, setDiscount] = useState(0);
+  const [tax, setTax] = useState(0);
+  const [payMethod, setPayMethod] = useState('CASH');
+  const [payRef, setPayRef] = useState('');
+  const [isCredit, setIsCredit] = useState(false);
+
+  useEffect(() => {
+    Promise.all([api('/pharmacy/stores'), api('/patients?limit=500')])
+      .then(([storeRes, patientRes]: any[]) => {
+        const allStores = toList(storeRes);
+        const filtered = allStores.filter((s: any) => s.location?.toLowerCase().includes('ground floor'));
+        setStores(filtered.length > 0 ? filtered : allStores);
+        if ((filtered.length > 0 ? filtered : allStores).length === 1) {
+          setStoreId((filtered.length > 0 ? filtered : allStores)[0].id);
+        }
+        setPatientList(toList(patientRes));
+      })
+      .catch(() => {});
+  }, []);
+
+  async function searchMedicines(q: string) {
+    setSearch(q);
+    if (q.length < 2) { setSearchResults([]); return; }
+    try {
+      const res = await api(`/pharmacy/medicines?query=${encodeURIComponent(q)}&limit=10`);
+      setSearchResults(toList(res));
+    } catch {
+      setSearchResults([]);
+    }
+  }
+
+  function addToSale(med: any) {
+    if (items.find((s) => s.medicineId === med.id)) return;
+    setItems((prev) => [...prev, {
+      medicineId: med.id,
+      medicineName: med.name,
+      quantity: 1,
+      unitPrice: Number(med.salesRate) || 0,
+    }]);
+    setSearch('');
+    setSearchResults([]);
+  }
+
+  function updateItem(medicineId: string, field: string, value: string) {
+    setItems((prev) => prev.map((item) =>
+      item.medicineId === medicineId
+        ? { ...item, [field]: field === 'quantity' || field === 'unitPrice' ? Number(value) || 0 : value }
+        : item
+    ));
+  }
+
+  function removeItem(medicineId: string) {
+    setItems((prev) => prev.filter((item) => item.medicineId !== medicineId));
+  }
+
+  const subtotal = items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
+  const taxAmount = (subtotal * tax) / 100;
+  const grandTotal = Math.max(0, subtotal + taxAmount - discount);
+
+  async function submit() {
+    if (items.length === 0 || !patientId || !storeId) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const saleRes = await api('/pharmacy/sale', {
+        method: 'POST',
+        body: JSON.stringify({
+          patientId,
+          storeId,
+          items: items.map((it) => ({
+            medicineId: it.medicineId,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+          })),
+          discountAmount: discount || 0,
+          taxPercent: tax || 0,
+          isCredit,
+          paymentMethod: isCredit ? undefined : payMethod,
+          referenceNumber: payRef || undefined,
+          notes: 'Pharmacy walk-in sale',
+        }),
+      });
+      const result = toObj(saleRes);
+      const invoice = result?.invoice ?? result;
+      let receiptInvoice = invoice;
+      if (invoice?.id) {
+        try {
+          const receiptRes = await api(`/billing/invoices/${invoice.id}`);
+          receiptInvoice = toObj(receiptRes) ?? invoice;
+        } catch { /* keep invoice */ }
+      }
+      onReceipt(receiptInvoice);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Sale failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleAddPatient() {
+    if (!newPatient.firstName.trim()) { setPatientError('First name is required'); return; }
+    setSavingPatient(true);
+    setPatientError('');
+    try {
+      const res = await api('/patients', { method: 'POST', body: JSON.stringify(newPatient) });
+      const pat = toObj(res);
+      setPatientList((prev) => [...prev, pat]);
+      setPatientId(pat.id);
+      setShowAddPatient(false);
+      setNewPatient({ firstName: '', lastName: '', mobile: '', gender: 'MALE' });
+    } catch (err: any) {
+      setPatientError(err.message || 'Failed to add patient');
+    } finally {
+      setSavingPatient(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 900, width: '92%' }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 className="modal-title">Walk-in Sale</h3>
+          <button className="modal-close" onClick={onClose}>x</button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, alignItems: 'start' }}>
+          <div className="card">
+            <div className="card-title">Billing Details</div>
+            <div className="form-grid">
+              <div className="field">
+                <label className="label">Patient *</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select className="input" style={{ flex: 1 }} value={patientId} onChange={(e) => setPatientId(e.target.value)}>
+                    <option value="">Select patient</option>
+                    {patientList.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.firstName} {p.lastName}{p.mrn ? ` (${p.mrn})` : ''}{p.mobile ? ` - ${p.mobile}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="btn btn-sm" onClick={() => setShowAddPatient(true)}>+ Add</button>
+                </div>
+              </div>
+              <div className="field">
+                <label className="label">Store *</label>
+                <select className="input" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+                  <option value="">Select store</option>
+                  {stores.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.location})</option>)}
+                </select>
+              </div>
+              <div className="field field-full">
+                {patientId && <PatientPrescriptions patientId={patientId} />}
+              </div>
+              <div className="field field-full">
+                <label className="label">Medicine</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    className="input search-input"
+                    value={search}
+                    onChange={(e) => searchMedicines(e.target.value)}
+                    placeholder="Search medicine by name or generic name..."
+                  />
+                  {searchResults.length > 0 && (
+                    <div style={{
+                      position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
+                      border: '1px solid var(--border)', borderRadius: 8, maxHeight: 240, overflowY: 'auto',
+                      background: 'var(--surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                    }}>
+                      {searchResults.map((med) => (
+                        <div
+                          key={med.id}
+                          onMouseDown={() => addToSale(med)}
+                          style={{
+                            padding: '10px 14px', cursor: 'pointer', fontSize: 13,
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            borderBottom: '1px solid var(--border)',
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 600 }}>{med.name}</div>
+                            {med.genericName && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{med.genericName}</div>}
+                          </div>
+                          <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatMoney(med.salesRate)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Sale Items</div>
+            {items.length === 0 && <div className="empty">No items added yet.</div>}
+            {items.map((it) => (
+              <div key={it.medicineId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{it.medicineName}</div>
+                <input className="input" type="number" min={1} value={it.quantity} onChange={(e) => updateItem(it.medicineId, 'quantity', e.target.value)} style={{ width: 56, padding: '4px 6px' }} />
+                <input className="input" type="number" min={0} value={it.unitPrice} onChange={(e) => updateItem(it.medicineId, 'unitPrice', e.target.value)} style={{ width: 80, padding: '4px 6px' }} />
+                <span style={{ fontWeight: 600, fontSize: 13, minWidth: 70, textAlign: 'right' }}>{formatMoney(it.quantity * it.unitPrice)}</span>
+                <button className="btn btn-sm btn-danger" onClick={() => removeItem(it.medicineId)}>x</button>
+              </div>
+            ))}
+            {items.length > 0 && (
+              <>
+                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-muted)' }}>
+                  <span>Subtotal</span><span>{formatMoney(subtotal)}</span>
+                </div>
+                <div className="form-grid" style={{ marginTop: 8 }}>
+                  <div className="field">
+                    <label className="label">Discount</label>
+                    <input className="input" type="number" min={0} step="0.01" value={discount || ''} onChange={(e) => setDiscount(Number(e.target.value) || 0)} placeholder="0" />
+                  </div>
+                  <div className="field">
+                    <label className="label">Tax %</label>
+                    <input className="input" type="number" min={0} max={100} step="0.01" value={tax || ''} onChange={(e) => setTax(Number(e.target.value) || 0)} placeholder="0" />
+                  </div>
+                </div>
+                <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 16 }}>
+                  <span>Total</span><span>{formatMoney(grandTotal)}</span>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', margin: '12px 0 8px' }}>
+                  <input type="checkbox" checked={isCredit} onChange={(e) => setIsCredit(e.target.checked)} />
+                  Credit invoice (pay later)
+                </label>
+                {!isCredit && (
+                  <>
+                    <div className="field">
+                      <label className="label">Payment Method</label>
+                      <select className="input" value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
+                        <option value="CASH">Cash</option>
+                        <option value="CARD">Card</option>
+                        <option value="BANK">Bank Transfer</option>
+                        <option value="ONLINE">QR / eSewa / Khalti</option>
+                        <option value="INSURANCE">Insurance</option>
+                      </select>
+                    </div>
+                    {(payMethod === 'CARD' || payMethod === 'BANK' || payMethod === 'ONLINE') && (
+                      <div className="field">
+                        <label className="label">Reference Number</label>
+                        <input className="input" value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Transaction ref" />
+                      </div>
+                    )}
+                  </>
+                )}
+                <button
+                  className="btn btn-primary"
+                  style={{ width: '100%', marginTop: 8 }}
+                  disabled={submitting || items.length === 0 || !patientId || !storeId}
+                  onClick={submit}
+                >
+                  {submitting ? 'Processing...' : 'Create Invoice & Receipt'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {error && <div className="alert alert-error" style={{ marginTop: 12 }}>{error}</div>}
+
+        {showAddPatient && (
+          <div className="modal-backdrop" onClick={() => setShowAddPatient(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3 className="modal-title">Add New Patient</h3>
+                <button className="modal-close" onClick={() => setShowAddPatient(false)}>x</button>
+              </div>
+              <div className="field">
+                <label className="label">First Name *</label>
+                <input className="input" value={newPatient.firstName} onChange={(e) => setNewPatient({ ...newPatient, firstName: e.target.value })} />
+              </div>
+              <div className="field">
+                <label className="label">Last Name</label>
+                <input className="input" value={newPatient.lastName} onChange={(e) => setNewPatient({ ...newPatient, lastName: e.target.value })} />
+              </div>
+              <div className="field">
+                <label className="label">Mobile</label>
+                <input className="input" value={newPatient.mobile} onChange={(e) => setNewPatient({ ...newPatient, mobile: e.target.value })} />
+              </div>
+              <div className="field">
+                <label className="label">Gender</label>
+                <select className="input" value={newPatient.gender} onChange={(e) => setNewPatient({ ...newPatient, gender: e.target.value })}>
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+              {patientError && <div className="alert alert-error">{patientError}</div>}
+              <div className="form-actions">
+                <button className="btn btn-secondary" onClick={() => setShowAddPatient(false)}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleAddPatient} disabled={savingPatient}>
+                  {savingPatient ? 'Saving...' : 'Add Patient'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1021,326 +1348,6 @@ function DispenseModal({ prescription, onClose, onDone, onReceipt }: { prescript
         </div>
       </div>
     </div>
-  );
-}
-
-function SalesTab() {
-  const [salesItems, setSalesItems] = useState<any[]>([]);
-  const [salesSearch, setSalesSearch] = useState('');
-  const [salesPatientId, setSalesPatientId] = useState('');
-  const [salesStoreId, setSalesStoreId] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [submittingSale, setSubmittingSale] = useState(false);
-  const [saleReceipt, setSaleReceipt] = useState<any>(null);
-  const [salesStores, setSalesStores] = useState<any[]>([]);
-  const [patientList, setPatientList] = useState<any[]>([]);
-  const [showAddPatient, setShowAddPatient] = useState(false);
-  const [newPatient, setNewPatient] = useState({ firstName: '', lastName: '', mobile: '', gender: 'MALE' });
-  const [savingPatient, setSavingPatient] = useState(false);
-  const [patientError, setPatientError] = useState('');
-  const [saleError, setSaleError] = useState('');
-  const [salesDiscount, setSalesDiscount] = useState(0);
-  const [salesTax, setSalesTax] = useState(0);
-  const [salesPaymentMethod, setSalesPaymentMethod] = useState('CASH');
-  const [salesPaymentRef, setSalesPaymentRef] = useState('');
-  const [salesIsCredit, setSalesIsCredit] = useState(false);
-
-  useEffect(() => {
-    Promise.all([api('/pharmacy/stores'), api('/patients?limit=500')])
-      .then(([storeRes, patientRes]: any[]) => {
-        const allStores = toList(storeRes);
-        const filtered = allStores.filter((s: any) => s.location?.toLowerCase().includes('ground floor'));
-        setSalesStores(filtered.length > 0 ? filtered : allStores);
-        if ((filtered.length > 0 ? filtered : allStores).length === 1) {
-          setSalesStoreId((filtered.length > 0 ? filtered : allStores)[0].id);
-        }
-        setPatientList(toList(patientRes));
-      })
-      .catch(() => {});
-  }, []);
-
-  async function searchMedicines(q: string) {
-    setSalesSearch(q);
-    if (q.length < 2) { setSearchResults([]); return; }
-    try {
-      const res = await api(`/pharmacy/medicines?query=${encodeURIComponent(q)}&limit=10`);
-      setSearchResults(toList(res));
-    } catch {
-      setSearchResults([]);
-    }
-  }
-
-  function addToSale(med: any) {
-    if (salesItems.find((s) => s.medicineId === med.id)) return;
-    setSalesItems((prev) => [...prev, {
-      medicineId: med.id,
-      medicineName: med.name,
-      quantity: 1,
-      unitPrice: Number(med.salesRate) || 0,
-    }]);
-    setSalesSearch('');
-    setSearchResults([]);
-  }
-
-  function updateSaleItem(medicineId: string, field: string, value: string) {
-    setSalesItems((prev) => prev.map((item) =>
-      item.medicineId === medicineId
-        ? { ...item, [field]: field === 'quantity' || field === 'unitPrice' ? Number(value) || 0 : value }
-        : item
-    ));
-  }
-
-  function removeSaleItem(medicineId: string) {
-    setSalesItems((prev) => prev.filter((item) => item.medicineId !== medicineId));
-  }
-
-  const saleSubtotal = salesItems.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
-  const saleTaxAmount = (saleSubtotal * salesTax) / 100;
-  const saleGrandTotal = Math.max(0, saleSubtotal + saleTaxAmount - salesDiscount);
-
-  async function submitSale() {
-    if (salesItems.length === 0 || !salesPatientId || !salesStoreId) return;
-    setSubmittingSale(true);
-    setSaleError('');
-    try {
-      const saleRes = await api('/pharmacy/sale', {
-        method: 'POST',
-        body: JSON.stringify({
-          patientId: salesPatientId,
-          storeId: salesStoreId,
-          items: salesItems.map((it) => ({
-            medicineId: it.medicineId,
-            quantity: it.quantity,
-            unitPrice: it.unitPrice,
-          })),
-          discountAmount: salesDiscount || 0,
-          taxPercent: salesTax || 0,
-          isCredit: salesIsCredit,
-          paymentMethod: salesIsCredit ? undefined : salesPaymentMethod,
-          referenceNumber: salesPaymentRef || undefined,
-          notes: 'Pharmacy walk-in sale',
-        }),
-      });
-      const result = toObj(saleRes);
-      const invoice = result?.invoice ?? result;
-      if (invoice?.id) {
-        const receiptRes = await api(`/billing/invoices/${invoice.id}`);
-        setSaleReceipt(toObj(receiptRes) ?? invoice);
-      } else {
-        setSaleReceipt(invoice);
-      }
-      setSalesItems([]);
-      setSalesPatientId('');
-      setSalesDiscount(0);
-      setSalesTax(0);
-    } catch (err: any) {
-      setSaleError(err.message || 'Sale failed');
-    } finally {
-      setSubmittingSale(false);
-    }
-  }
-
-  async function handleAddPatient() {
-    if (!newPatient.firstName.trim()) { setPatientError('First name is required'); return; }
-    setSavingPatient(true);
-    setPatientError('');
-    try {
-      const res = await api('/patients', {
-        method: 'POST',
-        body: JSON.stringify(newPatient),
-      });
-      const pat = toObj(res);
-      setPatientList((prev) => [...prev, pat]);
-      setSalesPatientId(pat.id);
-      setShowAddPatient(false);
-      setNewPatient({ firstName: '', lastName: '', mobile: '', gender: 'MALE' });
-    } catch (err: any) {
-      setPatientError(err.message || 'Failed to add patient');
-    } finally {
-      setSavingPatient(false);
-    }
-  }
-
-  return (
-    <>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, alignItems: 'start' }}>
-        <div className="card">
-          <div className="card-title">New Sale</div>
-          <div className="form-grid">
-            <div className="field">
-              <label className="label">Patient *</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <select className="input" style={{ flex: 1 }} value={salesPatientId} onChange={(e) => setSalesPatientId(e.target.value)}>
-                  <option value="">Select patient</option>
-                  {patientList.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.firstName} {p.lastName}{p.mrn ? ` (${p.mrn})` : ''}{p.mobile ? ` - ${p.mobile}` : ''}
-                    </option>
-                  ))}
-                </select>
-                <button className="btn btn-sm" onClick={() => setShowAddPatient(true)}>+ Add</button>
-              </div>
-            </div>
-            <div className="field">
-              <label className="label">Store *</label>
-              <select className="input" value={salesStoreId} onChange={(e) => setSalesStoreId(e.target.value)}>
-                <option value="">Select store</option>
-                {salesStores.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.location})</option>)}
-              </select>
-            </div>
-            <div className="field field-full">
-              {salesPatientId && <PatientPrescriptions patientId={salesPatientId} />}
-            </div>
-            <div className="field field-full">
-              <label className="label">Medicine</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  className="input search-input"
-                  value={salesSearch}
-                  onChange={(e) => searchMedicines(e.target.value)}
-                  placeholder="Search medicine by name or generic name..."
-                />
-                {searchResults.length > 0 && (
-                  <div style={{
-                    position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
-                    border: '1px solid var(--border)', borderRadius: 8, maxHeight: 240, overflowY: 'auto',
-                    background: 'var(--surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                  }}>
-                    {searchResults.map((med) => (
-                      <div
-                        key={med.id}
-                        onMouseDown={() => addToSale(med)}
-                        style={{
-                          padding: '10px 14px', cursor: 'pointer', fontSize: 13,
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          borderBottom: '1px solid var(--border)',
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 600 }}>{med.name}</div>
-                          {med.genericName && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{med.genericName}</div>}
-                        </div>
-                        <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatMoney(med.salesRate)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-title">Sale Items</div>
-          {salesItems.length === 0 && <div className="empty">No items added yet.</div>}
-          {salesItems.map((it) => (
-            <div key={it.medicineId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{it.medicineName}</div>
-              <input className="input" type="number" min={1} value={it.quantity} onChange={(e) => updateSaleItem(it.medicineId, 'quantity', e.target.value)} style={{ width: 56, padding: '4px 6px' }} />
-              <input className="input" type="number" min={0} value={it.unitPrice} onChange={(e) => updateSaleItem(it.medicineId, 'unitPrice', e.target.value)} style={{ width: 80, padding: '4px 6px' }} />
-              <span style={{ fontWeight: 600, fontSize: 13, minWidth: 70, textAlign: 'right' }}>{formatMoney(it.quantity * it.unitPrice)}</span>
-              <button className="btn btn-sm btn-danger" onClick={() => removeSaleItem(it.medicineId)}>x</button>
-            </div>
-          ))}
-          {salesItems.length > 0 && (
-            <>
-              <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-muted)' }}>
-                <span>Subtotal</span><span>{formatMoney(saleSubtotal)}</span>
-              </div>
-              <div className="form-grid" style={{ marginTop: 8 }}>
-                <div className="field">
-                  <label className="label">Discount</label>
-                  <input className="input" type="number" min={0} step="0.01" value={salesDiscount || ''} onChange={(e) => setSalesDiscount(Number(e.target.value) || 0)} placeholder="0" />
-                </div>
-                <div className="field">
-                  <label className="label">Tax %</label>
-                  <input className="input" type="number" min={0} max={100} step="0.01" value={salesTax || ''} onChange={(e) => setSalesTax(Number(e.target.value) || 0)} placeholder="0" />
-                </div>
-              </div>
-              <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 16 }}>
-                <span>Total</span><span>{formatMoney(saleGrandTotal)}</span>
-              </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', margin: '12px 0 8px' }}>
-                <input type="checkbox" checked={salesIsCredit} onChange={(e) => setSalesIsCredit(e.target.checked)} />
-                Credit invoice (pay later)
-              </label>
-              {!salesIsCredit && (
-                <>
-                  <div className="field">
-                    <label className="label">Payment Method</label>
-                    <select className="input" value={salesPaymentMethod} onChange={(e) => setSalesPaymentMethod(e.target.value)}>
-                      <option value="CASH">Cash</option>
-                      <option value="CARD">Card</option>
-                      <option value="BANK">Bank Transfer</option>
-                      <option value="ONLINE">QR / eSewa / Khalti</option>
-                      <option value="INSURANCE">Insurance</option>
-                    </select>
-                  </div>
-                  {(salesPaymentMethod === 'CARD' || salesPaymentMethod === 'BANK' || salesPaymentMethod === 'ONLINE') && (
-                    <div className="field">
-                      <label className="label">Reference Number</label>
-                      <input className="input" value={salesPaymentRef} onChange={(e) => setSalesPaymentRef(e.target.value)} placeholder="Transaction ref" />
-                    </div>
-                  )}
-                </>
-              )}
-              <button
-                className="btn btn-primary"
-                style={{ width: '100%', marginTop: 8 }}
-                disabled={submittingSale || salesItems.length === 0 || !salesPatientId || !salesStoreId}
-                onClick={submitSale}
-              >
-                {submittingSale ? 'Processing...' : 'Create Invoice & Receipt'}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {saleError && <div className="alert alert-error" style={{ marginTop: 12 }}>{saleError}</div>}
-
-      {showAddPatient && (
-        <div className="modal-backdrop" onClick={() => setShowAddPatient(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">Add New Patient</h3>
-              <button className="modal-close" onClick={() => setShowAddPatient(false)}>x</button>
-            </div>
-            <div className="field">
-              <label className="label">First Name *</label>
-              <input className="input" value={newPatient.firstName} onChange={(e) => setNewPatient({ ...newPatient, firstName: e.target.value })} />
-            </div>
-            <div className="field">
-              <label className="label">Last Name</label>
-              <input className="input" value={newPatient.lastName} onChange={(e) => setNewPatient({ ...newPatient, lastName: e.target.value })} />
-            </div>
-            <div className="field">
-              <label className="label">Mobile</label>
-              <input className="input" value={newPatient.mobile} onChange={(e) => setNewPatient({ ...newPatient, mobile: e.target.value })} />
-            </div>
-            <div className="field">
-              <label className="label">Gender</label>
-              <select className="input" value={newPatient.gender} onChange={(e) => setNewPatient({ ...newPatient, gender: e.target.value })}>
-                <option value="MALE">Male</option>
-                <option value="FEMALE">Female</option>
-                <option value="OTHER">Other</option>
-              </select>
-            </div>
-            {patientError && <div className="alert alert-error">{patientError}</div>}
-            <div className="form-actions">
-              <button className="btn btn-secondary" onClick={() => setShowAddPatient(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleAddPatient} disabled={savingPatient}>
-                {savingPatient ? 'Saving...' : 'Add Patient'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {saleReceipt && (
-        <ReceiptModal invoice={saleReceipt} onClose={() => setSaleReceipt(null)} />
-      )}
-    </>
   );
 }
 
@@ -1871,7 +1878,7 @@ function PharmacyPageInner() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Pharmacy</h1>
-          <p className="page-subtitle">Medicines, dispensing, sales, stores, alerts and expiry management</p>
+          <p className="page-subtitle">Medicines, dispensing & billing, stores, alerts and expiry management</p>
         </div>
       </div>
 
@@ -1885,7 +1892,6 @@ function PharmacyPageInner() {
 
       {activeTab === 'medicines' && <MedicinesTab />}
       {activeTab === 'dispensing' && <DispensingTab />}
-      {activeTab === 'sales' && <SalesTab />}
       {activeTab === 'bills' && <BillsTab />}
       {activeTab === 'stores' && <StoresTab />}
       {activeTab === 'alerts' && <AlertsTab />}

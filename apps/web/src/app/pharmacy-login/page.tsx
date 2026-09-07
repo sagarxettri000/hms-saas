@@ -58,7 +58,7 @@ export default function PharmacyLoginPage() {
       if (res.data.user.mustChangePassword) {
         router.push('/change-password');
       } else {
-        router.push('/pharmacy/dashboard');
+        router.push('/pharmacy?tab=dispensing');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed';

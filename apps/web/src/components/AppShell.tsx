@@ -67,10 +67,8 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Pharmacy',
     items: [
-      { label: 'Pharmacy Home', href: '/pharmacy/dashboard', icon: '⌂', roles: [...PHARMACY, ...ADMIN, ...SUPER] },
-      { label: 'Medicines', href: '/pharmacy?tab=medicines', icon: '💊', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER] },
       { label: 'Dispensing', href: '/pharmacy?tab=dispensing', icon: '📋', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER] },
-      { label: 'Sales', href: '/pharmacy?tab=sales', icon: '₨', roles: [...PHARMACY, ...ADMIN, ...SUPER] },
+      { label: 'Medicines', href: '/pharmacy?tab=medicines', icon: '💊', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER] },
       { label: 'Bills', href: '/pharmacy?tab=bills', icon: '📄', roles: [...PHARMACY, ...ADMIN, ...SUPER] },
       { label: 'Stores & Stock', href: '/pharmacy?tab=stores', icon: '🗄', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER] },
       { label: 'Stock Alerts', href: '/pharmacy?tab=alerts', icon: '⚠', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER] },

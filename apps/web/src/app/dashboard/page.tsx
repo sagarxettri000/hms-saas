@@ -340,13 +340,14 @@ export default function DashboardPage() {
 
   async function loadAdminData(isSuper: boolean) {
     const todayStart = startOfToday().toISOString();
-    const [summaryR, todayR, analyticsR, usersStatsR, todaySummaryR, alertsR] = await Promise.all([
+    const [summaryR, todayR, analyticsR, usersStatsR, todaySummaryR, alertsR, pharmSummaryR] = await Promise.all([
       safe(api('/reports/summary')),
       safe(api('/appointments/today')),
       safe(api('/billing/analytics')),
       safe(api('/users/stats')),
       safe(api(`/reports/summary?from=${todayStart}`)),
       safe(api('/pharmacy/alerts')),
+      safe(api('/pharmacy/summary')),
     ]);
     const s = summaryOf(summaryR);
     const appts = listOf(todayR);
@@ -358,6 +359,8 @@ export default function DashboardPage() {
     const beds = s.bedOccupancy || { occupied: 0, total: 0 };
     const occupancy = beds.total > 0 ? Math.round((beds.occupied / beds.total) * 100) : 0;
     const pharmAlerts = summaryOf(alertsR);
+    const pharmSummary = summaryOf(pharmSummaryR);
+    const pharmTotal = pharmSummary.totalMedicines ?? 0;
     const pharmLow = toList(pharmAlerts?.lowStock).length;
     const pharmOut = toList(pharmAlerts?.outOfStock).length;
 
@@ -372,21 +375,27 @@ export default function DashboardPage() {
         value: todaySum.patients ?? 0,
         tone: 'blue',
         icon: '👤',
-        delta: { current: todaySum.patients ?? 0, previous: yesterday?.patients ?? 0 },
+        ...(yesterday && yesterday.patients !== undefined
+          ? { delta: { current: todaySum.patients ?? 0, previous: yesterday.patients as number } }
+          : {}),
       },
       {
         label: "Today's admit",
         value: todaySum.admissions ?? 0,
         tone: 'green',
         icon: '🛏',
-        delta: { current: todaySum.admissions ?? 0, previous: yesterday?.admissions ?? 0 },
+        ...(yesterday && yesterday.admissions !== undefined
+          ? { delta: { current: todaySum.admissions ?? 0, previous: yesterday.admissions as number } }
+          : {}),
       },
       {
         label: "Today's appointments",
         value: sum.total ?? appts.length,
         tone: 'green',
         icon: '📅',
-        delta: { current: sum.total ?? appts.length, previous: yesterday?.appointments ?? 0 },
+        ...(yesterday && yesterday.appointments !== undefined
+          ? { delta: { current: sum.total ?? appts.length, previous: yesterday.appointments as number } }
+          : {}),
       },
       { label: 'Bed occupancy', value: `${occupancy}%`, tone: occupancy >= 90 ? 'red' : occupancy >= 70 ? 'amber' : 'green', icon: '🛌' },
       {
@@ -395,17 +404,19 @@ export default function DashboardPage() {
         tone: 'purple',
         icon: '₨',
         spark: revSpark,
-        delta: { current: analytics.today?.revenue ?? 0, previous: yesterday?.totalRevenue ?? 0, money: true },
+        ...(yesterday && yesterday.totalRevenue !== undefined
+          ? { delta: { current: analytics.today?.revenue ?? 0, previous: yesterday.totalRevenue as number, money: true } }
+          : {}),
       },
       { label: 'Total staff', value: totalStaff, tone: 'blue', icon: '👥' },
     ]);
 
     setStockHealth({
-      pct: s.totalMedicines > 0 ? ((s.totalMedicines - pharmLow - pharmOut) / s.totalMedicines) * 100 : 100,
+      pct: pharmTotal > 0 ? ((pharmTotal - pharmLow - pharmOut) / pharmTotal) * 100 : 100,
       low: pharmLow,
       out: pharmOut,
       expiring: pharmAlerts?.summary?.nearExpiryCount ?? 0,
-      total: s.totalMedicines ?? 0,
+      total: pharmTotal,
     });
 
     setFocus({
@@ -523,21 +534,27 @@ export default function DashboardPage() {
         value: todaySum.patients ?? 0,
         tone: 'blue',
         icon: '👤',
-        delta: { current: todaySum.patients ?? 0, previous: yesterday?.patients ?? 0 },
+        ...(yesterday && yesterday.patients !== undefined
+          ? { delta: { current: todaySum.patients ?? 0, previous: yesterday.patients as number } }
+          : {}),
       },
       {
         label: "Today's admit",
         value: todaySum.admissions ?? 0,
         tone: 'green',
         icon: '🛏',
-        delta: { current: todaySum.admissions ?? 0, previous: yesterday?.admissions ?? 0 },
+        ...(yesterday && yesterday.admissions !== undefined
+          ? { delta: { current: todaySum.admissions ?? 0, previous: yesterday.admissions as number } }
+          : {}),
       },
       {
         label: "Today's appointments",
         value: appts.length,
         tone: 'blue',
         icon: '📅',
-        delta: { current: appts.length, previous: yesterday?.appointments ?? 0 },
+        ...(yesterday && yesterday.appointments !== undefined
+          ? { delta: { current: appts.length, previous: yesterday.appointments as number } }
+          : {}),
       },
       {
         label: "Today's revenue",
@@ -545,7 +562,9 @@ export default function DashboardPage() {
         tone: 'green',
         icon: '₨',
         spark: revSpark,
-        delta: { current: analytics.today?.revenue ?? 0, previous: yesterday?.totalRevenue ?? 0, money: true },
+        ...(yesterday && yesterday.totalRevenue !== undefined
+          ? { delta: { current: analytics.today?.revenue ?? 0, previous: yesterday.totalRevenue as number, money: true } }
+          : {}),
       },
       { label: 'Walk-ins today', value: walkIns, tone: 'purple', icon: '🚶' },
       { label: 'Pending billing', value: pendingBills.length, tone: pendingBills.length > 0 ? 'amber' : 'green', icon: '📄' },
@@ -602,7 +621,9 @@ export default function DashboardPage() {
         tone: 'green',
         icon: '₨',
         spark: colSpark,
-        delta: { current: a.today?.collection ?? 0, previous: yesterday?.collected ?? 0, money: true },
+        ...(yesterday && yesterday.collected !== undefined
+          ? { delta: { current: a.today?.collection ?? 0, previous: yesterday.collected as number, money: true } }
+          : {}),
       },
     ]);
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { formatMoney, formatDate, formatDateTime } from '@/lib/hooks';
@@ -875,18 +875,33 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
   const [payMethod, setPayMethod] = useState('CASH');
   const [payRef, setPayRef] = useState('');
   const [isCredit, setIsCredit] = useState(false);
+  const [notes, setNotes] = useState('');
+  const [invList, setInvList] = useState<any[]>([]);
 
   useEffect(() => {
-    Promise.all([api('/pharmacy/stores'), api('/patients?limit=500')])
-      .then(([storeRes, patientRes]: any[]) => {
+    Promise.all([api('/pharmacy/stores'), api('/patients?limit=500'), api('/pharmacy/inventory?limit=500')])
+      .then(([storeRes, patientRes, invRes]: any[]) => {
         const allStores = toList(storeRes);
         const filtered = allStores.filter((s: any) => s.location?.toLowerCase().includes('ground floor'));
         const available = filtered.length > 0 ? filtered : allStores;
         if (available.length > 0) setStoreId(available[0].id);
         setPatientList(toList(patientRes));
+        setInvList(toList(invRes));
       })
       .catch(() => {});
   }, []);
+
+  const stockOf = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const item of invList) {
+      const medId = item.medicineId || item.medicine?.id;
+      const st = Number(item.currentStock) || 0;
+      if (!medId) continue;
+      if (storeId && item.storeId !== storeId) continue;
+      map[medId] = (map[medId] || 0) + st;
+    }
+    return map;
+  }, [invList, storeId]);
 
   async function searchMedicines(q: string) {
     setSearch(q);
@@ -901,22 +916,45 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
 
   function addToSale(med: any) {
     if (items.find((s) => s.medicineId === med.id)) return;
+    const st = stockOf[med.id] ?? 0;
+    if (st <= 0) {
+      setError(`"${med.name}" is out of stock in the selected store.`);
+      return;
+    }
+    setError('');
     setItems((prev) => [...prev, {
       medicineId: med.id,
       medicineName: med.name,
       quantity: 1,
       unitPrice: Number(med.salesRate) || 0,
+      available: st,
     }]);
     setSearch('');
     setSearchResults([]);
   }
 
   function updateItem(medicineId: string, field: string, value: string) {
-    setItems((prev) => prev.map((item) =>
-      item.medicineId === medicineId
-        ? { ...item, [field]: field === 'quantity' || field === 'unitPrice' ? Number(value) || 0 : value }
-        : item
-    ));
+    setItems((prev) => prev.map((item) => {
+      if (item.medicineId !== medicineId) return item;
+      let v: any = value;
+      if (field === 'quantity' || field === 'unitPrice') {
+        v = Number(value) || 0;
+        if (field === 'quantity') {
+          const maxQty = stockOf[medicineId] ?? Number.MAX_SAFE_INTEGER;
+          v = Math.max(1, Math.min(maxQty, v));
+        }
+      }
+      return { ...item, [field]: v };
+    }));
+  }
+
+  function bumpItem(medicineId: string, delta: number) {
+    setItems((prev) => prev.map((item) => {
+      if (item.medicineId !== medicineId) return item;
+      const maxQty = stockOf[medicineId] ?? Number.MAX_SAFE_INTEGER;
+      const next = Math.max(1, Math.min(maxQty, Number(item.quantity) + delta));
+      return { ...item, quantity: next };
+    }));
   }
 
   function removeItem(medicineId: string) {
@@ -949,7 +987,7 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
           isCredit,
           paymentMethod: isCredit ? undefined : payMethod,
           referenceNumber: payRef || undefined,
-          notes: 'Pharmacy walk-in sale',
+          notes: notes.trim() || 'Pharmacy walk-in sale',
         }),
       });
       const result = toObj(saleRes);
@@ -1046,46 +1084,114 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
                       border: '1px solid var(--border)', borderRadius: 8, maxHeight: 240, overflowY: 'auto',
                       background: 'var(--surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
                     }}>
-                      {searchResults.map((med) => (
-                        <div
-                          key={med.id}
-                          onMouseDown={() => addToSale(med)}
-                          style={{
-                            padding: '10px 14px', cursor: 'pointer', fontSize: 13,
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            borderBottom: '1px solid var(--border)',
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 600 }}>{med.name}</div>
-                            {med.genericName && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{med.genericName}</div>}
+                      {searchResults.map((med) => {
+                        const st = stockOf[med.id] ?? 0;
+                        const low = st > 0 && st <= 5;
+                        return (
+                          <div
+                            key={med.id}
+                            onMouseDown={() => addToSale(med)}
+                            style={{
+                              padding: '10px 14px', cursor: st > 0 ? 'pointer' : 'not-allowed', fontSize: 13,
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+                              borderBottom: '1px solid var(--border)',
+                              opacity: st > 0 ? 1 : 0.55,
+                            }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 600 }}>{med.name}</div>
+                              {med.genericName && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{med.genericName}</div>}
+                            </div>
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              <div style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatMoney(med.salesRate)}</div>
+                              <div style={{ fontSize: 11, color: st <= 0 ? '#dc2626' : (low ? '#d97706' : 'var(--text-muted)') }}>
+                                {st <= 0 ? 'Out of stock' : `In stock: ${st}`}
+                              </div>
+                            </div>
                           </div>
-                          <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatMoney(med.salesRate)}</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
+              </div>
+              <div className="field field-full">
+                <label className="label">Notes</label>
+                <textarea
+                  className="input"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Optional note for this sale"
+                  rows={2}
+                  style={{ resize: 'vertical' }}
+                />
               </div>
             </div>
           </div>
 
           <div className="card">
-            <div className="card-title">Sale Items</div>
-            {items.length === 0 && <div className="empty">No items added yet.</div>}
+            <div className="card-title">Sale Items ({items.length})</div>
+            {items.length === 0 && <div className="empty">Search medicines to add sale items.</div>}
             {items.map((it) => (
-              <div key={it.medicineId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{it.medicineName}</div>
-                <input className="input" type="number" min={1} value={it.quantity} onChange={(e) => updateItem(it.medicineId, 'quantity', e.target.value)} style={{ width: 56, padding: '4px 6px' }} />
-                <input className="input" type="number" min={0} value={it.unitPrice} onChange={(e) => updateItem(it.medicineId, 'unitPrice', e.target.value)} style={{ width: 80, padding: '4px 6px' }} />
-                <span style={{ fontWeight: 600, fontSize: 13, minWidth: 70, textAlign: 'right' }}>{formatMoney(it.quantity * it.unitPrice)}</span>
-                <button className="btn btn-sm btn-danger" onClick={() => removeItem(it.medicineId)}>x</button>
+              <div key={it.medicineId} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1, fontSize: 13, fontWeight: 500, minWidth: 0 }}>
+                    {it.medicineName}
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      {formatMoney(it.unitPrice)} / unit
+                      {it.available != null && ` · Available: ${it.available}`}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => bumpItem(it.medicineId, -1)} style={{ padding: '2px 8px' }}>−</button>
+                    <input
+                      className="input"
+                      type="number"
+                      min={1}
+                      value={it.quantity}
+                      onChange={(e) => updateItem(it.medicineId, 'quantity', e.target.value)}
+                      style={{ width: 52, padding: '3px 6px', textAlign: 'center' }}
+                    />
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => bumpItem(it.medicineId, 1)} style={{ padding: '2px 8px' }}>+</button>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 6 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{formatMoney(it.quantity * it.unitPrice)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      className="input"
+                      type="number"
+                      min={0}
+                      value={it.unitPrice}
+                      onChange={(e) => updateItem(it.medicineId, 'unitPrice', e.target.value)}
+                      style={{ width: 90, padding: '3px 6px' }}
+                      title="Unit price"
+                    />
+                    <button type="button" className="btn btn-sm btn-danger" onClick={() => removeItem(it.medicineId)}>Remove</button>
+                  </div>
+                </div>
+                {it.available != null && it.quantity > it.available && (
+                  <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>
+                    Quantity exceeds available stock ({it.available}).
+                  </div>
+                )}
               </div>
             ))}
             {items.length > 0 && (
               <>
-                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-muted)' }}>
-                  <span>Subtotal</span><span>{formatMoney(subtotal)}</span>
+                <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-muted)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                    <span>Items count</span><span>{items.length}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                    <span>Subtotal</span><span>{formatMoney(subtotal)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                    <span>Discount</span><span>- {formatMoney(discount)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                    <span>Tax ({tax}%)</span><span>+ {formatMoney(taxAmount)}</span>
+                  </div>
                 </div>
                 <div className="form-grid" style={{ marginTop: 8 }}>
                   <div className="field">
@@ -1097,8 +1203,9 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
                     <input className="input" type="number" min={0} max={100} step="0.01" value={tax || ''} onChange={(e) => setTax(Number(e.target.value) || 0)} placeholder="0" />
                   </div>
                 </div>
-                <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 16 }}>
-                  <span>Total</span><span>{formatMoney(grandTotal)}</span>
+                <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{items.reduce((s, it) => s + it.quantity, 0)} units</span>
+                  <span style={{ fontWeight: 700, fontSize: 18 }}>{formatMoney(grandTotal)}</span>
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', margin: '12px 0 8px' }}>
                   <input type="checkbox" checked={isCredit} onChange={(e) => setIsCredit(e.target.checked)} />

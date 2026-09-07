@@ -126,30 +126,56 @@ export function TrendChart({
 }) {
   const width = 640;
   const padL = 52;
-  const padR = 12;
+  const padR = 14;
   const padT = 16;
   const padB = 26;
-  const dd = (data || []).slice(-30);
-  const labels = dd.map((d) => d.date);
-  const revenue = dd.map((d) => Number(d.revenue) || 0);
-  const collection = dd.map((d) => Number(d.collection) || 0);
-  const n = Math.max(labels.length, 2);
-  const max = Math.max(1, ...revenue, ...collection);
-  const stepX = n > 1 ? (width - padL - padR) / (n - 1) : 0;
-  const y = (v: number) => padT + (1 - v / max) * (height - padT - padB);
 
-  const revPath = revenue
-    .map((v, i) => `${padL + i * stepX},${y(v)}`)
-    .join(' ');
-  const colPath = collection
-    .map((v, i) => `${padL + i * stepX},${y(v)}`)
-    .join(' ');
+  const byDate = new Map<string, { revenue: number; collection: number }>();
+  for (const d of data || []) {
+    const key = String(d.date || '').slice(0, 10);
+    if (!key) continue;
+    const cur = byDate.get(key) || { revenue: 0, collection: 0 };
+    cur.revenue += Number(d.revenue) || 0;
+    cur.collection += Number(d.collection) || 0;
+    byDate.set(key, cur);
+  }
+  const days = [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-30);
+
+  const labels = days.map(([k]) => k);
+  const revenue = days.map(([, v]) => v.revenue);
+  const collection = days.map(([, v]) => v.collection);
+
+  if (labels.length === 0) {
+    return <p className="empty">No revenue data yet.</p>;
+  }
+
+  const hasRevenue = revenue.some((v) => v > 0);
+  const hasCollection = collection.some((v) => v > 0);
+  const max = Math.max(1, ...(hasRevenue ? revenue : []), ...(hasCollection ? collection : []));
+  const plotW = width - padL - padR;
+  const innerH = height - padT - padB;
+  const n = labels.length;
+  const stepX = n > 1 ? plotW / (n - 1) : 0;
+  const y = (v: number) => padT + (1 - v / max) * innerH;
+  const pt = (arr: number[]) => arr.map((v, i) => `${padL + i * stepX},${y(v)}`).join(' ');
+
+  const tickCount = Math.min(6, n);
+  const tickEvery = n > 1 ? Math.max(1, Math.ceil((n - 1) / (tickCount - 1))) : 1;
+  const tickIndexes: number[] = [];
+  for (let i = 0; i < n; i++) {
+    if (i === n - 1 || i % tickEvery === 0) tickIndexes.push(i);
+  }
 
   return (
     <div className="dash-chart">
-      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto' }}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ width: '100%', height: 'auto' }}
+        role="img"
+        aria-label="Revenue and collections over the last 30 days"
+      >
         {[0, 0.25, 0.5, 0.75, 1].map((f) => {
-          const yy = padT + (1 - f) * (height - padT - padB);
+          const yy = padT + (1 - f) * innerH;
           return (
             <g key={f}>
               <line x1={padL} y1={yy} x2={width - padR} y2={yy} stroke="#e2e8f0" strokeWidth={1} />
@@ -159,29 +185,25 @@ export function TrendChart({
             </g>
           );
         })}
-        {labels.length > 0 &&
-          labels.map((lb, i) => (
-            <text
-              key={i}
-              x={padL + i * stepX}
-              y={height - 8}
-              textAnchor="middle"
-              fontSize={10}
-              fill="#64748b"
-            >
-              {shortDate(lb)}
-            </text>
-          ))}
-        {labels.length > 1 && (
+        {tickIndexes.map((i) => (
+          <text key={i} x={padL + i * stepX} y={height - 8} textAnchor="middle" fontSize={10} fill="#64748b">
+            {shortDate(labels[i])}
+          </text>
+        ))}
+        {n > 1 && (
           <>
-            <polyline points={colPath} fill="none" stroke={PALETTE[1]} strokeWidth={2} strokeLinejoin="round" />
-            <polyline points={revPath} fill="none" stroke={PALETTE[0]} strokeWidth={2} strokeLinejoin="round" />
+            {hasCollection && (
+              <polyline points={pt(collection)} fill="none" stroke={PALETTE[1]} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            )}
+            {hasRevenue && (
+              <polyline points={pt(revenue)} fill="none" stroke={PALETTE[0]} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            )}
           </>
         )}
-        {labels.length === 1 && (
+        {n === 1 && (
           <>
-            <circle cx={padL} cy={y(revenue[0])} r={3} fill={PALETTE[0]} />
-            <circle cx={padL} cy={y(collection[0])} r={3} fill={PALETTE[1]} />
+            {hasRevenue && <circle cx={padL} cy={y(revenue[0])} r={3} fill={PALETTE[0]} />}
+            {hasCollection && <circle cx={padL} cy={y(collection[0])} r={3} fill={PALETTE[1]} />}
           </>
         )}
       </svg>
@@ -190,10 +212,12 @@ export function TrendChart({
           <span className="dash-chart-dot" style={{ background: PALETTE[0] }} />
           Revenue
         </span>
-        <span className="dash-chart-legend-item">
-          <span className="dash-chart-dot" style={{ background: PALETTE[1] }} />
-          Collections
-        </span>
+        {hasCollection && (
+          <span className="dash-chart-legend-item">
+            <span className="dash-chart-dot" style={{ background: PALETTE[1] }} />
+            Collections
+          </span>
+        )}
       </div>
     </div>
   );

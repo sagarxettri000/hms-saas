@@ -1085,7 +1085,7 @@ export default function DashboardPage() {
 
           {finRole && finance && (
             <div className="dash-widget-grid">
-              <WidgetCard title="Revenue vs collections · 30 days">
+              <WidgetCard title="Revenue vs collections · 30 days" style={{ gridColumn: '1 / -1' }}>
                 <TrendChart data={trend} />
               </WidgetCard>
               <WidgetCard title="Collections today by method">

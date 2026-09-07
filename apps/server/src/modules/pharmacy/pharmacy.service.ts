@@ -1317,6 +1317,68 @@ export class PharmacyService {
       }),
     ]);
 
+    const num = (v: any) => Number(v) || 0;
+
+    // 30-day pharmacy revenue/collection trend — DB groups by timestamp, JS buckets into days
+    const last30Start = new Date(now);
+    last30Start.setDate(last30Start.getDate() - 29);
+    last30Start.setHours(0, 0, 0, 0);
+    const [trendInvoices, trendPayments] = await Promise.all([
+      this.prisma.invoice.groupBy({
+        by: ["issuedDate"],
+        _sum: { totalAmount: true },
+        where: {
+          tenantId,
+          type: "PHARMACY",
+          issuedDate: { gte: last30Start },
+          status: { not: "CANCELLED" },
+        },
+      }),
+      this.prisma.payment.groupBy({
+        by: ["paidAt"],
+        _sum: { amount: true },
+        where: { tenantId, paidAt: { gte: last30Start }, invoice: { type: "PHARMACY" } },
+      }),
+    ]);
+    const trendMap: Record<string, { revenue: number; collection: number }> = {};
+    for (let d = 0; d < 30; d++) {
+      const day = new Date(last30Start);
+      day.setDate(day.getDate() + d);
+      trendMap[day.toISOString().slice(0, 10)] = { revenue: 0, collection: 0 };
+    }
+    for (const g of trendInvoices) {
+      const key = g.issuedDate.toISOString().slice(0, 10);
+      if (trendMap[key]) trendMap[key].revenue += num(g._sum.totalAmount);
+    }
+    for (const g of trendPayments) {
+      const key = g.paidAt.toISOString().slice(0, 10);
+      if (trendMap[key]) trendMap[key].collection += num(g._sum.amount);
+    }
+    const trend = Object.entries(trendMap)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, v]) => ({ date, revenue: v.revenue, collection: v.collection }));
+
+    // Top medicines billed today
+    const todayInvoices = await this.prisma.invoice.findMany({
+      where: { tenantId, type: "PHARMACY", issuedDate: { gte: todayStart }, status: { not: "CANCELLED" } },
+      select: {
+        items: { select: { serviceName: true, quantity: true, lineTotal: true } },
+      },
+    });
+    const medMap: Record<string, { revenue: number; quantity: number }> = {};
+    for (const inv of todayInvoices) {
+      for (const item of inv.items) {
+        const name = item.serviceName || "Item";
+        const m = (medMap[name] = medMap[name] || { revenue: 0, quantity: 0 });
+        m.revenue += num(item.lineTotal);
+        m.quantity += num(item.quantity);
+      }
+    }
+    const topMedicines = Object.entries(medMap)
+      .map(([name, v]) => ({ name, revenue: v.revenue, quantity: v.quantity }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+
     return {
       totalMedicines,
       pendingPrescriptions,
@@ -1326,6 +1388,8 @@ export class PharmacyService {
       billedToday: billedToday._sum.totalAmount || 0,
       billsToday: billedToday._count || 0,
       revenueToday: revenueToday._sum.amount || 0,
+      trend,
+      topMedicines,
     };
   }
 }

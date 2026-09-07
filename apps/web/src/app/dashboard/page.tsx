@@ -242,6 +242,9 @@ export default function DashboardPage() {
   const [stockHealth, setStockHealth] = useState<any>(null);
   const [labPipeline, setLabPipeline] = useState<any>(null);
   const [bedsState, setBedsState] = useState<any>({ occupied: 0, total: 0 });
+  const [pharmSummary, setPharmSummary] = useState<any>(null);
+  const [pharmTrend, setPharmTrend] = useState<any[]>([]);
+  const [pharmTop, setPharmTop] = useState<any[]>([]);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -743,6 +746,10 @@ export default function DashboardPage() {
     const lowCount = lowStock.length;
     const outCount = outOfStock.length;
 
+    setPharmSummary(s);
+    setPharmTrend(Array.isArray(s.trend) ? s.trend : []);
+    setPharmTop(Array.isArray(s.topMedicines) ? s.topMedicines : []);
+
     setStockHealth({
       pct: totalMedicines > 0 ? ((totalMedicines - lowCount - outCount) / totalMedicines) * 100 : 100,
       low: lowCount,
@@ -751,12 +758,36 @@ export default function DashboardPage() {
       total: totalMedicines,
     });
 
+    const revSpark = Array.isArray(s.trend)
+      ? s.trend.slice(-14).map((t: any) => Number(t.revenue) || 0)
+      : [];
+
     setStats([
-      { label: 'Total medicines', value: totalMedicines, tone: 'blue', icon: '💊' },
-      { label: 'Low stock items', value: s.lowStockCount ?? alerts.summary?.lowStockCount ?? 0, tone: (s.lowStockCount ?? 0) > 0 ? 'amber' : 'green', icon: '⚠' },
-      { label: 'Dispensed today', value: s.dispensedToday ?? 0, tone: 'green', icon: '✅' },
-      { label: 'Revenue today', value: formatMoney(pharmacyRevenue), tone: 'green', icon: '₨' },
-      { label: 'Expiring soon', value: alerts.summary?.nearExpiryCount ?? 0, tone: (alerts.summary?.nearExpiryCount ?? 0) > 0 ? 'red' : 'green', icon: '⏰' },
+      {
+        label: 'Revenue today',
+        value: formatMoney(s.revenueToday ?? pharmacyRevenue),
+        tone: 'green',
+        icon: '₨',
+        spark: revSpark,
+        href: '/pharmacy?tab=billing',
+      },
+      { label: 'Prescriptions dispensed', value: s.dispensedToday ?? 0, tone: 'blue', icon: '✅' },
+      { label: 'Bills today', value: s.billsToday ?? 0, tone: 'purple', icon: '📄' },
+      {
+        label: 'Pending prescriptions',
+        value: s.pendingPrescriptions ?? 0,
+        tone: (s.pendingPrescriptions ?? 0) > 0 ? 'amber' : 'green',
+        icon: '💊',
+        href: '/pharmacy?tab=billing',
+      },
+      { label: 'Inventory value', value: formatMoney(s.totalStockValue ?? 0), tone: 'blue', icon: '📦' },
+      {
+        label: 'Low stock items',
+        value: s.lowStockCount ?? alerts.summary?.lowStockCount ?? 0,
+        tone: (s.lowStockCount ?? 0) > 0 ? 'amber' : 'green',
+        icon: '⚠',
+        href: '/pharmacy?tab=alerts',
+      },
     ]);
 
     setFocus({
@@ -1028,6 +1059,12 @@ export default function DashboardPage() {
   const beds = bedsState;
   const bedsPct = beds?.total > 0 ? Math.round((beds.occupied / beds.total) * 100) : 0;
 
+  const pharmTopRows = pharmTop.slice(0, 5).map((t: any) => ({
+    label: t.name || 'Item',
+    sublabel: `${Number(t.quantity) || 0} units`,
+    value: formatMoney(Number(t.revenue) || 0),
+  }));
+
   return (
     <>
       <div className="page-header">
@@ -1082,6 +1119,45 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+
+          {group === 'PHARMACY' && pharmSummary && (
+            <>
+              <div className="dash-hero">
+                <div className="dash-hero-copy">
+                  <div className="dash-hero-label">Pharmacy</div>
+                  <div className="dash-hero-title">
+                    {pharmSummary.revenueToday != null
+                      ? formatMoney(pharmSummary.revenueToday)
+                      : formatMoney(0)}{' '}
+                    <span>collected today</span>
+                  </div>
+                  <div className="dash-hero-sub">
+                    {pharmSummary.billsToday ?? 0} billing transactions ·{' '}
+                    {pharmSummary.dispensedToday ?? 0} prescriptions dispensed
+                  </div>
+                </div>
+                <button className="btn btn-light" onClick={() => router.push('/pharmacy?tab=billing')}>
+                  Start dispensing →
+                </button>
+              </div>
+
+              <div className="dash-widget-grid">
+                <WidgetCard title="Revenue vs collections · 30 days">
+                  <TrendChart data={pharmTrend} height={150} />
+                </WidgetCard>
+                <WidgetCard
+                  title="Top medicines sold today"
+                  action={
+                    <a className="dash-link" href="/pharmacy?tab=billing">
+                      View bills
+                    </a>
+                  }
+                >
+                  <Leaderboard rows={pharmTopRows} empty="No medicine sales recorded today." />
+                </WidgetCard>
+              </div>
+            </>
+          )}
 
           {finRole && finance && (
             <div className="dash-widget-grid">

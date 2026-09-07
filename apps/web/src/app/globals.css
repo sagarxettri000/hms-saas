@@ -1346,3 +1346,61 @@ h3 {
   }
 }
 
+.dash-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 20px 24px;
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+  color: #fff;
+  background: linear-gradient(120deg, #10b981 0%, #0ea5e9 100%);
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.28);
+}
+
+.dash-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dash-hero-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.dash-hero-title {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-hero-title span {
+  font-size: 15px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.dash-hero-sub {
+  font-size: 13px;
+  opacity: 0.92;
+}
+
+.btn-light {
+  background: #fff;
+  color: #0f766e;
+  border: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.btn-light:hover {
+  background: #ecfdf5;
+}
+

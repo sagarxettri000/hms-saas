@@ -25,7 +25,7 @@ export function toneColor(tone?: string): string {
 export function IconTile({
   glyph,
   tone = 'blue',
-  size = 42,
+  size = 36,
 }: {
   glyph?: string;
   tone?: string;
@@ -421,7 +421,7 @@ export function WidgetCard({
 export function DashboardSkeletons({ stats = 6, cards = 2 }: { stats?: number; cards?: number }) {
   return (
     <>
-      <div className="stat-grid">
+      <div className="dash-stat-grid">
         {Array.from({ length: stats }).map((_, i) => (
           <div key={i} className="card dash-skel" style={{ height: 96 }} />
         ))}

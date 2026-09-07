@@ -866,7 +866,6 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [stores, setStores] = useState<any[]>([]);
   const [patientList, setPatientList] = useState<any[]>([]);
   const [isWalkIn, setIsWalkIn] = useState(false);
   const [customerName, setCustomerName] = useState('');
@@ -882,10 +881,8 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
       .then(([storeRes, patientRes]: any[]) => {
         const allStores = toList(storeRes);
         const filtered = allStores.filter((s: any) => s.location?.toLowerCase().includes('ground floor'));
-        setStores(filtered.length > 0 ? filtered : allStores);
-        if ((filtered.length > 0 ? filtered : allStores).length === 1) {
-          setStoreId((filtered.length > 0 ? filtered : allStores)[0].id);
-        }
+        const available = filtered.length > 0 ? filtered : allStores;
+        if (available.length > 0) setStoreId(available[0].id);
         setPatientList(toList(patientRes));
       })
       .catch(() => {});
@@ -931,7 +928,7 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
   const grandTotal = Math.max(0, subtotal + taxAmount - discount);
 
   async function submit() {
-    if (items.length === 0 || (!patientId && !customerName.trim()) || !storeId) return;
+    if (items.length === 0 || (!patientId && !customerName.trim())) return;
     setSubmitting(true);
     setError('');
     try {
@@ -1030,13 +1027,6 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
                     />
                   </div>
                 )}
-              </div>
-              <div className="field">
-                <label className="label">Store *</label>
-                <select className="input" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-                  <option value="">Select store</option>
-                  {stores.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.location})</option>)}
-                </select>
               </div>
               <div className="field field-full">
                 {!isWalkIn && patientId && <PatientPrescriptions patientId={patientId} />}
@@ -1137,7 +1127,7 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
                 <button
                   className="btn btn-primary"
                   style={{ width: '100%', marginTop: 8 }}
-                  disabled={submitting || items.length === 0 || (!patientId && !customerName.trim()) || !storeId}
+                  disabled={submitting || items.length === 0 || (!patientId && !customerName.trim())}
                   onClick={submit}
                 >
                   {submitting ? 'Processing...' : 'Create Invoice & Receipt'}

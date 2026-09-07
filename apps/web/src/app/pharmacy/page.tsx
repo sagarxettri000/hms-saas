@@ -5,16 +5,18 @@ import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { formatMoney, formatDate, formatDateTime } from '@/lib/hooks';
 import ReceiptModal from '@/components/ReceiptModal';
+import PaymentModal from '@/components/PaymentModal';
 import PatientPrescriptions from '@/components/PatientPrescriptions';
 
 const REMOVED_KEY = 'pharmacy_expiry_removed';
 
-const VALID_TABS = ['medicines', 'dispensing', 'sales', 'stores', 'alerts', 'expiry'];
+const VALID_TABS = ['medicines', 'dispensing', 'sales', 'bills', 'stores', 'alerts', 'expiry'];
 
 const TAB_LABELS: Record<string, string> = {
   medicines: 'Medicines',
   dispensing: 'Dispensing',
   sales: 'Sales',
+  bills: 'Bills',
   stores: 'Stores',
   alerts: 'Alerts',
   expiry: 'Expiry',
@@ -103,6 +105,17 @@ function RxStatusBadge({ status }: { status: string }) {
     status === 'APPROVED' ? 'badge-blue' :
     status === 'CANCELLED' ? 'badge-red' :
     status === 'PENDING' ? 'badge-yellow' :
+    'badge-gray';
+  return <span className={`badge ${tone}`}>{status}</span>;
+}
+
+function InvoiceStatusBadge({ status }: { status: string }) {
+  const tone =
+    status === 'PAID' ? 'badge-green' :
+    status === 'PENDING' ? 'badge-yellow' :
+    status === 'PARTIAL' ? 'badge-blue' :
+    status === 'CANCELLED' || status === 'REFUNDED' ? 'badge-red' :
+    status === 'OVERDUE' ? 'badge-red' :
     'badge-gray';
   return <span className={`badge ${tone}`}>{status}</span>;
 }
@@ -762,6 +775,7 @@ function DispensingTab() {
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dispenseTarget, setDispenseTarget] = useState<any>(null);
+  const [receipt, setReceipt] = useState<any>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -827,17 +841,26 @@ function DispensingTab() {
           prescription={dispenseTarget}
           onClose={() => setDispenseTarget(null)}
           onDone={() => { setDispenseTarget(null); load(); }}
+          onReceipt={setReceipt}
         />
       )}
+      {receipt && <ReceiptModal invoice={receipt} onClose={() => setReceipt(null)} />}
     </>
   );
 }
 
-function DispenseModal({ prescription, onClose, onDone }: { prescription: any; onClose: () => void; onDone: () => void }) {
+function DispenseModal({ prescription, onClose, onDone, onReceipt }: { prescription: any; onClose: () => void; onDone: () => void; onReceipt: (invoice: any) => void }) {
   const [storeId, setStoreId] = useState('');
   const [stores, setStores] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [items, setItems] = useState<any[]>([]);
+  const [ready, setReady] = useState(false);
+  const [tax, setTax] = useState(0);
+  const [discount, setDiscount] = useState(0);
+  const [payMethod, setPayMethod] = useState('CASH');
+  const [payRef, setPayRef] = useState('');
+  const [isCredit, setIsCredit] = useState(false);
 
   useEffect(() => {
     api('/pharmacy/stores')
@@ -848,40 +871,66 @@ function DispenseModal({ prescription, onClose, onDone }: { prescription: any; o
         if (filtered.length === 1) setStoreId(filtered[0].id);
       })
       .catch(() => {});
-  }, []);
+
+    Promise.all(
+      (prescription.items || []).map(async (it: any) => {
+        let unitPrice = 0;
+        if (it.medicineId) {
+          try {
+            const medRes = await api(`/pharmacy/medicines/${it.medicineId}`);
+            unitPrice = Number(toObj(medRes)?.salesRate) || 0;
+          } catch {}
+        }
+        return {
+          prescriptionItemId: it.id,
+          medicineName: it.medicineName,
+          medicineId: it.medicineId,
+          quantity: it.quantity || 1,
+          unitPrice,
+        };
+      }),
+    )
+      .then((resolved) => { setItems(resolved); })
+      .catch(() => {})
+      .finally(() => setReady(true));
+  }, [prescription]);
+
+  const unitSubtotal = items.reduce((sum, it) => sum + Number(it.quantity) * Number(it.unitPrice), 0);
+  const taxAmount = (unitSubtotal * tax) / 100;
+  const grandTotal = Math.max(0, unitSubtotal + taxAmount - discount);
 
   async function handleDispense() {
     if (!storeId) { setError('Select a store'); return; }
     setSaving(true);
     setError('');
     try {
-      const items = await Promise.all(
-        (prescription.items || []).map(async (it: any) => {
-          let unitPrice = 0;
-          if (it.medicineId) {
-            try {
-              const medRes = await api(`/pharmacy/medicines/${it.medicineId}`);
-              unitPrice = Number(toObj(medRes)?.salesRate) || 0;
-            } catch {}
-          }
-          return {
-            prescriptionItemId: it.id,
-            medicineName: it.medicineName,
-            medicineId: it.medicineId,
-            quantity: it.quantity || 1,
-            unitPrice,
-          };
-        })
-      );
-      await api('/pharmacy/dispense', {
+      const res = await api('/pharmacy/dispense', {
         method: 'POST',
         body: JSON.stringify({
           patientId: prescription.patientId,
           prescriptionId: prescription.id,
           storeId,
           items,
+          taxPercent: tax || 0,
+          discountAmount: discount || 0,
+          isCredit,
+          paymentMethod: isCredit ? undefined : payMethod,
+          referenceNumber: isCredit ? undefined : payRef || undefined,
+          notes: 'Pharmacy dispensing',
         }),
       });
+      const result = toObj(res);
+      const invoice = result?.invoice ?? result;
+      if (invoice?.id) {
+        try {
+          const receiptRes = await api(`/billing/invoices/${invoice.id}`);
+          onReceipt(toObj(receiptRes) ?? invoice);
+        } catch {
+          onReceipt(invoice);
+        }
+      } else {
+        onReceipt(invoice);
+      }
       onDone();
     } catch (err: any) {
       setError(err.message || 'Dispensing failed');
@@ -917,11 +966,57 @@ function DispenseModal({ prescription, onClose, onDone }: { prescription: any; o
             </div>
           ))}
         </div>
+
+        {ready && items.length > 0 && (
+          <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-muted)' }}>
+              <span>Subtotal</span><span>{formatMoney(unitSubtotal)}</span>
+            </div>
+            <div className="form-grid" style={{ marginTop: 8 }}>
+              <div className="field">
+                <label className="label">Discount</label>
+                <input className="input" type="number" min={0} step="0.01" value={discount || ''} onChange={(e) => setDiscount(Number(e.target.value) || 0)} placeholder="0" />
+              </div>
+              <div className="field">
+                <label className="label">Tax %</label>
+                <input className="input" type="number" min={0} max={100} step="0.01" value={tax || ''} onChange={(e) => setTax(Number(e.target.value) || 0)} placeholder="0" />
+              </div>
+            </div>
+            <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 16 }}>
+              <span>Total</span><span>{formatMoney(grandTotal)}</span>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', margin: '12px 0 8px' }}>
+              <input type="checkbox" checked={isCredit} onChange={(e) => setIsCredit(e.target.checked)} />
+              Bill to account (credit)
+            </label>
+            {!isCredit && (
+              <>
+                <div className="field">
+                  <label className="label">Payment Method</label>
+                  <select className="input" value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
+                    <option value="CASH">Cash</option>
+                    <option value="CARD">Card</option>
+                    <option value="BANK">Bank Transfer</option>
+                    <option value="ONLINE">QR / eSewa / Khalti</option>
+                    <option value="INSURANCE">Insurance</option>
+                  </select>
+                </div>
+                {(payMethod === 'CARD' || payMethod === 'BANK' || payMethod === 'ONLINE') && (
+                  <div className="field">
+                    <label className="label">Reference Number</label>
+                    <input className="input" value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Transaction ref" />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {error && <div className="alert alert-error" style={{ marginTop: 12 }}>{error}</div>}
         <div className="form-actions">
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleDispense} disabled={saving || !storeId}>
-            {saving ? 'Dispensing...' : 'Confirm Dispense'}
+          <button className="btn btn-primary" onClick={handleDispense} disabled={saving || !storeId || !ready}>
+            {saving ? 'Dispensing...' : 'Dispense & Create Bill'}
           </button>
         </div>
       </div>
@@ -1245,6 +1340,98 @@ function SalesTab() {
       {saleReceipt && (
         <ReceiptModal invoice={saleReceipt} onClose={() => setSaleReceipt(null)} />
       )}
+    </>
+  );
+}
+
+function BillsTab() {
+  const [bills, setBills] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [paymentTarget, setPaymentTarget] = useState<any>(null);
+  const [receipt, setReceipt] = useState<any>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api('/pharmacy/sales?limit=100')
+      .then((res: any) => setBills(toList(res)))
+      .catch(() => setBills([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const totalOutstanding = bills.reduce(
+    (sum, b) => sum + Math.max(0, Number(b.totalAmount || 0) - Number(b.paidAmount || 0)),
+    0,
+  );
+
+  return (
+    <>
+      <div className="toolbar" style={{ marginBottom: 16 }}>
+        <span className="note">{bills.length} pharmacy bill(s) · Outstanding {formatMoney(totalOutstanding)}</span>
+        <button className="btn btn-secondary" onClick={load}>Refresh</button>
+      </div>
+
+      {loading ? (
+        <div className="loading">Loading bills...</div>
+      ) : bills.length === 0 ? (
+        <div className="empty">
+          No pharmacy bills yet. Dispense a prescription or create a sale to generate a bill.
+        </div>
+      ) : (
+        <div className="card">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Invoice</th>
+                <th>Patient</th>
+                <th>Date</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Paid</th>
+                <th>Due</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bills.map((b) => {
+                const due = Math.max(0, Number(b.totalAmount || 0) - Number(b.paidAmount || 0));
+                return (
+                  <tr key={b.id}>
+                    <td className="mono">{b.invoiceNumber}</td>
+                    <td>
+                      {b.patient?.firstName} {b.patient?.lastName}
+                      {b.patient?.mrn ? <span className="mono" style={{ marginLeft: 6, fontSize: 12, color: 'var(--text-muted)' }}>{b.patient.mrn}</span> : null}
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatDate(b.issuedDate)}</td>
+                    <td style={{ textAlign: 'center' }}>{b.items?.length ?? 0}</td>
+                    <td style={{ fontWeight: 600 }}>{formatMoney(b.totalAmount)}</td>
+                    <td>{formatMoney(b.paidAmount)}</td>
+                    <td>{formatMoney(due)}</td>
+                    <td><InvoiceStatusBadge status={b.status} /></td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {due > 0 && b.status !== 'CANCELLED' && (
+                        <button className="btn btn-sm btn-primary" onClick={() => setPaymentTarget(b)}>Record Payment</button>
+                      )}
+                      <button className="btn btn-sm" onClick={() => setReceipt(b)}>Receipt</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {paymentTarget && (
+        <PaymentModal
+          invoice={paymentTarget}
+          onClose={() => setPaymentTarget(null)}
+          onDone={() => { setPaymentTarget(null); load(); }}
+        />
+      )}
+      {receipt && <ReceiptModal invoice={receipt} onClose={() => setReceipt(null)} />}
     </>
   );
 }
@@ -1699,6 +1886,7 @@ function PharmacyPageInner() {
       {activeTab === 'medicines' && <MedicinesTab />}
       {activeTab === 'dispensing' && <DispensingTab />}
       {activeTab === 'sales' && <SalesTab />}
+      {activeTab === 'bills' && <BillsTab />}
       {activeTab === 'stores' && <StoresTab />}
       {activeTab === 'alerts' && <AlertsTab />}
       {activeTab === 'expiry' && <ExpiryTab />}

@@ -8,7 +8,12 @@ export default function Home() {
 
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-    router.replace(token ? '/dashboard' : '/login');
+    if (!token) {
+      router.replace('/login');
+      return;
+    }
+    const role = typeof window !== 'undefined' ? localStorage.getItem('role') || '' : '';
+    router.replace(role === 'PHARMACIST' ? '/pharmacy/dashboard' : '/dashboard');
   }, [router]);
 
   return (

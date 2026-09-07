@@ -9,15 +9,13 @@ import {
   AuthField,
   AuthButton,
   AuthError,
-  AuthMessage,
 } from '@/components/auth/controls';
 import '../auth.css';
 
-export default function LoginPage() {
+export default function PharmacyLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [emailTouched, setEmailTouched] = useState(false);
@@ -26,10 +24,6 @@ export default function LoginPage() {
   const emailError =
     emailTouched && email.trim() !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
       ? 'Please enter a valid email address.'
-      : null;
-  const passwordError =
-    passwordTouched && password.trim() === ''
-      ? 'Password is required.'
       : null;
 
   async function handleLogin(e: React.FormEvent) {
@@ -40,41 +34,31 @@ export default function LoginPage() {
     }
     setLoading(true);
     setError(null);
-    setMessage(null);
     try {
       const res = await api('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password, rememberMe: true }),
       });
+      const role = res.data.user.role;
+      if (role !== 'PHARMACIST') {
+        setError('Only pharmacy staff can sign in here.');
+        return;
+      }
       localStorage.setItem('accessToken', res.data.accessToken);
       localStorage.setItem('refreshToken', res.data.refreshToken);
-      localStorage.setItem('role', res.data.user.role);
+      localStorage.setItem('role', role);
       localStorage.setItem(
         'userName',
         `${res.data.user.firstName} ${res.data.user.lastName}`,
       );
       if (res.data.user.tenantId) {
         localStorage.setItem('tenantId', res.data.user.tenantId);
-      }
-
-      if (!res.data.user.tenantId) {
-        try {
-          const tenantRes = await api('/tenants?limit=1');
-          const tenantList = tenantRes?.data?.data ?? (Array.isArray(tenantRes?.data) ? tenantRes.data : []);
-          if (tenantList.length > 0) {
-            localStorage.setItem('tenantId', tenantList[0].id);
-            localStorage.setItem('tenantName', tenantList[0].name);
-          }
-        } catch {}
+        localStorage.setItem('tenantName', res.data.user.tenant?.name || 'Workspace');
       }
       if (res.data.user.mustChangePassword) {
         router.push('/change-password');
       } else {
-        router.push(
-          res.data.user.role === 'PHARMACIST'
-            ? '/pharmacy/dashboard'
-            : '/dashboard',
-        );
+        router.push('/pharmacy/dashboard');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed';
@@ -93,11 +77,11 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthShell mode="login" heading="Login">
+    <AuthShell mode="login" heading="Pharmacy Login">
       <form className="auth-form" onSubmit={handleLogin} noValidate>
         <AuthField
           id="email"
-          label="Email"
+          label="Pharmacy Email"
           type="email"
           value={email}
           onChange={(v) => {
@@ -107,7 +91,7 @@ export default function LoginPage() {
           onBlurHandled={() => setEmailTouched(true)}
           error={emailError}
           autoComplete="email"
-          placeholder="username@gmail.com"
+          placeholder="pharmacist@hospital.com"
         />
 
         <AuthField
@@ -117,7 +101,7 @@ export default function LoginPage() {
           value={password}
           onChange={setPassword}
           onBlurHandled={() => setPasswordTouched(true)}
-          error={passwordError}
+          error={passwordTouched && password.trim() === '' ? 'Password is required.' : null}
           autoComplete="current-password"
         />
 
@@ -127,13 +111,18 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        {message && <AuthMessage message={message} />}
         {error && <AuthError message={error} />}
 
         <AuthButton loading={loading} loadingText="Signing in…">
-          Sign in
+          Sign in to pharmacy
         </AuthButton>
       </form>
+
+      <p className="auth-register-text" style={{ marginTop: 16 }}>
+        <Link href="/login" className="auth-register-link">
+          Back to staff login
+        </Link>
+      </p>
     </AuthShell>
   );
 }

@@ -84,6 +84,12 @@ export interface DispenseDto {
   prescriptionId?: string;
   storeId: string;
   items: DispenseItemDto[];
+  taxPercent?: number;
+  discountAmount?: number;
+  discountReason?: string;
+  paymentMethod?: string;
+  referenceNumber?: string;
+  isCredit?: boolean;
   notes?: string;
 }
 
@@ -555,13 +561,17 @@ export class PharmacyService {
     });
     if (!patient) throw new NotFoundException("Patient not found");
 
-    const results: any[] = [];
+    const taxPercent = Number(dto.taxPercent ?? 0);
 
-    // Wrap the whole dispensing (stock decrements + prescription status) in a
-    // single transaction so a failure mid-way rolls back every change, and use
-    // an atomic conditional update to prevent two concurrent dispatches from
-    // overselling the same batch.
-    await this.prisma.$transaction(async (tx) => {
+    // Wrap the whole dispensing (stock decrements + invoice + payment +
+    // prescription status) in a single transaction so a failure mid-way rolls
+    // back every change, and use atomic conditional updates to prevent two
+    // concurrent dispatches from overselling the same batch.
+    return this.prisma.$transaction(async (tx) => {
+      const results: any[] = [];
+      const invoiceItems: any[] = [];
+      let subtotal = 0;
+
       for (const item of dto.items) {
         const quantity = Number(item.quantity);
         if (!quantity || quantity <= 0)
@@ -612,20 +622,160 @@ export class PharmacyService {
               unitPrice,
               totalValue: unitPrice ? unitPrice * quantity : undefined,
               batchNumber: item.batchNumber || inventoryItem.batchNumber || undefined,
-              referenceType: "DISPENSING",
+              referenceType: "PHARMACY_SALE",
               remarks: `Dispensed to ${patient.firstName} ${patient.lastName}`,
               createdBy: userId,
             },
           });
         }
 
+        if (!unitPrice && item.medicineId) {
+          const med = await tx.medicine.findFirst({
+            where: { id: item.medicineId, tenantId },
+            select: { salesRate: true },
+          });
+          unitPrice = Number(med?.salesRate) || 0;
+        }
+
+        const gross = quantity * unitPrice;
+        const taxAmount = (gross * taxPercent) / 100;
+        const lineTotal = Math.round(gross + taxAmount);
+        subtotal += lineTotal;
+
         results.push({
           medicineName: item.medicineName,
           quantity,
           unitPrice,
-          total: unitPrice * quantity,
+          total: gross,
+        });
+
+        invoiceItems.push({
+          tenantId,
+          serviceName: item.medicineName || inventoryItem?.name || "Medicine",
+          serviceId: item.medicineId || undefined,
+          quantity,
+          rate: unitPrice,
+          taxPercent: taxPercent || undefined,
+          taxAmount,
+          lineTotal,
+          referenceType: "PRESCRIPTION_DISPENSE",
+          referenceId: dto.prescriptionId,
         });
       }
+
+      const invoiceDiscount = Math.max(
+        0,
+        Math.min(Number(dto.discountAmount || 0), subtotal),
+      );
+      const totalAmount = Math.max(0, subtotal - invoiceDiscount);
+
+      const paidAmount =
+        !dto.isCredit && dto.paymentMethod ? totalAmount : 0;
+      const dueAmount = totalAmount - paidAmount;
+      const status =
+        dueAmount <= 0 ? "PAID" : dto.isCredit ? "PENDING" : "PARTIAL";
+
+      const invoiceNumber = await this.nextNumber(
+        tx,
+        tenantId,
+        "INV",
+        "invoice",
+        "invoiceNumber",
+      );
+      const invoice = await tx.invoice.create({
+        data: {
+          tenantId,
+          invoiceNumber,
+          patientId: dto.patientId,
+          type: "PHARMACY",
+          status: status as any,
+          subtotal,
+          discountAmount: invoiceDiscount,
+          discountReason: dto.discountReason || undefined,
+          taxAmount: invoiceItems.reduce((s, i) => s + i.taxAmount, 0),
+          taxPercent: taxPercent || undefined,
+          totalAmount,
+          paidAmount,
+          dueAmount,
+          isCredit: dto.isCredit || false,
+          notes: dto.notes || "Pharmacy dispensing",
+          createdBy: userId,
+          items: { create: invoiceItems },
+        },
+        include: { items: true },
+      });
+
+      let paymentId: string | undefined;
+      if (!dto.isCredit && dto.paymentMethod) {
+        const paymentNumber = await this.nextNumber(
+          tx,
+          tenantId,
+          "PAY",
+          "payment",
+          "paymentNumber",
+        );
+        const payment = await tx.payment.create({
+          data: {
+            tenantId,
+            patientId: dto.patientId,
+            invoiceId: invoice.id,
+            paymentNumber,
+            amount: totalAmount,
+            method: dto.paymentMethod as any,
+            status: "COMPLETED",
+            referenceNumber: dto.referenceNumber,
+            receivedBy: userId,
+            paymentType: "INVOICE",
+            notes: dto.notes || "Pharmacy dispensing payment",
+          },
+        });
+        paymentId = payment.id;
+
+        await tx.financialTransaction.create({
+          data: {
+            tenantId,
+            txnNumber: await this.nextNumber(
+              tx,
+              tenantId,
+              "FT",
+              "financialTransaction",
+              "txnNumber",
+            ),
+            type: "PAYMENT",
+            direction: "CREDIT",
+            amount: totalAmount,
+            patientId: dto.patientId,
+            invoiceId: invoice.id,
+            referenceType: "payment",
+            referenceId: payment.id,
+            method: dto.paymentMethod as any,
+            notes: `Payment ${paymentNumber} received`,
+            createdBy: userId,
+          },
+        });
+      }
+
+      await tx.financialTransaction.create({
+        data: {
+          tenantId,
+          txnNumber: await this.nextNumber(
+            tx,
+            tenantId,
+            "FT",
+            "financialTransaction",
+            "txnNumber",
+          ),
+          type: "INVOICE",
+          direction: "CREDIT",
+          amount: totalAmount,
+          patientId: dto.patientId,
+          invoiceId: invoice.id,
+          referenceType: "invoice",
+          referenceId: invoice.id,
+          notes: `Invoice ${invoiceNumber} issued`,
+          createdBy: userId,
+        },
+      });
 
       if (dto.prescriptionId) {
         await tx.prescription.update({
@@ -633,17 +783,36 @@ export class PharmacyService {
           data: { status: "DISPENSED" },
         });
       }
-    });
 
-    return {
-      success: true,
-      patientName: `${patient.firstName} ${patient.lastName}`,
-      storeName: store.name,
-      items: results,
-      totalAmount: results.reduce((sum, r) => sum + r.total, 0),
-      dispensedAt: new Date(),
-      dispensedBy: userId,
-    };
+      if (userId) {
+        await tx.auditLog.create({
+          data: {
+            tenantId,
+            userId,
+            entity: "Invoice",
+            entityId: invoice.id,
+            action: "CREATE",
+            metadata: { source: "PHARMACY_DISPENSE", type: "PHARMACY" },
+          },
+        });
+      }
+
+      return {
+        success: true,
+        invoice,
+        paymentId,
+        patientName: `${patient.firstName} ${patient.lastName}`,
+        storeName: store.name,
+        items: results,
+        totalAmount,
+        paidAmount,
+        dueAmount,
+        status,
+        isCredit: dto.isCredit || false,
+        dispensedAt: new Date(),
+        dispensedBy: userId,
+      };
+    });
   }
 
   async sale(tenantId: string, dto: CreatePharmacySaleDto, userId?: string) {
@@ -1019,35 +1188,110 @@ export class PharmacyService {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
+  async listSales(
+    tenantId: string,
+    params: { patientId?: string; status?: string; page?: number; limit?: number },
+  ) {
+    const page = Number(params.page) || 1;
+    const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
+
+    const where: any = { tenantId, type: "PHARMACY" };
+    if (params.patientId) where.patientId = params.patientId;
+    if (params.status) where.status = params.status;
+
+    const [data, total] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where,
+        include: {
+          patient: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              mrn: true,
+              mobile: true,
+            },
+          },
+          payments: {
+            select: {
+              id: true,
+              paymentNumber: true,
+              amount: true,
+              method: true,
+              status: true,
+              paidAt: true,
+            },
+          },
+          items: {
+            select: {
+              id: true,
+              serviceName: true,
+              quantity: true,
+              rate: true,
+              lineTotal: true,
+            },
+          },
+        },
+        orderBy: { issuedDate: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.invoice.count({ where }),
+    ]);
+
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
   async getPharmacySummary(tenantId: string) {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const [totalMedicines, pendingPrescriptions, dispensedToday, lowStockCount, totalStockValue] =
-      await Promise.all([
-        this.prisma.medicine.count({ where: { tenantId, isActive: true } }),
-        this.prisma.prescription.count({ where: { tenantId, status: { in: ["DRAFT", "APPROVED"] } } }),
-        this.prisma.prescription.count({ where: { tenantId, status: "DISPENSED", updatedAt: { gte: todayStart } } }),
-        this.prisma.inventoryItem.count({
+    const [
+      totalMedicines,
+      pendingPrescriptions,
+      dispensedToday,
+      lowStockCount,
+      totalStockValue,
+      billedToday,
+      revenueToday,
+    ] = await Promise.all([
+      this.prisma.medicine.count({ where: { tenantId, isActive: true } }),
+      this.prisma.prescription.count({ where: { tenantId, status: { in: ["DRAFT", "APPROVED"] } } }),
+      this.prisma.prescription.count({ where: { tenantId, status: "DISPENSED", updatedAt: { gte: todayStart } } }),
+      this.prisma.inventoryItem.count({
+        where: { tenantId, currentStock: { gt: 0 }, reorderLevel: { not: null, gt: 0 } },
+      }).then(async (c) => {
+        const items = await this.prisma.inventoryItem.findMany({
           where: { tenantId, currentStock: { gt: 0 }, reorderLevel: { not: null, gt: 0 } },
-        }).then(async (c) => {
-          const items = await this.prisma.inventoryItem.findMany({
-            where: { tenantId, currentStock: { gt: 0 }, reorderLevel: { not: null, gt: 0 } },
-            select: { currentStock: true, reorderLevel: true },
-          });
-          return items.filter((i) => Number(i.currentStock) <= Number(i.reorderLevel)).length;
-        }),
-        this.prisma.inventoryItem.aggregate({
+          select: { currentStock: true, reorderLevel: true },
+        });
+        return items.filter((i) => Number(i.currentStock) <= Number(i.reorderLevel)).length;
+      }),
+      this.prisma.inventoryItem.aggregate({
+        where: { tenantId },
+        _sum: { currentStock: true },
+      }).then(async (r) => {
+        const items = await this.prisma.inventoryItem.findMany({
           where: { tenantId },
-          _sum: { currentStock: true },
-        }).then(async (r) => {
-          const items = await this.prisma.inventoryItem.findMany({
-            where: { tenantId },
-            select: { currentStock: true, salesRate: true },
-          });
-          return items.reduce((s, i) => s + Number(i.currentStock) * Number(i.salesRate), 0);
-        }),
-      ]);
+          select: { currentStock: true, salesRate: true },
+        });
+        return items.reduce((s, i) => s + Number(i.currentStock) * Number(i.salesRate), 0);
+      }),
+      this.prisma.invoice.aggregate({
+        where: { tenantId, type: "PHARMACY", issuedDate: { gte: todayStart } },
+        _sum: { totalAmount: true },
+        _count: true,
+      }),
+      this.prisma.payment.aggregate({
+        where: {
+          tenantId,
+          status: "COMPLETED",
+          paidAt: { gte: todayStart },
+          invoice: { type: "PHARMACY" },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
 
     return {
       totalMedicines,
@@ -1055,6 +1299,9 @@ export class PharmacyService {
       dispensedToday,
       lowStockCount,
       totalStockValue,
+      billedToday: billedToday._sum.totalAmount || 0,
+      billsToday: billedToday._count || 0,
+      revenueToday: revenueToday._sum.amount || 0,
     };
   }
 }

@@ -178,13 +178,20 @@ export class PharmacyController {
 
   @Post("dispense")
   @Permissions(PermissionAction.CREATE)
-  @ApiOperation({ summary: "Dispense medicines to patient" })
+  @ApiOperation({ summary: "Dispense medicines to patient (stock + billing)" })
   dispense(@Body() dto: DispenseDto, @Req() req: any) {
     return this.pharmacyService.dispense(
       req.user.tenantId,
       dto,
       req.user.id,
     );
+  }
+
+  @Get("sales")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List pharmacy invoices (sales)" })
+  getSales(@Query() query: any, @Req() req: any) {
+    return this.pharmacyService.listSales(req.user.tenantId, query);
   }
 
   // ---------- Stock Alerts ----------

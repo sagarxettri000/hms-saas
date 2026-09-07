@@ -34,6 +34,7 @@ interface NavItem {
   href: string;
   icon: string;
   roles?: string[];
+  cls?: string;
 }
 
 const SECTIONS: { title: string; items: NavItem[] }[] = [
@@ -67,11 +68,11 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Pharmacy',
     items: [
-      { label: 'Billing', href: '/pharmacy?tab=billing', icon: '📋', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER] },
-      { label: 'Medicines', href: '/pharmacy?tab=medicines', icon: '💊', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER] },
-      { label: 'Bills', href: '/pharmacy?tab=bills', icon: '📄', roles: [...PHARMACY, ...ADMIN, ...SUPER] },
-      { label: 'Stores & Stock', href: '/pharmacy?tab=stores', icon: '🗄', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER] },
-      { label: 'Stock Alerts', href: '/pharmacy?tab=alerts', icon: '⚠', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER] },
+      { label: 'Billing', href: '/pharmacy?tab=billing', icon: '₨', cls: 'pharma', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER] },
+      { label: 'Medicines', href: '/pharmacy?tab=medicines', icon: '☤', cls: 'pharma', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER] },
+      { label: 'Bills', href: '/pharmacy?tab=bills', icon: '▧', cls: 'pharma', roles: [...PHARMACY, ...ADMIN, ...SUPER] },
+      { label: 'Stores & Stock', href: '/pharmacy?tab=stores', icon: '▥', cls: 'pharma', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER] },
+      { label: 'Stock Alerts', href: '/pharmacy?tab=alerts', icon: '▲', cls: 'pharma', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER] },
     ],
   },
   {
@@ -220,7 +221,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   href={item.href}
                   className={`sidebar-link ${isActive(item.href) ? 'active' : ''}`}
                 >
-                  <span className="ico">{item.icon}</span>
+                  <span className={`ico ${item.cls || ''}`}>{item.icon}</span>
                   {item.label}
                 </Link>
               ))}

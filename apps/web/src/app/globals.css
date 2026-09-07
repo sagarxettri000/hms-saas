@@ -140,6 +140,26 @@ h3 {
   flex-shrink: 0;
 }
 
+.sidebar-link .ico.pharma {
+  width: 22px;
+  height: 22px;
+  line-height: 22px;
+  border-radius: 6px;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.12);
+  font-weight: 700;
+}
+
+.sidebar-link:hover .ico.pharma {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.22);
+}
+
+.sidebar-link.active .ico.pharma {
+  color: #a7f3d0;
+  background: rgba(16, 185, 129, 0.3);
+}
+
 .sidebar-footer {
   margin-top: auto;
   padding: 16px 20px;

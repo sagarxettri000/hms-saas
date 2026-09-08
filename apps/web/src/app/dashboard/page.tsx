@@ -245,6 +245,8 @@ export default function DashboardPage() {
   const [pharmSummary, setPharmSummary] = useState<any>(null);
   const [pharmTrend, setPharmTrend] = useState<any[]>([]);
   const [pharmTop, setPharmTop] = useState<any[]>([]);
+  const [clinic, setClinic] = useState<any>(null);
+  const [todayAppts, setTodayAppts] = useState<any[]>([]);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -474,15 +476,27 @@ export default function DashboardPage() {
     const appts = listOf(todayR);
     const sum = summaryOf(todayR)?.summary || {};
     const queue = appts.filter((a: any) => ['CHECKED_IN', 'WAITING', 'IN_CONSULTATION'].includes(a.status)).length;
+    const activeEnc = countOf(activeEncR);
     const pendingRx = listOf(rxR).filter((p: any) => p.status === 'DRAFT' || p.status === 'APPROVED').length;
     const lab = summaryOf(labSummaryR);
+
+    setClinic({
+      total: sum.total ?? appts.length,
+      queue,
+      encounters: activeEnc,
+      rx: pendingRx,
+      labPending: lab.pendingOrders ?? 0,
+      labCollected: lab.sampleCollected ?? 0,
+    });
+    setTodayAppts(appts);
 
     setStats([
       { label: "Today's appointments", value: sum.total ?? appts.length, tone: 'blue', icon: '📅', href: '/appointments' },
       { label: 'My patients in queue', value: queue, tone: queue > 0 ? 'purple' : 'green', icon: '🩺', href: '/appointments' },
-      { label: 'Pending encounters', value: countOf(activeEncR), tone: 'blue', icon: '📋', href: '/encounters' },
+      { label: 'Pending encounters', value: activeEnc, tone: 'blue', icon: '📋', href: '/encounters' },
       { label: 'Pending prescriptions', value: pendingRx, tone: pendingRx > 0 ? 'amber' : 'green', icon: '💊', href: '/pharmacy?tab=billing' },
       { label: 'Pending lab orders', value: lab.pendingOrders ?? 0, tone: (lab.pendingOrders ?? 0) > 0 ? 'amber' : 'green', icon: '🔬', href: '/laboratory' },
+      { label: 'Samples collected', value: lab.sampleCollected ?? 0, tone: 'purple', icon: '🧪', href: '/laboratory' },
     ]);
 
     setLabPipeline({
@@ -1065,6 +1079,42 @@ export default function DashboardPage() {
     value: formatMoney(Number(t.revenue) || 0),
   }));
 
+  const STATUS_TONES: Record<string, string> = {
+    COMPLETED: 'green',
+    IN_CONSULTATION: 'purple',
+    CHECKED_IN: 'blue',
+    WAITING: 'amber',
+    SCHEDULED: 'blue',
+    CANCELLED: 'red',
+    NO_SHOW: 'red',
+  };
+  const agendaRows = [...todayAppts]
+    .sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+    .filter((a: any) => !['CANCELLED', 'NO_SHOW'].includes(a.status))
+    .slice(0, 6)
+    .map((a: any) => ({
+      label: personName(a.patient),
+      sublabel: `${timeOf(a.startTime)} · ${a.department?.name || '—'}`,
+      value: String(a.status || '—').replace(/_/g, ' '),
+      tone: STATUS_TONES[a.status] || 'gray',
+    }));
+  const apptStatusLabels: Record<string, string> = {
+    SCHEDULED: 'Scheduled',
+    CHECKED_IN: 'Checked in',
+    WAITING: 'Waiting',
+    IN_CONSULTATION: 'In consultation',
+    COMPLETED: 'Completed',
+    CANCELLED: 'Cancelled',
+    NO_SHOW: 'No show',
+  };
+  const apptStatusBar = Object.entries(
+    todayAppts.reduce<Record<string, number>>((acc, a: any) => {
+      const k = String(a.status || 'SCHEDULED');
+      acc[k] = (acc[k] || 0) + 1;
+      return acc;
+    }, {}),
+  ).map(([k, v]) => ({ label: apptStatusLabels[k] || k.replace(/_/g, ' '), value: Number(v) || 0 }));
+
   return (
     <>
       <div className="page-header">
@@ -1085,7 +1135,7 @@ export default function DashboardPage() {
         <DashboardSkeletons stats={6} cards={2} />
       ) : (
         <>
-          <div className="stat-grid">
+          <div className="dash-stat-grid">
             {stats.map((s) => (
               <div
                 key={s.label}
@@ -1119,6 +1169,48 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+
+          {group === 'CLINICAL' && clinic && (
+            <>
+              <div className="dash-hero dash-hero-blue">
+                <div className="dash-hero-copy">
+                  <div className="dash-hero-label">Doctor dashboard</div>
+                  <div className="dash-hero-title">
+                    {greeting}, {userName || 'Doctor'}
+                    <span> · {clinic.total ?? 0} appointments today</span>
+                  </div>
+                  <div className="dash-hero-sub">
+                    {clinic.queue ?? 0} patients waiting · {clinic.encounters ?? 0} pending encounters ·{' '}
+                    {clinic.labPending ?? 0} lab orders in progress
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button className="btn btn-light" onClick={() => router.push('/encounters')}>
+                    Start encounter →
+                  </button>
+                  <button className="btn btn-ghost-light" onClick={() => router.push('/appointments')}>
+                    My appointments
+                  </button>
+                </div>
+              </div>
+
+              <div className="dash-widget-grid">
+                <WidgetCard
+                  title="Today's schedule"
+                  action={
+                    <a className="dash-link" href="/appointments">
+                      Full agenda
+                    </a>
+                  }
+                >
+                  <Leaderboard rows={agendaRows} empty="No appointments scheduled today." />
+                </WidgetCard>
+                <WidgetCard title="Appointments by status">
+                  <BarList data={apptStatusBar} money={false} />
+                </WidgetCard>
+              </div>
+            </>
+          )}
 
           {group === 'PHARMACY' && pharmSummary && (
             <>

@@ -1404,6 +1404,11 @@ h3 {
   box-shadow: 0 8px 24px rgba(16, 185, 129, 0.28);
 }
 
+.dash-hero-blue {
+  background: linear-gradient(120deg, #2563eb 0%, #7c3aed 100%);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.28);
+}
+
 .dash-hero-copy {
   display: flex;
   flex-direction: column;
@@ -1446,5 +1451,17 @@ h3 {
 
 .btn-light:hover {
   background: #ecfdf5;
+}
+
+.btn-ghost-light {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.btn-ghost-light:hover {
+  background: rgba(255, 255, 255, 0.16);
 }
 

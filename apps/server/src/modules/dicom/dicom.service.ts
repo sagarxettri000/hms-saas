@@ -178,6 +178,17 @@ export class DicomService {
       });
     }
 
+    if (radiologyOrderId && ingested.length) {
+      await this.prisma.radiologyOrder.updateMany({
+        where: {
+          id: radiologyOrderId,
+          tenantId,
+          status: { in: ["ORDERED", "SCHEDULED", "IN_PROGRESS"] },
+        },
+        data: { status: "IMAGES_UPLOADED" },
+      });
+    }
+
     return { ingested };
   }
 
@@ -311,5 +322,85 @@ export class DicomService {
 
     await this.prisma.dicomStudy.delete({ where: { id: studyId } });
     return { deleted: true };
+  }
+
+  // ---- DICOM node management ----
+
+  async listNodes(tenantId: string) {
+    return this.prisma.dicomNode.findMany({
+      where: { tenantId },
+      orderBy: { name: "asc" as const },
+    });
+  }
+
+  async createNode(tenantId: string, data: { name: string; aeTitle: string; hostname: string; port?: number; isLocal?: boolean }) {
+    if (!data.name?.trim()) throw new BadRequestException("Node name is required");
+    if (!data.aeTitle?.trim()) throw new BadRequestException("AE title is required");
+    if (!data.hostname?.trim()) throw new BadRequestException("Hostname is required");
+
+    return this.prisma.dicomNode.create({
+      data: {
+        tenantId,
+        name: data.name.trim(),
+        aeTitle: data.aeTitle.trim(),
+        hostname: data.hostname.trim(),
+        port: Number(data.port) || 104,
+        isLocal: Boolean(data.isLocal),
+      },
+    });
+  }
+
+  async updateNode(
+    tenantId: string,
+    nodeId: string,
+    data: { name?: string; aeTitle?: string; hostname?: string; port?: number; isLocal?: boolean },
+  ) {
+    const existing = await this.prisma.dicomNode.findFirst({
+      where: { id: nodeId, tenantId },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException("DICOM node not found");
+
+    return this.prisma.dicomNode.update({
+      where: { id: nodeId },
+      data: {
+        ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+        ...(data.aeTitle !== undefined ? { aeTitle: data.aeTitle.trim() } : {}),
+        ...(data.hostname !== undefined ? { hostname: data.hostname.trim() } : {}),
+        ...(data.port !== undefined ? { port: Number(data.port) } : {}),
+        ...(data.isLocal !== undefined ? { isLocal: data.isLocal } : {}),
+      },
+    });
+  }
+
+  async deleteNode(tenantId: string, nodeId: string) {
+    const existing = await this.prisma.dicomNode.findFirst({
+      where: { id: nodeId, tenantId },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException("DICOM node not found");
+
+    await this.prisma.dicomNode.delete({ where: { id: nodeId } });
+    return { deleted: true };
+  }
+
+  async echoNode(tenantId: string, nodeId: string) {
+    const node = await this.prisma.dicomNode.findFirst({
+      where: { id: nodeId, tenantId },
+    });
+    if (!node) throw new NotFoundException("DICOM node not found");
+
+    const { isTcpReachable } = await import("./dicom-node-echo");
+    try {
+      const info = await isTcpReachable(node.hostname, node.port);
+      return { node, reachable: info.reachable, latencyMs: info.latencyMs };
+    } catch (err) {
+      return {
+        node,
+        reachable: false,
+        latencyMs: null,
+        error: (err as Error).message,
+      };
+    }
   }
 }

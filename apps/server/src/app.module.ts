@@ -20,6 +20,7 @@ import { HealthModule } from "./modules/health/health.module";
 import { LaboratoryModule } from "./modules/laboratory/laboratory.module";
 import { RadiologyModule } from "./modules/radiology/radiology.module";
 import { DicomModule } from "./modules/dicom/dicom.module";
+import { Hl7Module } from "./modules/hl7/hl7.module";
 import { PharmacyModule } from "./modules/pharmacy/pharmacy.module";
 import { AdmissionsModule } from "./modules/admissions/admissions.module";
 import { ProcurementModule } from "./modules/procurement/procurement.module";
@@ -96,6 +97,7 @@ import { AppController } from "./app.controller";
     LaboratoryModule,
     RadiologyModule,
     DicomModule,
+    Hl7Module,
     PharmacyModule,
     AdmissionsModule,
     ProcurementModule,

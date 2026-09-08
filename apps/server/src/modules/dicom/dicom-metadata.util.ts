@@ -107,15 +107,24 @@ export function extractDicomMetadata(buffer: Buffer): DicomFileMetadata {
       sopInstanceUid: dataset.string(TAGS.sopInstanceUid),
       sopClassUid: dataset.string(TAGS.sopClassUid),
       instanceNumber: dataset.string(TAGS.instanceNumber),
-      rows: dataset.intString(TAGS.rows),
-      columns: dataset.intString(TAGS.columns),
+      rows: readUInt(dataset, TAGS.rows),
+      columns: readUInt(dataset, TAGS.columns),
       numberOfFrames: dataset.intString(TAGS.numberOfFrames),
-      bitsAllocated: dataset.intString(TAGS.bitsAllocated),
-      samplesPerPixel: dataset.intString(TAGS.samplesPerPixel),
+      bitsAllocated: readUInt(dataset, TAGS.bitsAllocated),
+      samplesPerPixel: readUInt(dataset, TAGS.samplesPerPixel),
       photometricInterpretation: dataset.string(TAGS.photometricInterpretation),
       transferSyntax: dataset.string(TAGS.transferSyntax),
     },
   };
+}
+
+function readUInt(dataset: dicomParser.DataSet, tag: string): number | undefined {
+  try {
+    const value = dataset.uint16(tag);
+    return typeof value === "number" ? value : undefined;
+  } catch {
+    return dataset.intString(tag);
+  }
 }
 
 function combineDateTime(

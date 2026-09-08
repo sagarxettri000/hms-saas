@@ -157,4 +157,56 @@ export class DicomController {
     });
     res.send(data);
   }
+
+  // ---- DICOM node management (remote PACS/AE peers) ----
+
+  @Get("dicom/nodes")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List configured DICOM nodes" })
+  listNodes(@Req() req: Request) {
+    const user = req.user as any;
+    return this.dicomService.listNodes(user.tenantId);
+  }
+
+  @Post("dicom/nodes")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Register a remote DICOM node (PACS/AE)" })
+  createNode(
+    @Body() body: { name: string; aeTitle: string; hostname: string; port?: number; isLocal?: boolean },
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    return this.dicomService.createNode(user.tenantId, body);
+  }
+
+  @Post("dicom/nodes/:id")
+  @HttpCode(200)
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Update a DICOM node" })
+  updateNode(
+    @Param("id") id: string,
+    @Body() body: { name?: string; aeTitle?: string; hostname?: string; port?: number; isLocal?: boolean },
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    return this.dicomService.updateNode(user.tenantId, id, body);
+  }
+
+  @Delete("dicom/nodes/:id")
+  @HttpCode(200)
+  @Permissions(PermissionAction.DELETE)
+  @ApiOperation({ summary: "Remove a DICOM node" })
+  deleteNode(@Param("id") id: string, @Req() req: Request) {
+    const user = req.user as any;
+    return this.dicomService.deleteNode(user.tenantId, id);
+  }
+
+  @Post("dicom/nodes/:id/echo")
+  @HttpCode(200)
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Check DICOM node reachability (TCP)" })
+  echoNode(@Param("id") id: string, @Req() req: Request) {
+    const user = req.user as any;
+    return this.dicomService.echoNode(user.tenantId, id);
+  }
 }

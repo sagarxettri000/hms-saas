@@ -1470,3 +1470,146 @@ h3 {
   background: rgba(255, 255, 255, 0.16);
 }
 
+
+/* ---------- Prescription composer ---------- */
+
+.rx-patient-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--primary-light);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.rx-date {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rx-items {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.rx-row {
+  display: grid;
+  grid-template-columns: 2.1fr 1fr 1fr 1fr 0.9fr 0.7fr 28px;
+  gap: 8px;
+  align-items: start;
+  margin-bottom: 8px;
+}
+
+.rx-row-head {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.rx-col-x {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rx-instructions {
+  grid-column: 1 / -1;
+}
+
+.rx-note {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rx-paper {
+  background: #fff;
+  color: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 16px;
+}
+
+.rx-paper .label {
+  color: #64748b;
+}
+
+.rx-advice {
+  font-size: 14px;
+  margin: 10px 0 0;
+}
+
+.rx-advice .label {
+  margin-right: 6px;
+}
+
+.rx-sign-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 22px;
+  padding-top: 36px;
+}
+
+.rx-sign-line {
+  border-bottom: 1.5px solid #0f172a;
+  min-width: 220px;
+  padding: 2px 4px;
+}
+
+@media (max-width: 720px) {
+  .rx-row {
+    grid-template-columns: 1fr;
+  }
+  .rx-instructions {
+    grid-column: auto;
+  }
+  .rx-row-head {
+    display: none;
+  }
+}
+
+/* ---------- Prescription cards (patient record) ---------- */
+
+.rx-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--surface);
+}
+
+.rx-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rx-card-no {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rx-card-notes {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0;
+  padding: 8px 10px;
+  background: var(--surface-muted);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.rx-card-notes .label {
+  margin-right: 6px;
+}

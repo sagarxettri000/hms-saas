@@ -61,7 +61,11 @@ async function request(path: string, options: RequestInit = {}, retry = true): P
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Request failed (${res.status})`);
+    const err: any = new Error(body.message || `Request failed (${res.status})`);
+    err.statusCode = res.status;
+    err.code = body?.code;
+    err.warnings = Array.isArray(body?.warnings) ? body.warnings : undefined;
+    throw err;
   }
 
   return res.json();

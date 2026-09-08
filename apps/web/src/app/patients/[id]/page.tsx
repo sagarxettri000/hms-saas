@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import EncounterModal from '@/components/EncounterModal';
 import AdmitModal from '@/components/AdmitModal';
 import DischargeModal from '@/components/DischargeModal';
+import PrescriptionModal from '@/components/PrescriptionModal';
 import { badgeTone, formatDate, formatDateTime, formatMoney, pick } from '@/lib/hooks';
 import { BLOOD_GROUPS, GENDERS, MARITAL_STATUS, PATIENT_TYPES } from '@/lib/options';
 import type { FormField, Row } from '@/lib/types';
@@ -104,6 +105,7 @@ export default function PatientDetailPage() {
   const [dischargeTarget, setDischargeTarget] = useState<Row | null>(null);
   const [followupTarget, setFollowupTarget] = useState<Row | null>(null);
   const [showFollowup, setShowFollowup] = useState(false);
+  const [showPrescription, setShowPrescription] = useState(false);
   const [followupValues, setFollowupValues] = useState<{
     id: string;
     encounterId: string;
@@ -130,6 +132,7 @@ export default function PatientDetailPage() {
   const canFollowup = FRONT_ROLES
     .concat(['HOSPITAL_ADMIN', 'HOSPITAL_OWNER', 'PLATFORM_SUPER_ADMIN', 'IT_ADMIN'])
     .includes(role);
+  const canPrescribe = canManageClinical;
   const canSeeBilling = FRONT_ROLES
     .concat(['FINANCE_MANAGER', 'HOSPITAL_ADMIN', 'HOSPITAL_OWNER', 'PLATFORM_SUPER_ADMIN', 'IT_ADMIN', 'INSURANCE_OFFICER'])
     .includes(role);
@@ -184,13 +187,7 @@ export default function PatientDetailPage() {
         setData({
           encounters: list(enc),
           vitals: list(vitals),
-          prescriptions: (list(rx) as any[]).flatMap((p) =>
-            (p.items?.length ? p.items : [p]).map((it: any) => ({
-              ...it,
-              prescriptionId: p.id,
-              createdAt: p.createdAt,
-            })),
-          ),
+          prescriptions: list(rx),
           labs: list(labs),
           invoices: list(inv),
           admissions: list(adm),
@@ -234,6 +231,13 @@ export default function PatientDetailPage() {
     setDischargeTarget(null);
     setActive('admissions');
     setFlash('Patient discharged successfully');
+    reload();
+  }
+
+  function handlePrescriptionCreated() {
+    setShowPrescription(false);
+    setActive('prescriptions');
+    setFlash('Prescription saved successfully');
     reload();
   }
 
@@ -331,14 +335,23 @@ export default function PatientDetailPage() {
     { key: 'weight', label: 'Weight' },
   ];
 
-  const rxCols = [
-    { key: 'createdAt', label: 'Date', render: (r: Row) => formatDateTime(r.createdAt) },
-    { key: 'medicine', label: 'Medicine', render: (r: Row) => r.medicineName || r.medicine?.name || r.medicineId },
-    { key: 'dosage', label: 'Dosage' },
-    { key: 'frequency', label: 'Frequency' },
-    { key: 'duration', label: 'Duration' },
-    { key: 'status', label: 'Status', render: (r: Row) => <span className={`badge badge-${badgeTone(r.status)}`}>{r.status}</span> },
-  ];
+  function rxStatus(r: Row) {
+    const map: Record<string, { label: string; tone: string }> = {
+      DRAFT: { label: 'Draft', tone: 'secondary' },
+      PRESCRIBED: { label: 'Prescribed', tone: 'blue' },
+      APPROVED: { label: 'Approved', tone: 'green' },
+      DISPENSED: { label: 'Dispensed', tone: 'primary' },
+      PARTIALLY_DISPENSED: { label: 'Partial', tone: 'yellow' },
+      CANCELLED: { label: 'Cancelled', tone: 'red' },
+      COMPLETED: { label: 'Completed', tone: 'green' },
+    };
+    return map[r.status] || { label: r.status || '—', tone: 'secondary' };
+  }
+
+  const signerNote = (r: Row) => {
+    const docName = r.doctor?.user ? [r.doctor.user.firstName, r.doctor.user.lastName].filter(Boolean).join(' ') : '';
+    return r.signedAt ? `${docName || 'Signed'} · ${formatDate(r.signedAt)}` : docName;
+  };
 
   const labCols = [
     { key: 'orderNumber', label: 'Order no.', render: (r: Row) => <span className="mono">{r.orderNumber}</span> },
@@ -548,6 +561,9 @@ export default function PatientDetailPage() {
           {canManageEncounters && (
             <button className="btn" onClick={() => setShowEncounter(true)}>+ Start encounter</button>
           )}
+          {canPrescribe && (
+            <button className="btn" onClick={() => setShowPrescription(true)}>✎ Prescribe</button>
+          )}
           {canAdmit && (
             <button className="btn" onClick={() => setShowAdmit(true)}>+ Admit</button>
           )}
@@ -660,7 +676,74 @@ export default function PatientDetailPage() {
 
       {active === 'encounters' && <SectionTable title="Encounters" rows={data.encounters || []} columns={encCols} />}
       {active === 'vitals' && <SectionTable title="Vital history" rows={data.vitals || []} columns={vitalsCols} />}
-      {active === 'prescriptions' && <SectionTable title="Prescriptions" rows={data.prescriptions || []} columns={rxCols} />}
+      {active === 'prescriptions' && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <h3 className="card-title" style={{ margin: 0 }}>Prescriptions ({(data.prescriptions || []).length})</h3>
+            {canPrescribe && (
+              <button className="btn btn-sm" onClick={() => setShowPrescription(true)}>✎ New prescription</button>
+            )}
+          </div>
+          {(data.prescriptions || []).length === 0 ? (
+            <p className="muted" style={{ padding: '12px 0 4px' }}>
+              No prescriptions yet. {canPrescribe ? 'Click “✎ New prescription” to write one.' : ''}
+            </p>
+          ) : (
+            <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
+              {(data.prescriptions as any[]).map((rx) => {
+                const st = rxStatus(rx);
+                const items = rx.items || [];
+                return (
+                  <div key={rx.id} className="rx-card">
+                    <div className="rx-card-head">
+                      <div style={{ minWidth: 0 }}>
+                        <div className="rx-card-no">Rx <span className="mono">{String(rx.id).slice(0, 8).toUpperCase()}</span></div>
+                        <div className="muted" style={{ fontSize: 12.5 }}>{formatDateTime(rx.createdAt)} · {signerNote(rx)}</div>
+                      </div>
+                      <span className={`badge badge-${st.tone}`}>{st.label}</span>
+                    </div>
+                    {(rx.advice || rx.followUp) && (
+                      <div className="rx-card-notes">
+                        {rx.advice ? <div><span className="label">Advice</span> {rx.advice}</div> : null}
+                        {rx.followUp ? <div><span className="label">Follow-up</span> {rx.followUp}</div> : null}
+                      </div>
+                    )}
+                    <div className="table-wrap" style={{ border: 'none', borderRadius: 0, padding: 0 }}>
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Medicine</th>
+                            <th>Dosage</th>
+                            <th>Frequency</th>
+                            <th>Duration</th>
+                            <th>Instructions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((it: any, i: number) => (
+                            <tr key={it.id ?? i}>
+                              <td>{i + 1}</td>
+                              <td>
+                                <strong>{it.medicineName}</strong>
+                                {it.genericName ? <div className="muted" style={{ fontSize: 12 }}>{it.genericName}</div> : null}
+                              </td>
+                              <td>{it.dosage || '—'}</td>
+                              <td>{it.frequency || '—'}</td>
+                              <td>{it.duration || '—'}</td>
+                              <td style={{ fontSize: 12.5 }}>{it.instructions || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
       {active === 'lab' && <SectionTable title="Laboratory orders" rows={data.labs || []} columns={labCols} />}
       {active === 'billing' && <SectionTable title="Invoices" rows={data.invoices || []} columns={invCols} />}
       {active === 'admissions' && <SectionTable title="Admit history" rows={data.admissions || []} columns={admCols} />}
@@ -815,6 +898,26 @@ export default function PatientDetailPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {showPrescription && (
+        <PrescriptionModal
+          patient={{
+            id: patient.id,
+            firstName: patient.firstName,
+            middleName: patient.middleName,
+            lastName: patient.lastName,
+            mrn: patient.mrn,
+            age: patient.age,
+            gender: patient.gender,
+            dateOfBirth: patient.dateOfBirth,
+            allergies: patient.allergies,
+          }}
+          encounters={(data.encounters || []) as any}
+          role={role}
+          onClose={() => setShowPrescription(false)}
+          onCreated={handlePrescriptionCreated}
+        />
       )}
 
       {showEdit && (

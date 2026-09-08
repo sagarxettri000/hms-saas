@@ -654,7 +654,6 @@ export class PharmacyService {
         invoiceItems.push({
           tenantId,
           serviceName: item.medicineName || inventoryItem?.name || "Medicine",
-          serviceId: item.medicineId || undefined,
           quantity,
           rate: unitPrice,
           taxPercent: taxPercent || undefined,
@@ -929,7 +928,6 @@ export class PharmacyService {
         invoiceItems.push({
           tenantId,
           serviceName: inventoryItem.name || medicine?.name || "Medicine",
-          serviceId: inventoryItem.medicineId || undefined,
           serviceCode: medicine?.sku || inventoryItem.sku || undefined,
           description: inventoryItem.batchNumber
             ? `Batch: ${inventoryItem.batchNumber}`

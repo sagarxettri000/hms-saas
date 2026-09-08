@@ -4,13 +4,14 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import AuthShell from '@/components/auth/AuthShell';
+import LoginShell from '@/components/auth/LoginShell';
 import {
   AuthField,
   AuthButton,
   AuthError,
   AuthMessage,
 } from '@/components/auth/controls';
+import './login.css';
 import '../auth.css';
 
 export default function LoginPage() {
@@ -89,7 +90,7 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthShell mode="login" heading="Login">
+    <LoginShell>
       <form className="auth-form" onSubmit={handleLogin} noValidate>
         <AuthField
           id="email"
@@ -130,6 +131,6 @@ export default function LoginPage() {
           Sign in
         </AuthButton>
       </form>
-    </AuthShell>
+    </LoginShell>
   );
 }

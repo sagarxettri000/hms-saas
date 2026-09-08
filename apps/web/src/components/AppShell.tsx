@@ -10,7 +10,7 @@ import { api } from '@/lib/api';
 // AppShell renders the persistent app shell. It now lives in the root layout so
 // the sidebar stays mounted across navigations (preserving its scroll position
 // natively with no flicker). Public/auth pages render children without the shell.
-const PUBLIC_PATHS = ['/login', '/pharmacy-login', '/register', '/forgot-password', '/reset-password', '/select-tenant'];
+const PUBLIC_PATHS = ['/login', '/pharmacy-login', '/register', '/forgot-password', '/reset-password', '/select-tenant', '/about', '/security', '/help'];
 
 const ADMIN = ['HOSPITAL_ADMIN', 'HOSPITAL_OWNER'];
 const SUPER = ['PLATFORM_SUPER_ADMIN', 'IT_ADMIN'];

@@ -15,17 +15,10 @@ interface Founder {
 const FOUNDERS: Founder[] = [
   {
     name: 'Sagar Katwal',
-    role: 'Founder',
+    role: 'Support',
     display: '9768545542',
     intl: '9779768545542',
     message: 'Hello Sagar, I would like to know more about Swasthya.',
-  },
-  {
-    name: 'Dipson Basnet',
-    role: 'Co-Founder',
-    display: '9707429360',
-    intl: '9779707429360',
-    message: 'Hello Dipson, I would like to know more about Swasthya.',
   },
 ];
 
@@ -70,7 +63,7 @@ export default function AboutPage() {
           </section>
 
           <section className="auth-copy-section">
-            <h2 className="auth-copy-title">Founders</h2>
+            <h2 className="auth-copy-title">Support</h2>
             <div className="about-founders">
               {FOUNDERS.map((f) => (
                 <div key={f.name} className="about-card">
@@ -99,7 +92,7 @@ export default function AboutPage() {
             <h2 className="auth-copy-title">Contact</h2>
             <p className="auth-copy-body">
               Need support, have a question, or want to discuss the system?
-              Contact our founders directly on WhatsApp.
+              Contact our support team directly on WhatsApp.
             </p>
           </section>
         </div>

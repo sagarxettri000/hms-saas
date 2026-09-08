@@ -70,11 +70,7 @@ export default function LoginPage() {
       if (res.data.user.mustChangePassword) {
         router.push('/change-password');
       } else {
-        router.push(
-          res.data.user.role === 'PHARMACIST'
-            ? '/pharmacy?tab=billing'
-            : '/dashboard',
-        );
+        router.push('/dashboard');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed';

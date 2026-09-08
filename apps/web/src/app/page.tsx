@@ -12,8 +12,7 @@ export default function Home() {
       router.replace('/login');
       return;
     }
-    const role = typeof window !== 'undefined' ? localStorage.getItem('role') || '' : '';
-    router.replace(role === 'PHARMACIST' ? '/pharmacy?tab=billing' : '/dashboard');
+    router.replace('/dashboard');
   }, [router]);
 
   return (

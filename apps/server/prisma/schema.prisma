@@ -673,6 +673,8 @@ model Tenant {
   chargeTransactions      ChargeTransaction[]
   dischargeBills          DischargeBill[]
   dischargeBillDetails    DischargeBillDetail[]
+  dicomStudies            DicomStudy[]
+  dicomNodes              DicomNode[]
 
   @@index([status])
   @@index([createdAt])
@@ -1311,6 +1313,7 @@ model Patient {
   prescriptions       Prescription[]
   labOrders           LabOrder[]
   radiologyOrders     RadiologyOrder[]
+  dicomStudies        DicomStudy[]
   memberships         Membership[]
   emergencyCases      EmergencyCase[]
   vitals              Vital[]
@@ -1927,6 +1930,7 @@ model RadiologyOrder {
   updatedAt       DateTime             @updatedAt
 
   images RadiologyImage[]
+  dicomStudies DicomStudy[]
 
   @@index([tenantId, patientId])
   @@index([status])
@@ -1951,6 +1955,94 @@ model RadiologyImage {
 
   @@index([radiologyOrderId])
   @@map("radiology_images")
+}
+
+model DicomStudy {
+  id                 String            @id @default(cuid())
+  tenantId           String
+  tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId          String?
+  patient            Patient?          @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  radiologyOrderId   String?
+  radiologyOrder     RadiologyOrder?   @relation(fields: [radiologyOrderId], references: [id], onDelete: SetNull)
+  studyInstanceUid   String
+  studyDate          DateTime?
+  studyDescription   String?
+  accessionNumber    String?
+  modality           String?
+  bodyPart           String?
+  referringPhysician String?
+  institutionName    String?
+  numberOfSeries     Int               @default(0)
+  numberOfInstances  Int               @default(0)
+  uploadedBy         String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  series DicomSeries[]
+
+  @@unique([tenantId, studyInstanceUid])
+  @@index([patientId])
+  @@index([radiologyOrderId])
+  @@index([accessionNumber])
+  @@map("dicom_studies")
+}
+
+model DicomSeries {
+  id                String          @id @default(cuid())
+  dicomStudyId      String
+  dicomStudy        DicomStudy      @relation(fields: [dicomStudyId], references: [id], onDelete: Cascade)
+  seriesInstanceUid String
+  seriesNumber      String?
+  modality          String?
+  seriesDescription String?
+  bodyPart          String?
+  numberOfInstances Int             @default(0)
+  createdAt         DateTime        @default(now())
+
+  instances DicomInstance[]
+
+  @@unique([dicomStudyId, seriesInstanceUid])
+  @@map("dicom_series")
+}
+
+model DicomInstance {
+  id             String      @id @default(cuid())
+  dicomSeriesId  String
+  dicomSeries    DicomSeries @relation(fields: [dicomSeriesId], references: [id], onDelete: Cascade)
+  sopInstanceUid String
+  instanceNumber String?
+  storageKey     String
+  fileSize       Int         @default(0)
+  colorSpace     String?
+  rows           Int?
+  columns        Int?
+  numberOfFrames Int?
+  bitsAllocated  Int?
+  transferSyntax String?
+  contentType    String      @default("application/dicom")
+  uploadedBy     String?
+  createdAt      DateTime    @default(now())
+
+  @@unique([dicomSeriesId, sopInstanceUid])
+  @@index([sopInstanceUid])
+  @@map("dicom_instances")
+}
+
+model DicomNode {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name       String
+  aeTitle    String
+  hostname   String
+  port       Int       @default(104)
+  isLocal    Boolean   @default(false)
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([tenantId])
+  @@map("dicom_nodes")
 }
 
 // ============================================================

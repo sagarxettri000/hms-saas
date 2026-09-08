@@ -2,10 +2,24 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { api, API_URL, unwrap, listOf } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/hooks';
 import { DOCTOR_REF, PATIENT_REF } from '@/lib/options';
 import AsyncSearchSelect from '@/components/AsyncSearchSelect';
+import { dicomApi } from '@/lib/dicom';
+import type { DicomStudyListItem } from '@/lib/dicom';
+import type { DicomUploadResult } from '@/lib/dicom';
+
+const DicomViewer = dynamic(() => import('@/components/dicom/DicomViewer').then((m) => m.DicomViewer), {
+  ssr: false,
+  loading: () => <div className="loading">Loading viewer…</div>,
+});
+
+const DicomUploadModal = dynamic(() => import('@/components/dicom/DicomUploadModal').then((m) => m.DicomUploadModal), {
+  ssr: false,
+  loading: () => <div className="loading">Loading…</div>,
+});
 
 type Tab = 'orders' | 'worklist' | 'reports' | 'studies' | 'summary';
 
@@ -127,6 +141,16 @@ export default function RadiologyPage() {
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({ modality: '', status: '', priority: '', from: '', to: '' });
 
+  // DICOM studies tab state
+  const [studyRows, setStudyRows] = useState<DicomStudyListItem[]>([]);
+  const [studyTotal, setStudyTotal] = useState(0);
+  const [loadingStudies, setLoadingStudies] = useState(false);
+  const [studyPage, setStudyPage] = useState(1);
+  const [studySearch, setStudySearch] = useState('');
+  const [studyModality, setStudyModality] = useState('');
+  const [showUpload, setShowUpload] = useState(false);
+  const [viewStudyId, setViewStudyId] = useState<string | null>(null);
+
   // Summary state
   const [summary, setSummary] = useState<any>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
@@ -206,6 +230,25 @@ export default function RadiologyPage() {
     setLoading(false);
   }, []);
 
+  const loadStudies = useCallback(async () => {
+    setLoadingStudies(true);
+    try {
+      const res: any = await dicomApi.listStudies({
+        page: studyPage,
+        limit: 15,
+        query: studySearch.trim() || undefined,
+        modality: studyModality || undefined,
+      });
+      setStudyRows(res?.items ?? []);
+      setStudyTotal(res?.pagination?.total ?? 0);
+    } catch (e) {
+      setStudyRows([]);
+      setStudyTotal(0);
+      setFlash(e instanceof Error ? e.message : 'Failed to load studies');
+    }
+    setLoadingStudies(false);
+  }, [studyPage, studySearch, studyModality]);
+
   const loadSummary = useCallback(async () => {
     setLoadingSummary(true);
     try {
@@ -218,11 +261,16 @@ export default function RadiologyPage() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'orders' || activeTab === 'reports' || activeTab === 'studies') loadOrders();
+    if (activeTab === 'orders' || activeTab === 'reports') loadOrders();
     else if (activeTab === 'worklist') loadWorklist();
     else if (activeTab === 'summary') loadSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, queryKey]);
+
+  useEffect(() => {
+    if (activeTab === 'studies') loadStudies();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, studyPage, studySearch, studyModality]);
 
   useEffect(() => {
     if (!detailId) return;
@@ -280,6 +328,10 @@ export default function RadiologyPage() {
     setFilters({ modality: '', status: '', priority: '', from: '', to: '' });
     setDetailId(null);
     setDetail(null);
+    setViewStudyId(null);
+    setStudyPage(1);
+    setStudySearch('');
+    setStudyModality('');
   };
 
   const applyFilters = () => {
@@ -527,6 +579,23 @@ export default function RadiologyPage() {
     );
   }
 
+  // ---------- DICOM study viewer ----------
+  if (viewStudyId) {
+    return (
+      <div style={{ padding: '0 0 24px' }}>
+        {flash && <div className="alert alert-success">{flash}</div>}
+        <DicomViewer
+          studyId={viewStudyId}
+          onBack={() => setViewStudyId(null)}
+          onDeleted={() => {
+            setViewStudyId(null);
+            loadStudies();
+          }}
+        />
+      </div>
+    );
+  }
+
   // ---------- List views (Orders / Worklist / Reports / Studies) ----------
   const isOrders = activeTab === 'orders';
   const isStudies = activeTab === 'studies';
@@ -552,10 +621,13 @@ export default function RadiologyPage() {
 
       <div className="page-header">
         <div>
-          <h1 className="page-title">Radiology Orders</h1>
-          <p className="page-subtitle">Imaging orders and reports</p>
+          <h1 className="page-title">{isStudies ? 'DICOM Studies' : 'Radiology Orders'}</h1>
+          <p className="page-subtitle">{isStudies ? 'Uploaded imaging studies and DICOM viewing' : 'Imaging orders and reports'}</p>
         </div>
-        <button className="btn" onClick={openCreate}>+ New imaging order</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {isStudies && <button className="btn" onClick={() => setShowUpload(true)}>+ Upload DICOM</button>}
+          <button className="btn" onClick={openCreate}>+ New imaging order</button>
+        </div>
       </div>
 
       <div className="tabs">
@@ -571,12 +643,25 @@ export default function RadiologyPage() {
       </div>
 
       <div className="toolbar" style={{ flexWrap: 'wrap' }}>
-        <input
-          className="input search-input"
-          placeholder="Search patient, accession no., study…"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-        />
+        {isStudies ? (
+          <>
+            <input
+              className="input search-input"
+              placeholder="Search accession no., description, UID…"
+              value={studySearch}
+              onChange={(e) => { setStudySearch(e.target.value); setStudyPage(1); }}
+            />
+            {renderFilterSelect(studyModality, (v) => { setStudyModality(v); setStudyPage(1); }, MODALITIES, 'All modalities')}
+            <button className="btn btn-secondary btn-sm" onClick={() => { setStudyPage(1); loadStudies(); }}>Refresh</button>
+          </>
+        ) : (
+          <input
+            className="input search-input"
+            placeholder="Search patient, accession no., study…"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          />
+        )}
         {isOrders && (
           <>
             {renderFilterSelect(filters.modality, (v) => setFilters({ ...filters, modality: v }), MODALITIES, 'All modalities')}
@@ -590,7 +675,65 @@ export default function RadiologyPage() {
         )}
       </div>
 
-      {loading ? (
+      {isStudies ? (
+        loadingStudies ? (
+          <div className="loading">Loading studies…</div>
+        ) : studyRows.length === 0 ? (
+          <div className="empty">No DICOM studies found.</div>
+        ) : (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Patient</th>
+                  <th>Study Description</th>
+                  <th>Accession No.</th>
+                  <th>Modality</th>
+                  <th>Series</th>
+                  <th>Images</th>
+                  <th>Study Date</th>
+                  <th style={{ width: 1 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {studyRows.map((st) => (
+                  <tr key={st.id}>
+                    <td>
+                      {st.patient ? [st.patient.firstName, st.patient.lastName].filter(Boolean).join(' ') : '—'}
+                      {st.patient?.mrn && <div className="note">{st.patient.mrn}</div>}
+                    </td>
+                    <td>{st.studyDescription || '—'}</td>
+                    <td>{st.accessionNumber || '—'}</td>
+                    <td><span className="badge badge-gray">{st.modality || '—'}</span></td>
+                    <td>{st.numberOfSeries ?? st.series?.length ?? '—'}</td>
+                    <td>{st.numberOfInstances ?? '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatDate(st.studyDate)}</td>
+                    <td>
+                      <button className="btn btn-sm btn-ghost" onClick={() => setViewStudyId(st.id)}>View</button>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        style={{ marginLeft: 4 }}
+                        onClick={async () => {
+                          if (!window.confirm('Delete this DICOM study and all its images?')) return;
+                          try {
+                            await dicomApi.deleteStudy(st.id);
+                            setFlash('Study deleted');
+                            loadStudies();
+                          } catch (e) {
+                            setFlash(e instanceof Error ? e.message : 'Delete failed');
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : loading ? (
         <div className="loading">Loading…</div>
       ) : rows.length === 0 ? (
         <div className="empty">No records found.</div>
@@ -634,19 +777,34 @@ export default function RadiologyPage() {
         </div>
       )}
 
-      {!loading && rows.length > 0 && (
-        <div className="table-wrap" style={{ borderTop: 'none', borderRadius: '0 0 8px 8px' }}>
-          <div className="pagination">
-            <span>{total} record{total === 1 ? '' : 's'}</span>
-            {paginated && (
+      {isStudies ? (
+        !loadingStudies && studyRows.length > 0 && (
+          <div className="table-wrap" style={{ borderTop: 'none', borderRadius: '0 0 8px 8px' }}>
+            <div className="pagination">
+              <span>{studyTotal} study{studyTotal === 1 ? '' : 's'}</span>
               <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
-                <button className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
-                <span>Page {page} / {Math.max(1, Math.ceil(total / 15))}</span>
-                <button className="btn btn-secondary btn-sm" disabled={page >= Math.max(1, Math.ceil(total / 15))} onClick={() => setPage((p) => p + 1)}>Next</button>
+                <button className="btn btn-secondary btn-sm" disabled={studyPage <= 1} onClick={() => setStudyPage((p) => Math.max(1, p - 1))}>Prev</button>
+                <span>Page {studyPage} / {Math.max(1, Math.ceil(studyTotal / 15))}</span>
+                <button className="btn btn-secondary btn-sm" disabled={studyPage >= Math.max(1, Math.ceil(studyTotal / 15))} onClick={() => setStudyPage((p) => p + 1)}>Next</button>
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )
+      ) : (
+        !loading && rows.length > 0 && (
+          <div className="table-wrap" style={{ borderTop: 'none', borderRadius: '0 0 8px 8px' }}>
+            <div className="pagination">
+              <span>{total} record{total === 1 ? '' : 's'}</span>
+              {paginated && (
+                <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+                  <button className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
+                  <span>Page {page} / {Math.max(1, Math.ceil(total / 15))}</span>
+                  <button className="btn btn-secondary btn-sm" disabled={page >= Math.max(1, Math.ceil(total / 15))} onClick={() => setPage((p) => p + 1)}>Next</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )
       )}
 
       {showCreate && (
@@ -722,6 +880,18 @@ export default function RadiologyPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {showUpload && (
+        <DicomUploadModal
+          onClose={() => setShowUpload(false)}
+          onDone={(result) => {
+            setShowUpload(false);
+            const n = result?.ingested?.length ?? 0;
+            setFlash(`Uploaded ${n} DICOM file${n === 1 ? '' : 's'}`);
+            loadStudies();
+          }}
+        />
       )}
     </div>
   );

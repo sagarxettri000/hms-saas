@@ -14,11 +14,11 @@ interface Founder {
 
 const FOUNDERS: Founder[] = [
   {
-    name: 'Sagar Katwal',
+    name: 'Support',
     role: 'Support',
     display: '9768545542',
     intl: '9779768545542',
-    message: 'Hello Sagar, I would like to know more about Swasthya.',
+    message: 'Hello, I would like to know more about Swasthya.',
   },
 ];
 
@@ -67,18 +67,13 @@ export default function AboutPage() {
             <div className="about-founders">
               {FOUNDERS.map((f) => (
                 <div key={f.name} className="about-card">
-                  <div className="about-card-avatar" aria-hidden="true">
-                    {f.name.charAt(0)}
-                  </div>
-                  <div className="about-card-name">{f.name}</div>
                   <div className="about-card-role">{f.role}</div>
-                  <div className="about-card-phone">{f.display}</div>
                   <a
                     className="about-wa-btn"
                     href={`https://wa.me/${f.intl}?text=${encodeURIComponent(f.message)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    aria-label={`Contact ${f.name} on WhatsApp`}
+                    aria-label="Contact support on WhatsApp"
                   >
                     <WhatsAppIcon />
                     Contact on WhatsApp

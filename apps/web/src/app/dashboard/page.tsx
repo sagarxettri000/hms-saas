@@ -235,6 +235,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const loadingRef = useRef(false);
+  const roleRef = useRef('');
   const [finance, setFinance] = useState<any>(null);
   const [yesterday, setYesterday] = useState<any>(null);
   const [doctors, setDoctors] = useState<any[]>([]);
@@ -247,6 +248,7 @@ export default function DashboardPage() {
   const [pharmTop, setPharmTop] = useState<any[]>([]);
   const [clinic, setClinic] = useState<any>(null);
   const [todayAppts, setTodayAppts] = useState<any[]>([]);
+  const [nurseData, setNurseData] = useState<any>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -257,6 +259,7 @@ export default function DashboardPage() {
     const storedRole = localStorage.getItem('role') || '';
     setUserName(localStorage.getItem('userName') || '');
     setRole(storedRole);
+    roleRef.current = storedRole;
     const g = getRoleGroup(storedRole);
     setGroup(g);
     load(g);
@@ -330,7 +333,10 @@ export default function DashboardPage() {
   }
 
   async function loadGroupData(g: string) {
-    if (g === 'CLINICAL') await loadClinicalData();
+    if (g === 'CLINICAL') {
+      if (['NURSE', 'WARD_INCHARGE', 'ICU_STAFF'].includes(roleRef.current)) await loadNurseData();
+      else await loadClinicalData();
+    }
     else if (g === 'RECEPTION') await loadReceptionData();
     else if (g === 'FINANCE') await loadFinanceData();
     else if (g === 'LAB') await loadLabData();
@@ -523,6 +529,87 @@ export default function DashboardPage() {
       { label: 'My appointments', href: '/appointments', icon: '📅' },
       { label: 'Start encounter', href: '/encounters', icon: '🩺' },
       { label: 'Laboratory', href: '/laboratory', icon: '🔬' },
+    ]);
+  }
+
+  async function loadNurseData() {
+    const [admissionsR, boardR, handoversR] = await Promise.all([
+      safe(api('/admissions?limit=100&status=ADMITTED')),
+      safe(api('/bed-management/board')),
+      safe(api('/nursing-handovers?limit=100')),
+    ]);
+    const admissions = listOf(admissionsR);
+    const boardData = summaryOf(boardR);
+    const boardSummary = boardData.summary || {};
+    const boardWards = Array.isArray(boardData.wards) ? boardData.wards : [];
+    const totalBeds = Number(boardSummary.total ?? 0);
+    const occupiedBeds = Number(boardSummary.occupied ?? 0);
+    const handovers = listOf(handoversR);
+    const dayStart = startOfToday().getTime();
+    const todayHandovers = handovers.filter((h: any) => {
+      const at = new Date(h.shiftDate || h.createdAt).getTime();
+      return !isNaN(at) && at >= dayStart;
+    }).length;
+
+    const occPct = Number(boardSummary.occupancyRate ?? (totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0));
+
+    setNurseData({
+      admissions: admissions.length,
+      occupied: occupiedBeds,
+      totalBeds,
+      occPct,
+      handovers: todayHandovers,
+      wards: boardWards,
+    });
+    setBedsState({ occupied: occupiedBeds, total: totalBeds });
+
+    setStats([
+      {
+        label: 'Patients admitted',
+        value: admissions.length,
+        tone: 'blue',
+        icon: '🛏',
+        href: '/admissions',
+      },
+      {
+        label: 'Beds occupied',
+        value: occupiedBeds,
+        tone: occPct >= 90 ? 'red' : occPct >= 70 ? 'amber' : 'green',
+        icon: '⊞',
+        href: '/bed-management',
+      },
+      {
+        label: 'Bed occupancy',
+        value: totalBeds > 0 ? `${occPct}%` : '—',
+        tone: occPct >= 90 ? 'red' : occPct >= 70 ? 'amber' : 'green',
+        icon: '📊',
+        href: '/bed-management',
+      },
+      {
+        label: 'Handovers today',
+        value: todayHandovers,
+        tone: todayHandovers > 0 ? 'green' : 'blue',
+        icon: '⇄',
+        href: '/nursing',
+      },
+    ]);
+
+    setFocus({
+      title: 'Current admissions',
+      headers: ['Patient', 'Ward / Bed', 'Admitted', 'Doctor'],
+      href: '/admissions',
+      rows: admissions.slice(0, 8).map((a: any) => [
+        personName(a.patient),
+        [a.ward?.name ?? a.roomNumber, a.bed?.number ?? ''].filter(Boolean).join(' · ') || '—',
+        formatDate(a.admissionDate),
+        personName(a.doctor) || '—',
+      ]),
+    });
+
+    setQuickLinks([
+      { label: 'Nursing dashboard', href: '/nursing', icon: '♡' },
+      { label: 'Bed board', href: '/bed-management', icon: '⊞' },
+      { label: 'Admissions', href: '/admissions', icon: '🛏' },
     ]);
   }
 
@@ -1027,6 +1114,8 @@ export default function DashboardPage() {
   });
 
   const finRole = group === 'ADMIN' || group === 'FINANCE' || group === 'RECEPTION';
+  const isDoctor = role === 'DOCTOR';
+  const isNurse = ['NURSE', 'WARD_INCHARGE', 'ICU_STAFF'].includes(role);
   const trend = (finance?.trend || []).map((t: any) => ({
     date: t.date,
     revenue: Number(t.revenue) || 0,
@@ -1170,7 +1259,7 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          {group === 'CLINICAL' && clinic && (
+          {group === 'CLINICAL' && isDoctor && clinic && (
             <>
               <div className="dash-hero dash-hero-blue">
                 <div className="dash-hero-copy">
@@ -1207,6 +1296,63 @@ export default function DashboardPage() {
                 </WidgetCard>
                 <WidgetCard title="Appointments by status">
                   <BarList data={apptStatusBar} money={false} />
+                </WidgetCard>
+              </div>
+            </>
+          )}
+
+          {group === 'CLINICAL' && isNurse && nurseData && (
+            <>
+              <div className="dash-hero dash-hero-teal">
+                <div className="dash-hero-copy">
+                  <div className="dash-hero-label">Nursing station</div>
+                  <div className="dash-hero-title">
+                    {greeting}, {userName || 'Nurse'}
+                    <span> · {nurseData.admissions ?? 0} patients admitted</span>
+                  </div>
+                  <div className="dash-hero-sub">
+                    {nurseData.occupied ?? 0} beds occupied · {nurseData.occPct ?? 0}% occupancy ·{' '}
+                    {nurseData.handovers ?? 0} handovers today
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button className="btn btn-light" onClick={() => router.push('/nursing')}>
+                    Open nursing board →
+                  </button>
+                  <button className="btn btn-ghost-light" onClick={() => router.push('/bed-management')}>
+                    Bed board
+                  </button>
+                </div>
+              </div>
+
+              <div className="dash-widget-grid">
+                <WidgetCard
+                  title="Ward occupancy"
+                  action={
+                    <a className="dash-link" href="/bed-management">
+                      Bed board
+                    </a>
+                  }
+                >
+                  <Leaderboard
+                    rows={(nurseData.wards || []).slice(0, 6).map((w: any) => ({
+                      label: w.name || 'Ward',
+                      sublabel: `${w.occupied ?? 0}/${w.totalBeds ?? 0} beds occupied`,
+                      value: `${w.totalBeds ? Math.round(((w.occupied ?? 0) / w.totalBeds) * 100) : 0}%`,
+                      tone: w.totalBeds && (w.occupied ?? 0) >= w.totalBeds ? 'red' : 'green',
+                    }))}
+                    empty="No ward data available."
+                  />
+                </WidgetCard>
+                <WidgetCard
+                  title="Occupancy today"
+                  action={
+                    <a className="dash-link" href="/bed-management">
+                      Manage beds
+                    </a>
+                  }
+                >
+                  <OccupancyBar occupied={nurseData.occupied ?? 0} total={nurseData.totalBeds ?? 0} pct={nurseData.occPct ?? 0} />
                 </WidgetCard>
               </div>
             </>

@@ -127,7 +127,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState('');
 
   useEffect(() => {
-    if (isPublic) return;
+    if (isPublic) {
+      // On public/auth routes (login, register, ...) the shell is not rendered.
+      // Reset identity state so a fresh login never inherits the previous
+      // session's name/role/tenant in its React state (AppShell persists across
+      // navigations, so a plain 1x mount effect would stay stale forever).
+      setUserName('');
+      setTenantName('');
+      setRole('');
+      return;
+    }
     const token = localStorage.getItem('accessToken');
     if (!token) { router.replace('/login'); return; }
     // Apply whatever identity we already have so the UI is never blank.
@@ -163,7 +172,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
     syncIdentity();
     return () => { cancelled = true; };
-  }, []);
+  }, [isPublic, pathname]);
 
   function handleLogout() {
     const refreshToken = localStorage.getItem('refreshToken');

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { api, safe } from '@/lib/api';
 import { formatMoney, formatDate, formatDateTime, badgeTone } from '@/lib/hooks';
 import {
@@ -224,6 +224,7 @@ function humanEntity(entity: any): string {
 }
 
 export default function DashboardPage() {
+  const pathname = usePathname();
   const router = useRouter();
   const [userName, setUserName] = useState('');
   const [role, setRole] = useState('');
@@ -263,7 +264,7 @@ export default function DashboardPage() {
     const g = getRoleGroup(storedRole);
     setGroup(g);
     load(g);
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     if (!group) return;

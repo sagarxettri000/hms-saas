@@ -41,7 +41,7 @@ export default function AboutPage() {
   return (
     <AuthShell mode="forgot" wide heading="About Swasthya"
       footer={
-        <span>© 2026 Nepluro. All rights reserved.</span>
+        <span>© Nepluro. All rights reserved.</span>
       }
     >
         <div className="auth-divider" />

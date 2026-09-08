@@ -56,15 +56,11 @@ export default function AuthShell({ children, mode, wide, footer, heading }: Aut
       <div className="auth-footer-glass">
         {footer ?? (
           <>
-            <span>&copy; 2026 Swasthya</span>
+            <span>&copy; Swasthya</span>
             <span className="auth-footer-dot">&middot;</span>
             <span>Hospital Management System</span>
             <span className="auth-footer-links">
               <Link href="/about">About</Link>
-              <span>&middot;</span>
-              <Link href="/security">Security</Link>
-              <span>&middot;</span>
-              <Link href="/help">Help</Link>
             </span>
           </>
         )}

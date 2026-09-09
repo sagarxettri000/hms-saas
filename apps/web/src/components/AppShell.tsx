@@ -144,8 +144,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       setRole('');
       return;
     }
-    const token = localStorage.getItem('accessToken');
-    if (!token) { router.replace('/login'); return; }
+    if (!localStorage.getItem('role')) { router.replace('/login'); return; }
     // Apply whatever identity we already have so the UI is never blank.
     setUserName(localStorage.getItem('userName') || 'User');
     setTenantName(localStorage.getItem('tenantName') || 'Workspace');
@@ -187,13 +186,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [isPublic, pathname]);
 
   function handleLogout() {
-    const refreshToken = localStorage.getItem('refreshToken');
-    if (refreshToken) {
-      api('/auth/logout', {
-        method: 'POST',
-        body: JSON.stringify({ refreshToken }),
-      }).catch(() => {});
-    }
+    api('/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }).catch(() => {});
     localStorage.clear();
     router.replace('/login');
   }

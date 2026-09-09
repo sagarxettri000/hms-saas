@@ -22,7 +22,7 @@ async function bootstrap() {
     origin: process.env.CORS_ORIGIN?.split(",") || ["http://localhost:3000"],
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Tenant-ID", "X-Correlation-ID"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Tenant-ID", "X-Correlation-ID", "X-HMS-CSRF", "X-Requested-With"],
   });
 
   app.use(helmet());

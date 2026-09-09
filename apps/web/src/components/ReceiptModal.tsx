@@ -33,12 +33,10 @@ export default function ReceiptModal({
   const downloadPdf = useCallback(
     async (endpoint: string, defaultName: string) => {
       try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
         const tenantId = typeof window !== 'undefined' ? localStorage.getItem('tenantId') : null;
-        const headers: Record<string, string> = {};
-        if (token) headers.Authorization = `Bearer ${token}`;
+        const headers: Record<string, string> = { 'X-HMS-CSRF': '1' };
         if (tenantId) headers['X-Tenant-ID'] = tenantId;
-        const res = await fetch(`${API_URL}${endpoint}`, { headers });
+        const res = await fetch(`${API_URL}${endpoint}`, { headers, credentials: 'include' });
         if (!res.ok) throw new Error(`Download failed (${res.status})`);
         const blob = await res.blob();
         const filename = res.headers.get('Content-Disposition')?.match(/filename="?(.+?)"?$/)?.[1] || defaultName;

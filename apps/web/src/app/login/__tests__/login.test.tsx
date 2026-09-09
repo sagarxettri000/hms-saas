@@ -49,7 +49,7 @@ describe('LoginPage', () => {
     expect(screen.getByText(/valid email/i)).toBeInTheDocument();
   });
 
-  it('stores tokens and navigates to dashboard on successful login', async () => {
+  it('stores session metadata (not tokens) and navigates to dashboard on successful login', async () => {
     const user = userEvent.setup();
     (api as jest.Mock).mockResolvedValue({
       data: {
@@ -71,7 +71,9 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() => {
-      expect(window.localStorage.getItem('accessToken')).toBe('at');
+      expect(window.localStorage.getItem('accessToken')).toBeNull();
+      expect(window.localStorage.getItem('refreshToken')).toBeNull();
+      expect(window.localStorage.getItem('role')).toBe('HOSPITAL_ADMIN');
       expect(window.localStorage.getItem('tenantId')).toBe('tenant-1');
     });
   });

@@ -44,8 +44,6 @@ export default function PharmacyLoginPage() {
         setError('Only pharmacy staff can sign in here.');
         return;
       }
-      localStorage.setItem('accessToken', res.data.accessToken);
-      localStorage.setItem('refreshToken', res.data.refreshToken);
       localStorage.setItem('role', role);
       localStorage.setItem(
         'userName',

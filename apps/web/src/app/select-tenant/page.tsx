@@ -12,8 +12,8 @@ export default function SelectTenantPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
+    const role = localStorage.getItem('role');
+    if (!role) {
       router.replace('/login');
       return;
     }

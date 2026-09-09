@@ -3,22 +3,22 @@ import { API_URL } from './api';
 function getToken(): { token: string | null; tenantId: string | null } {
   if (typeof window === 'undefined') return { token: null, tenantId: null };
   return {
-    token: window.localStorage.getItem('accessToken'),
+    token: null,
     tenantId: window.localStorage.getItem('tenantId'),
   };
 }
 
 function authHeaders(json = false): Record<string, string> {
-  const { token, tenantId } = getToken();
+  const { tenantId } = getToken();
   const h: Record<string, string> = {};
   if (json) h['Content-Type'] = 'application/json';
-  if (token) h.Authorization = `Bearer ${token}`;
+  h['X-HMS-CSRF'] = '1';
   if (tenantId && tenantId !== '') h['X-Tenant-ID'] = tenantId;
   return h;
 }
 
 async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers: authHeaders(true) });
+  const res = await fetch(`${API_URL}${path}`, { ...init, headers: authHeaders(true), credentials: 'include' });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.message || `Request failed (${res.status})`);
@@ -89,8 +89,8 @@ export function wadoUrl(studyId: string, instanceId: string): string {
 }
 
 export function authBeforeSend(xhr: XMLHttpRequest): void {
-  const { token, tenantId } = getToken();
-  if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+  xhr.withCredentials = true;
+  const { tenantId } = getToken();
   if (tenantId && tenantId !== '') xhr.setRequestHeader('X-Tenant-ID', tenantId);
 }
 
@@ -103,6 +103,7 @@ export const dicomApi = {
     const res = await fetch(`${API_URL}/dicom/upload`, {
       method: 'POST',
       headers: authHeaders(false),
+      credentials: 'include',
       body: form,
     });
     if (!res.ok) {

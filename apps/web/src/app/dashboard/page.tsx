@@ -256,12 +256,11 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
+    const storedRole = localStorage.getItem('role') || '';
+    if (!storedRole) {
       router.replace('/login');
       return;
     }
-    const storedRole = localStorage.getItem('role') || '';
     setUserName(localStorage.getItem('userName') || '');
     setRole(storedRole);
     roleRef.current = storedRole;

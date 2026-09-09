@@ -15,39 +15,28 @@ function isAuthPath(path: string): boolean {
 async function request(path: string, options: RequestInit = {}, retry = true): Promise<any> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'X-HMS-CSRF': '1',
     ...(options.headers as Record<string, string> | undefined),
   };
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
   const tenantId = typeof window !== 'undefined' ? localStorage.getItem('tenantId') : null;
-  if (token) headers.Authorization = `Bearer ${token}`;
   if (tenantId && tenantId !== '') headers['X-Tenant-ID'] = tenantId;
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  const res = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: 'include' });
 
   if (res.status === 401 && retry && typeof window !== 'undefined' && !isAuthPath(path)) {
-    const refreshToken = localStorage.getItem('refreshToken');
-    if (refreshToken) {
-      try {
-        const r = await fetch(`${API_URL}/auth/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken }),
-        });
-        if (r.ok) {
-          const body = await r.json();
-          const root = body.data ?? body;
-          const newToken = root.accessToken || body.accessToken || body.data?.accessToken;
-          if (newToken) {
-            localStorage.setItem('accessToken', newToken);
-            const newRefresh = root.refreshToken || body.refreshToken || body.data?.refreshToken;
-            if (newRefresh) localStorage.setItem('refreshToken', newRefresh);
-            return request(path, options, false);
-          }
-        }
-      } catch {
-        // fall through to logout
+    try {
+      const r = await fetch(`${API_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'X-HMS-CSRF': '1' },
+        body: JSON.stringify({}),
+      });
+      if (r.ok) {
+        return request(path, options, false);
       }
+    } catch {
+      // fall through to logout
     }
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');

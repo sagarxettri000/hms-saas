@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Post,
   Req,
+  Res,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -44,8 +45,14 @@ export class AuthController {
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: "Login with email and password" })
-  login(@Body() dto: LoginDto, @Req() req: any) {
-    return this.authService.login(dto, req.headers["user-agent"], req.ip);
+  async login(@Body() dto: LoginDto, @Req() req: any, @Res({ passthrough: true }) res: any) {
+    const result = await this.authService.login(
+      dto,
+      req.headers["user-agent"],
+      req.ip,
+    );
+    this.setAuthCookies(res, result, dto.rememberMe);
+    return result;
   }
 
   @Post("refresh")
@@ -54,20 +61,32 @@ export class AuthController {
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: "Refresh access token" })
-  refreshToken(@Body() dto: RefreshTokenDto, @Req() req: any) {
-    return this.authService.refreshToken(
-      dto.refreshToken,
+  async refreshToken(@Body() dto: RefreshTokenDto, @Req() req: any, @Res({ passthrough: true }) res: any) {
+    const refreshToken = dto.refreshToken || req.cookies?.hms_refresh;
+    const result = await this.authService.refreshToken(
+      refreshToken,
       req.headers["user-agent"],
       req.ip,
     );
+    res.cookie("hms_access", result.accessToken, {
+      ...this.cookieOptions(false),
+      path: "/",
+      maxAge: 15 * 60 * 1000,
+    });
+    return result;
   }
 
   @Post("logout")
   @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Logout and invalidate session" })
-  logout(@Body() dto: RefreshTokenDto) {
-    return this.authService.logout(dto.refreshToken);
+  async logout(@Body() dto: RefreshTokenDto, @Req() req: any, @Res({ passthrough: true }) res: any) {
+    const refreshToken = dto.refreshToken || req.cookies?.hms_refresh;
+    this.clearAuthCookies(res);
+    if (refreshToken) {
+      return this.authService.logout(refreshToken);
+    }
+    return { success: true };
   }
 
   @Post("forgot-password")
@@ -113,8 +132,10 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Logout from all devices" })
-  logoutAll(@Req() req: any) {
-    return this.authService.logoutAll(req.user.id);
+  async logoutAll(@Req() req: any, @Res({ passthrough: true }) res: any) {
+    const result = await this.authService.logoutAll(req.user.id);
+    this.clearAuthCookies(res);
+    return result;
   }
 
   @Post("2fa/setup")
@@ -141,5 +162,34 @@ export class AuthController {
   @ApiOperation({ summary: "Disable 2FA with a verification code" })
   disableTwoFactor(@Body() dto: DisableTwoFactorDto, @Req() req: any) {
     return this.authService.disableTwoFactor(req.user.id, dto);
+  }
+
+  private cookieOptions(secureOverride?: boolean) {
+    const secure = secureOverride ?? process.env.NODE_ENV === "production";
+    return {
+      httpOnly: true as const,
+      secure,
+      sameSite: (secure ? "none" : "lax") as "none" | "lax",
+    };
+  }
+
+  private setAuthCookies(res: any, result: { accessToken: string; refreshToken: string }, rememberMe?: boolean) {
+    const common = this.cookieOptions();
+    res.cookie("hms_access", result.accessToken, {
+      ...common,
+      path: "/",
+      maxAge: 15 * 60 * 1000,
+    });
+    res.cookie("hms_refresh", result.refreshToken, {
+      ...common,
+      path: "/api/v1/auth",
+      maxAge: (rememberMe ? 30 : 7) * 24 * 60 * 60 * 1000,
+    });
+  }
+
+  private clearAuthCookies(res: any) {
+    const common = this.cookieOptions();
+    res.clearCookie("hms_access", { ...common, path: "/" });
+    res.clearCookie("hms_refresh", { ...common, path: "/api/v1/auth" });
   }
 }

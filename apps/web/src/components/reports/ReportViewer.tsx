@@ -402,17 +402,16 @@ export default function ReportViewer({ reportId }: { reportId: string | null }) 
       setExporting(format);
       setError(null);
       try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
         const tenantId = typeof window !== 'undefined' ? localStorage.getItem('tenantId') : null;
         const qs = new URLSearchParams();
         for (const [k, v] of Object.entries(filters)) {
           if (v !== undefined && v !== null && v !== '') qs.set(k, v);
         }
-        const headers: Record<string, string> = {};
-        if (token) headers.Authorization = `Bearer ${token}`;
+        const headers: Record<string, string> = { 'X-HMS-CSRF': '1' };
         if (tenantId) headers['X-Tenant-ID'] = tenantId;
       const res = await fetch(`${API_URL}/reports/analysis/${reportId}/export/${format}?${qs.toString()}`, {
         headers,
+        credentials: 'include',
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

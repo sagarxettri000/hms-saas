@@ -36,11 +36,11 @@ export function useData<T = any>(path: string, deps: any[] = []) {
 }
 
 export function useAuth() {
-  const [token, setToken] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   useEffect(() => {
-    setToken(localStorage.getItem('accessToken'));
+    setRole(localStorage.getItem('role'));
   }, []);
-  return token;
+  return role;
 }
 
 export function formatDate(value: any): string {

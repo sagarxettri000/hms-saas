@@ -4,6 +4,7 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
 import { PrismaModule } from "./prisma/prisma.module";
 import { CorrelationIdMiddleware } from "./common/middleware/correlation-id.middleware";
+import { cookieParserMiddleware } from "./common/middleware/cookie-parser.middleware";
 import { AuthModule } from "./modules/auth/auth.module";
 import { TenantsModule } from "./modules/tenants/tenants.module";
 import { UsersModule } from "./modules/users/users.module";
@@ -59,6 +60,7 @@ import { PermissionsGuard } from "./common/guards/permissions.guard";
 import { RolesGuard } from "./common/guards/roles.guard";
 import { TenantGuard } from "./common/guards/tenant.guard";
 import { MustChangePasswordGuard } from "./common/guards/must-change-password.guard";
+import { CsrfCookieGuard } from "./common/guards/csrf-cookie.guard";
 import { RlsBootstrap } from "./common/rls/rls.bootstrap";
 import { AppController } from "./app.controller";
 
@@ -147,6 +149,10 @@ import { AppController } from "./app.controller";
     },
     {
       provide: APP_GUARD,
+      useClass: CsrfCookieGuard,
+    },
+    {
+      provide: APP_GUARD,
       useClass: PermissionsGuard,
     },
     {
@@ -163,7 +169,7 @@ import { AppController } from "./app.controller";
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
-      .apply(CorrelationIdMiddleware)
+      .apply(CorrelationIdMiddleware, cookieParserMiddleware)
       .forRoutes({ path: "*", method: RequestMethod.ALL });
   }
 }

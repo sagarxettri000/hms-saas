@@ -47,8 +47,6 @@ export default function LoginPage() {
         method: 'POST',
         body: JSON.stringify({ email, password, rememberMe: true }),
       });
-      localStorage.setItem('accessToken', res.data.accessToken);
-      localStorage.setItem('refreshToken', res.data.refreshToken);
       localStorage.setItem('role', res.data.user.role);
       localStorage.setItem(
         'userName',

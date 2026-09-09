@@ -169,6 +169,28 @@ export class DicomService {
         },
       });
 
+      // Auto-link the study to an existing radiology order by accession number.
+      if (!radiologyOrderId && metadata.study.accessionNumber) {
+        const matched = await this.prisma.radiologyOrder.findFirst({
+          where: { tenantId, accessionNumber: metadata.study.accessionNumber as string },
+          select: { id: true },
+        });
+        if (matched) {
+          await this.prisma.dicomStudy.update({
+            where: { id: study.id },
+            data: { radiologyOrderId: matched.id },
+          });
+          await this.prisma.radiologyOrder.updateMany({
+            where: {
+              id: matched.id,
+              tenantId,
+              status: { in: ["ORDERED", "SCHEDULED", "IN_PROGRESS"] },
+            },
+            data: { status: "IMAGES_UPLOADED" },
+          });
+        }
+      }
+
       ingested.push({
         study: { id: study.id, studyInstanceUid: study.studyInstanceUid },
         series: { id: series.id, seriesInstanceUid: series.seriesInstanceUid },

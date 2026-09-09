@@ -1910,6 +1910,7 @@ model RadiologyOrder {
   admission       Admission?           @relation(fields: [admissionId], references: [id], onDelete: SetNull)
   doctorId        String?
   orderNumber     String
+  accessionNumber String?
   modality        RadiologyModality    @default(XRAY)
   bodyPart        String?
   status          RadiologyOrderStatus @default(ORDERED)
@@ -1934,6 +1935,7 @@ model RadiologyOrder {
 
   @@index([tenantId, patientId])
   @@index([status])
+  @@index([accessionNumber])
   @@map("radiology_orders")
   @@index([encounterId])
   @@index([patientId])

@@ -9,6 +9,7 @@ export interface SampleDicomOptions {
   modality?: string;
   rows?: number;
   columns?: number;
+  accessionNumber?: string;
 }
 
 const defaults = {
@@ -102,6 +103,7 @@ export function buildDicomP10File(opts: SampleDicomOptions = {}): Buffer {
     implicitTag(0x0008, 0x0016, ui(SECONDARY_CAPTURE)),
     implicitTag(0x0008, 0x0018, ui(o.sopInstanceUid!)),
     implicitTag(0x0008, 0x0020, np("20260908")),
+    implicitTag(0x0008, 0x0050, ui(o.accessionNumber || "")),
     implicitTag(0x0008, 0x0060, np(o.modality!)),
     implicitTag(0x0010, 0x0010, np(o.patientName!)),
     implicitTag(0x0010, 0x0020, np(o.patientId!)),

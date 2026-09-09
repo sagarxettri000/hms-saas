@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -22,6 +23,7 @@ import {
 import { PermissionAction } from '@hms/shared';
 import { Hl7Service } from './hl7.service';
 import { Hl7QueueService } from './hl7-queue.service';
+import { Hl7OutboundService, Hl7OutboundConfig } from './hl7-outbound.service';
 import { Hl7ListenerConfig } from './hl7.types';
 
 @ApiTags('HL7')
@@ -33,6 +35,7 @@ export class Hl7Controller {
   constructor(
     private readonly hl7: Hl7Service,
     private readonly hl7Queue: Hl7QueueService,
+    private readonly hl7Outbound: Hl7OutboundService,
   ) {}
 
   @Post('raw')
@@ -158,5 +161,31 @@ export class Hl7Controller {
       queue: stats,
       timestamp: new Date().toISOString(),
     };
+  }
+
+  @Get('outbound/config')
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: 'Get the outbound HL7 (ORU report) relay config' })
+  getOutboundConfig(@Req() req: Request) {
+    const user = req.user as any;
+    return this.hl7Outbound.getConfig(user.tenantId);
+  }
+
+  @Put('outbound/config')
+  @HttpCode(200)
+  @Permissions(PermissionAction.CONFIGURE)
+  @ApiOperation({ summary: 'Set the outbound HL7 (ORU report) relay config' })
+  setOutboundConfig(@Body() config: Hl7OutboundConfig, @Req() req: Request) {
+    const user = req.user as any;
+    return this.hl7Outbound.setConfig(user.tenantId, config);
+  }
+
+  @Post('outbound/radiology-report')
+  @HttpCode(200)
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: 'Send an ORU^R01 report for a radiology order to configured endpoints' })
+  async sendOutboundReport(@Body() body: { orderId: string }, @Req() req: Request) {
+    const user = req.user as any;
+    return this.hl7Outbound.sendRadiologyReport(user.tenantId, body.orderId);
   }
 }

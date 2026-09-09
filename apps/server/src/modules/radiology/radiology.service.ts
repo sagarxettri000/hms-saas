@@ -2,9 +2,11 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
+import { Hl7OutboundService } from "../hl7/hl7-outbound.service";
 import { buildRadiologyReportPdf } from "./radiology-report-pdf";
 
 export interface CreateRadiologyOrderDto {
@@ -42,7 +44,10 @@ const ORDER_FLOW: Record<string, string[]> = {
 
 @Injectable()
 export class RadiologyService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly hl7Outbound?: Hl7OutboundService,
+  ) {}
 
   async create(
     tenantId: string,
@@ -209,6 +214,9 @@ export class RadiologyService {
     await this.logAudit(tenantId, userId, "UPDATE", "RadiologyOrder", id, {
       status: toStatus,
     });
+    if (["REPORTED", "VERIFIED"].includes(toStatus)) {
+      void this.hl7Outbound?.sendRadiologyReportQuiet(tenantId, id);
+    }
     return updated;
   }
 
@@ -266,6 +274,7 @@ export class RadiologyService {
     await this.logAudit(tenantId, userId, "UPDATE", "RadiologyOrder", id, {
       action: "REPORT_WRITTEN",
     });
+    void this.hl7Outbound?.sendRadiologyReportQuiet(tenantId, id);
     return updated;
   }
 

@@ -32,6 +32,7 @@ function makePrisma() {
         studies.push(record);
         return create || update;
       }),
+      update: jest.fn(async ({ data }: any) => ({ id: "study-1", ...data })),
       findFirst: jest.fn().mockResolvedValue(null),
       findMany: jest.fn(),
       count: jest.fn(),
@@ -236,5 +237,45 @@ describe("DICOMweb service", () => {
     const { parts } = await service.retrieveSeriesInstances("t1", "study-uid", "series-uid");
     expect(parts).toHaveLength(1);
     expect(parts[0].data.equals(payload)).toBe(true);
+  });
+
+  it("auto-links an uploaded study to a radiology order by accession number", async () => {
+    prisma.radiologyOrder.findFirst.mockResolvedValue({ id: "order-777" });
+    prisma.radiologyOrder.updateMany.mockResolvedValue({ count: 1 });
+
+    const file = buildDicomP10File({ accessionNumber: "ACC-777" });
+    const boundary = "accBoundary";
+    const body = Buffer.concat([
+      Buffer.from(`--${boundary}\r\nContent-Type: application/dicom\r\nContent-Length: ${file.length}\r\n\r\n`, "utf8"),
+      file,
+      Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"),
+    ]);
+
+    const service = new DicomWebService(
+      prisma as any,
+      storage as any,
+      new DicomService(prisma as any, storage as any),
+    );
+
+    await service.stow("t1", "u1", body, `multipart/related; type="application/dicom"; boundary=${boundary}`);
+
+    expect(prisma.radiologyOrder.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ accessionNumber: "ACC-777" }),
+      }),
+    );
+    expect(prisma.dicomStudy.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ radiologyOrderId: "order-777" }),
+      }),
+    );
+    expect(prisma.radiologyOrder.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "IMAGES_UPLOADED" } }),
+    );
+    expect(prisma.radiologyOrder.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: "order-777" }),
+      }),
+    );
   });
 });

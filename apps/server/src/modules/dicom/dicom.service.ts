@@ -355,7 +355,7 @@ export class DicomService {
     });
   }
 
-  async createNode(tenantId: string, data: { name: string; aeTitle: string; hostname: string; port?: number; isLocal?: boolean }) {
+  async createNode(tenantId: string, data: { name: string; aeTitle: string; hostname: string; port?: number; isLocal?: boolean; tls?: boolean }) {
     if (!data.name?.trim()) throw new BadRequestException("Node name is required");
     if (!data.aeTitle?.trim()) throw new BadRequestException("AE title is required");
     if (!data.hostname?.trim()) throw new BadRequestException("Hostname is required");
@@ -368,6 +368,7 @@ export class DicomService {
         hostname: data.hostname.trim(),
         port: Number(data.port) || 104,
         isLocal: Boolean(data.isLocal),
+        tls: Boolean(data.tls),
       },
     });
   }
@@ -375,7 +376,7 @@ export class DicomService {
   async updateNode(
     tenantId: string,
     nodeId: string,
-    data: { name?: string; aeTitle?: string; hostname?: string; port?: number; isLocal?: boolean },
+    data: { name?: string; aeTitle?: string; hostname?: string; port?: number; isLocal?: boolean; tls?: boolean },
   ) {
     const existing = await this.prisma.dicomNode.findFirst({
       where: { id: nodeId, tenantId },
@@ -391,6 +392,7 @@ export class DicomService {
         ...(data.hostname !== undefined ? { hostname: data.hostname.trim() } : {}),
         ...(data.port !== undefined ? { port: Number(data.port) } : {}),
         ...(data.isLocal !== undefined ? { isLocal: data.isLocal } : {}),
+        ...(data.tls !== undefined ? { tls: data.tls } : {}),
       },
     });
   }

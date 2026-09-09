@@ -1,6 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as crypto from "crypto";
+import * as fs from "fs";
 import * as net from "net";
+import * as tls from "tls";
 import { PrismaService } from "../../../prisma/prisma.service";
 import { StorageService } from "../../storage/storage.service";
 import { DicomService, DicomUploadFile } from "../dicom.service";
@@ -52,7 +54,7 @@ const SUPPORTED_STORE_ABSTRACT_SYNTAX_PREFIX = "1.2.840.10008.5.1.4";
 export class DicomScpService {
   private readonly logger = new Logger(DicomScpService.name);
   private server?: net.Server;
-  private node?: { id: string; aeTitle: string; hostname: string; port: number };
+  private node?: { id: string; aeTitle: string; hostname: string; port: number; tls?: boolean };
   private stats: ScpStats = {
     startedAt: "",
     associations: 0,
@@ -85,11 +87,22 @@ export class DicomScpService {
       failedInstances: 0,
       echoRequests: 0,
     };
-    this.node = { id: node.id, aeTitle: node.aeTitle, hostname: node.hostname, port };
+    this.node = { id: node.id, aeTitle: node.aeTitle, hostname: node.hostname, port, tls: node.tls ?? false };
 
-    const server = net.createServer((socket) => {
+    const socketHandler = (socket: net.Socket) => {
       this.handleSocket(socket, tenantId);
-    });
+    };
+
+    let server;
+    if (node.tls) {
+      const tlsOptions = loadScpTlsOptions(process.env);
+      server = tls.createServer(tlsOptions, socketHandler);
+      this.logger.log(
+        `DICOM TLS SCP listener "${node.aeTitle}" on ${node.hostname || "0.0.0.0"}:${port}`,
+      );
+    } else {
+      server = net.createServer(socketHandler);
+    }
 
     await new Promise<void>((resolve, reject) => {
       server.once("error", (err) => reject(err));
@@ -119,11 +132,15 @@ export class DicomScpService {
     return Boolean(this.server);
   }
 
-  getStats(): ScpStats & { node?: { aeTitle: string; port: number } | undefined } {
+  getStats(): ScpStats & { node?: { aeTitle: string; port: number; tls?: boolean } | undefined } {
     return {
       ...this.stats,
-      ...(this.node ? { node: { aeTitle: this.node.aeTitle, port: this.node.port } } : {}),
+      ...(this.node ? { node: { aeTitle: this.node.aeTitle, port: this.node.port, tls: this.node.tls } } : {}),
     };
+  }
+
+  getNodeId(): string | undefined {
+    return this.node?.id;
   }
 
   private handleSocket(socket: net.Socket, tenantId: string) {
@@ -447,3 +464,31 @@ function attrsToCommand(attrs: Array<{ tag: string; vr: string; value: unknown }
 }
 
 export { unwrapP10 };
+
+/**
+ * Loads SCP TLS credentials from the environment when a local node has TLS
+ * enabled. Values may be PEM file paths (`DICOM_TLS_CERT`/`DICOM_TLS_KEY`/
+ * `DICOM_TLS_CA`). Throws when the DICOM TLS profile is requested but the
+ * required server certificate/key are not configured.
+ */
+export function loadScpTlsOptions(
+  env: NodeJS.ProcessEnv,
+): tls.TlsOptions {
+  const certPath = env.DICOM_TLS_CERT;
+  const keyPath = env.DICOM_TLS_KEY;
+  if (!certPath || !keyPath) {
+    throw new Error(
+      "DICOM node has TLS enabled but DICOM_TLS_CERT/DICOM_TLS_KEY are not configured",
+    );
+  }
+  const opts: tls.TlsOptions = {
+    cert: fs.readFileSync(certPath),
+    key: fs.readFileSync(keyPath),
+  };
+  if (env.DICOM_TLS_CA) {
+    opts.ca = [fs.readFileSync(env.DICOM_TLS_CA)];
+    opts.requestCert = true;
+    opts.rejectUnauthorized = true; // mutual TLS
+  }
+  return opts;
+}

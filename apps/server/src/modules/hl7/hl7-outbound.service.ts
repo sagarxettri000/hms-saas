@@ -1,6 +1,8 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import * as net from "net";
 import { PrismaService } from "../../prisma/prisma.service";
+import { AuditService } from "../audit/audit.service";
+import { buildAtnaXml, ATNA_CODES } from "../../common/audit/atna";
 import { buildRadiologyOruReport, frameMllp, MLLP_EOB } from "./hl7-outbound-builder";
 
 export interface Hl7OutboundConfig {
@@ -29,7 +31,10 @@ export interface OutboundSendResult {
 export class Hl7OutboundService {
   private readonly logger = new Logger(Hl7OutboundService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly audit?: AuditService,
+  ) {}
 
   async getConfig(tenantId: string): Promise<Hl7OutboundConfig> {
     const row = await this.prisma.integrationSetting.findUnique({
@@ -48,7 +53,11 @@ export class Hl7OutboundService {
   }
 
   /** Build + transmit an ORU^R01 report for one radiology order over MLLP. */
-  async sendRadiologyReport(tenantId: string, orderId: string): Promise<OutboundSendResult> {
+  async sendRadiologyReport(
+    tenantId: string,
+    orderId: string,
+    userId?: string,
+  ): Promise<OutboundSendResult> {
     const order = await this.prisma.radiologyOrder.findFirst({
       where: { id: orderId, tenantId },
       include: { patient: { select: { mrn: true, firstName: true, lastName: true, dateOfBirth: true, gender: true } } },
@@ -81,15 +90,60 @@ export class Hl7OutboundService {
     };
     if (!acked) this.logger.warn(`Outbound ORU not acknowledged for order ${order.id}`);
     else this.logger.debug(`Outbound ORU acknowledged for order ${order.id}`);
+    this.recordAtnaExport(tenantId, userId, order, config, acked);
     return result;
   }
 
   /** Fire-and-forget variant for report finalization hooks. */
-  async sendRadiologyReportQuiet(tenantId: string, orderId: string): Promise<void> {
+  async sendRadiologyReportQuiet(tenantId: string, orderId: string, userId?: string): Promise<void> {
     try {
-      await this.sendRadiologyReport(tenantId, orderId);
+      await this.sendRadiologyReport(tenantId, orderId, userId);
     } catch (err) {
       this.logger.warn(`Outbound ORU failed silently: ${(err as Error).message}`);
+    }
+  }
+
+  private recordAtnaExport(
+    tenantId: string,
+    userId: string | undefined,
+    order: { id: string; orderNumber: string; accessionNumber?: string | null },
+    config: Hl7OutboundConfig,
+    acked: boolean,
+  ) {
+    if (!this.audit) return;
+    try {
+      const xml = buildAtnaXml({
+        outcome: acked ? "0" : "12",
+        action: "E",
+        eventIdCode: ATNA_CODES.EVENT_EXPORT,
+        eventIdLabel: "Export",
+        eventTypeCode: ATNA_CODES.EVENT_EXPORT,
+        eventTypeLabel: "HL7 ORU report relayed to RIS/PACS",
+        initiator: {
+          userId: userId || "SYSTEM",
+          name: userId || "Automated system",
+          role: ATNA_CODES.ROLE_PERSON,
+          roleLabel: "User",
+        },
+        participant: {
+          name: `${config.host}:${config.port}`,
+          role: ATNA_CODES.ROLE_DESTINATION,
+          roleLabel: "Destination",
+        },
+        objects: [
+          {
+            id: order.orderNumber,
+            role: ATNA_CODES.ROLE_PROCEDURE,
+            roleLabel: "Procedure",
+            description: `HL7 ORU^R01 ${order.accessionNumber ? `(accession ${order.accessionNumber})` : ""}`.trim(),
+          },
+        ],
+      });
+      void this.audit.log(tenantId, userId, "HL7_MESSAGE", order.id, "EXPORT", {
+        atna: { xml },
+      });
+    } catch (err) {
+      this.logger.warn(`ATNA HL7 outbound audit failed: ${(err as Error).message}`);
     }
   }
 

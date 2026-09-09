@@ -215,7 +215,7 @@ export class RadiologyService {
       status: toStatus,
     });
     if (["REPORTED", "VERIFIED"].includes(toStatus)) {
-      void this.hl7Outbound?.sendRadiologyReportQuiet(tenantId, id);
+      void this.hl7Outbound?.sendRadiologyReportQuiet(tenantId, id, userId);
     }
     return updated;
   }
@@ -274,7 +274,7 @@ export class RadiologyService {
     await this.logAudit(tenantId, userId, "UPDATE", "RadiologyOrder", id, {
       action: "REPORT_WRITTEN",
     });
-    void this.hl7Outbound?.sendRadiologyReportQuiet(tenantId, id);
+    void this.hl7Outbound?.sendRadiologyReportQuiet(tenantId, id, userId);
     return updated;
   }
 

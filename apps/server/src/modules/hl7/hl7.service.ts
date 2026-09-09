@@ -3,12 +3,15 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from "@nestjs/common";
 import * as net from "net";
 import * as tls from "tls";
 import * as fs from "fs";
 import * as path from "path";
 import { PrismaService } from "../../prisma/prisma.service";
+import { AuditService } from "../audit/audit.service";
+import { buildAtnaXml, ATNA_CODES } from "../../common/audit/atna";
 import { buildAckMessage, parseHl7Message, parseHl7Timestamp } from "./hl7.parser";
 import {
   Hl7Action,
@@ -25,7 +28,10 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
   private mllpServer?: net.Server | tls.Server;
   private mllpConfig?: Hl7ListenerConfig;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly audit?: AuditService,
+  ) {}
 
   onModuleInit() {
     // MLLP listeners are opt-in per tenant via IntegrationSetting (provider "hl7").
@@ -170,8 +176,11 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
       actions.push({ type: "ERROR", detail: (err as Error).message });
     }
 
+    const accepted = actions.every((a) => a.type !== "ERROR");
+    this.recordAtnaId(tenantId, parsed, accepted, options.userId);
+
     return {
-      accepted: actions.every((a) => a.type !== "ERROR"),
+      accepted,
       messageType: parsed.messageType,
       eventType: parsed.eventType,
       messageControlId: parsed.messageControlId,
@@ -179,6 +188,51 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
       tenantId,
       actions,
     };
+  }
+
+  // ---- ATNA audit trail for ingested HL7 messages ----
+
+  private recordAtnaId(
+    tenantId: string,
+    parsed: ParsedHl7Message,
+    accepted: boolean,
+    userId?: string,
+  ) {
+    if (!this.audit) return;
+    try {
+      const xml = buildAtnaXml({
+        outcome: accepted ? "0" : "12",
+        action: "C",
+        eventIdCode: ATNA_CODES.EVENT_ORDER,
+        eventIdLabel: "Order Record",
+        eventTypeCode: ATNA_CODES.EVENT_APP_ACTIVITY,
+        eventTypeLabel: `HL7 ${parsed.messageType}^${parsed.eventType} ingested`,
+        initiator: {
+          userId: userId ?? "MLLP",
+          name: userId ?? "MLLP peer",
+          role: ATNA_CODES.ROLE_APPLICATION,
+          roleLabel: "Application",
+        },
+        participant: {
+          name: "HMS",
+          role: ATNA_CODES.ROLE_APPLICATION,
+          roleLabel: "Application",
+        },
+        objects: [
+          {
+            id: parsed.messageControlId,
+            role: ATNA_CODES.ROLE_PROCEDURE,
+            roleLabel: "Procedure",
+            description: `${parsed.messageType}^${parsed.eventType}`,
+          },
+        ],
+      });
+      void this.audit.log(tenantId, userId, "HL7_MESSAGE", parsed.messageControlId, "CREATE", {
+        atna: { xml },
+      });
+    } catch (err) {
+      this.logger.warn(`ATNA HL7 audit failed: ${(err as Error).message}`);
+    }
   }
 
   // ---- ADT ^A01/A04/A05/A08/A31 (register / admit / update patient) ----

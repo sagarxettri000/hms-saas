@@ -20,7 +20,7 @@ interface StudyOption {
   patient?: { firstName: string | null; lastName: string | null; mrn: string | null } | null;
 }
 
-const EMPTY_FORM: NodeForm = { name: '', aeTitle: '', hostname: '', port: 104, isLocal: false };
+const EMPTY_FORM: NodeForm = { name: '', aeTitle: '', hostname: '', port: 104, isLocal: false, tls: false };
 
 export default function DicomConsolePage() {
   const [nodes, setNodes] = useState<DicomNode[]>([]);
@@ -85,6 +85,7 @@ export default function DicomConsolePage() {
       hostname: node.hostname,
       port: node.port,
       isLocal: node.isLocal,
+      tls: node.tls ?? false,
     });
     setShowNodeModal(true);
   };
@@ -354,6 +355,7 @@ export default function DicomConsolePage() {
                         <span className={`badge ${n.isLocal ? 'badge-blue' : 'badge-gray'}`}>
                           {n.isLocal ? 'LOCAL AE' : 'REMOTE'}
                         </span>
+                        {n.tls ? <span className="badge badge-green">TLS</span> : null}
                       </td>
                       <td>{n.lastSeenAt ? formatDateTime(n.lastSeenAt) : <span className="muted">never</span>}</td>
                       <td>
@@ -504,6 +506,10 @@ export default function DicomConsolePage() {
               <label className="field checkbox-row">
                 <input type="checkbox" checked={form.isLocal} onChange={(e) => setForm({ ...form, isLocal: e.target.checked })} />
                 <span>This node runs the HMS imaging listener (local SCP)</span>
+              </label>
+              <label className="field checkbox-row">
+                <input type="checkbox" checked={form.tls ?? false} onChange={(e) => setForm({ ...form, tls: e.target.checked })} />
+                <span>Connect using DICOM TLS (requires DICOM_TLS_CERT / DICOM_TLS_KEY on the server)</span>
               </label>
             </div>
             <div className="form-actions">

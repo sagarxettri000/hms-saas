@@ -2040,6 +2040,7 @@ model DicomNode {
   hostname   String
   port       Int       @default(104)
   isLocal    Boolean   @default(false)
+  tls        Boolean   @default(false)
   lastSeenAt DateTime?
   createdAt  DateTime  @default(now())
 

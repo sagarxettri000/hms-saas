@@ -138,6 +138,7 @@ export interface DicomNode {
   hostname: string;
   port: number;
   isLocal: boolean;
+  tls?: boolean;
   lastSeenAt: string | null;
   createdAt: string;
 }
@@ -194,6 +195,7 @@ export interface NodeForm {
   hostname: string;
   port: number;
   isLocal: boolean;
+  tls?: boolean;
 }
 
 export const dicomNodeApi = {

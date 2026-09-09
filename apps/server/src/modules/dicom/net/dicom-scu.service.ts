@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as net from "net";
+import * as tls from "tls";
 import { NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../../prisma/prisma.service";
 import { StorageService } from "../../storage/storage.service";
@@ -79,7 +80,7 @@ export class DicomScuService {
       });
     }
 
-    const results = await this.store(node.hostname, node.port, node.aeTitle, payloads);
+    const results = await this.store(node.hostname, node.port, node.aeTitle, payloads, node.tls ?? false);
     return results;
   }
 
@@ -88,7 +89,7 @@ export class DicomScuService {
     const node = await this.prisma.dicomNode.findFirst({ where: { id: nodeId, tenantId } });
     if (!node) throw new NotFoundException("DICOM node not found");
     try {
-      const result = await this.echo(node.hostname, node.port, node.aeTitle);
+      const result = await this.echo(node.hostname, node.port, node.aeTitle, node.tls ?? false);
       return { connected: true, ...result };
     } catch (err) {
       return { connected: false, latencyMs: 0, error: (err as Error).message };
@@ -96,13 +97,19 @@ export class DicomScuService {
   }
 
   /** C-ECHO SCU: returns latency and peer status. */
-  async echo(host: string, port: number, calledAe: string): Promise<{ latencyMs: number; status?: number }> {
+  async echo(
+    host: string,
+    port: number,
+    calledAe: string,
+    useTls = false,
+  ): Promise<{ latencyMs: number; status?: number }> {
     const start = Date.now();
     const conn = await this.connect(
       host,
       port,
       calledAe,
       [{ abstractSyntaxUid: "1.2.840.10008.1.1" }],
+      useTls,
     );
     try {
       const status = await this.sendCommandExpectResponse(conn, "1.2.840.10008.1.1", {
@@ -124,13 +131,15 @@ export class DicomScuService {
     port: number,
     calledAe: string,
     instances: Array<{ sopClassUid: string; sopInstanceUid: string; p10: Buffer }>,
+    useTls = false,
   ): Promise<StoreResult[]> {
-    this.logger.log(`C-STORE SCU: ${instances.length} instance(s) -> ${calledAe}@${host}:${port}`);
+    this.logger.log(`C-STORE SCU: ${instances.length} instance(s) -> ${calledAe}@${host}:${port}${useTls ? " (TLS)" : ""}`);
     const conn = await this.connect(
       host,
       port,
       calledAe,
       instances.map((i) => ({ abstractSyntaxUid: i.sopClassUid })),
+      useTls,
     );
     const results: StoreResult[] = [];
 
@@ -193,9 +202,10 @@ export class DicomScuService {
     port: number,
     calledAe: string,
     contexts: Array<{ abstractSyntaxUid: string; transferSyntaxUids?: string[] }>,
+    useTls = false,
   ): Promise<ConnectionState> {
     return new Promise((resolve, reject) => {
-      const socket = net.connect({ host, port });
+      const { socket, readyEvent } = openDicomSocket(host, port, useTls);
       const state: ConnectionState = {
         socket,
         recvBuffer: Buffer.alloc(0),
@@ -222,7 +232,7 @@ export class DicomScuService {
         }
       });
 
-      socket.on("connect", () => {
+      socket.on(readyEvent, () => {
         state.send(buildAssociateRq(calledAe, contexts));
       });
 
@@ -458,3 +468,45 @@ function u32(v: number): Buffer {
 }
 
 const fallbackSopClass = "1.2.840.10008.5.1.4.1.1.7";
+
+/**
+ * TLS connection options for DICOM over TLS (DICOM TLS / mTLS). Peer
+ * verification is off unless a CA bundle is configured via `DICOM_TLS_CA`
+ * (interop fallback); setting `DICOM_TLS_CA` enables mTLS against
+ * hospital-controlled CAs.
+ */
+export function buildTlsConnectOptions(
+  host: string,
+  port: number,
+  env: NodeJS.ProcessEnv = process.env,
+): tls.ConnectionOptions {
+  const options: tls.ConnectionOptions = {
+    host,
+    port,
+    rejectUnauthorized: false,
+  };
+  if (env.DICOM_TLS_CA) {
+    options.ca = env.DICOM_TLS_CA.split(",").map((s) => s.trim()).filter(Boolean);
+    options.rejectUnauthorized = true;
+  }
+  return options;
+}
+
+/**
+ * Opens a raw or TLS DICOM transport socket. Returns the socket and the event
+ * that signals the transport is ready for a DICOM PDU (`connect` for TCP,
+ * `secureConnect` for TLS).
+ */
+export function openDicomSocket(
+  host: string,
+  port: number,
+  useTls: boolean,
+): { socket: net.Socket; readyEvent: "connect" | "secureConnect" } {
+  if (useTls) {
+    return {
+      socket: tls.connect(buildTlsConnectOptions(host, port)) as unknown as net.Socket,
+      readyEvent: "secureConnect",
+    };
+  }
+  return { socket: net.connect({ host, port }), readyEvent: "connect" };
+}

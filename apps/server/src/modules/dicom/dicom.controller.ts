@@ -31,6 +31,8 @@ import { DicomWebService } from "./dicomweb.service";
 import { DicomMwlService } from "./net/dicom-mwl.service";
 import { DicomScpService } from "./net/dicom-scp.service";
 import { DicomScuService } from "./net/dicom-scu.service";
+import { AtnaAuditService } from "./net/atna-audit.service";
+import { ATNA_CODES } from "../../common/audit/atna";
 import { readRawBody } from "./multipart-related";
 
 @ApiTags("DICOM")
@@ -45,6 +47,7 @@ export class DicomController {
     private readonly dicomScp: DicomScpService,
     private readonly dicomScu: DicomScuService,
     private readonly dicomMwl: DicomMwlService,
+    private readonly atna: AtnaAuditService,
   ) {}
 
   @Post("dicom/upload")
@@ -65,15 +68,36 @@ export class DicomController {
   ) {
     const user = req.user as any;
     if (!files?.length) {
+      this.atna.recordImportFailure(
+        user.tenantId,
+        user.id,
+        "Upload rejected: no files received",
+      );
       throw new BadRequestException("No files received");
     }
-    return this.dicomService.upload({
-      tenantId: user.tenantId,
-      userId: user.id,
-      files,
-      patientId,
-      radiologyOrderId,
-    });
+    try {
+      const result = await this.dicomService.upload({
+        tenantId: user.tenantId,
+        userId: user.id,
+        files,
+        patientId,
+        radiologyOrderId,
+      });
+      const ingested = (result as any).ingested ?? [];
+      const studyIds = [...new Set((ingested as any[]).map((i) => i.study?.id).filter(Boolean))] as string[];
+      this.atna.recordImport(user.tenantId, user.id, studyIds, {
+        count: ingested.length,
+        accession: (result as any).accessionNumber ?? undefined,
+      });
+      return result;
+    } catch (err) {
+      this.atna.recordImportFailure(
+        user.tenantId,
+        user.id,
+        (err as Error).message,
+      );
+      throw err;
+    }
   }
 
   @Get("dicom/studies")
@@ -116,6 +140,7 @@ export class DicomController {
       studyId,
       instanceId,
     );
+    this.atna.recordAccess(user.tenantId, user.id, `${studyId}/${instanceId}`);
     res.set({ "Content-Type": contentType });
     res.send(data);
   }
@@ -304,6 +329,7 @@ export class DicomController {
       seriesInstanceUid: seriesUid,
       instanceUid,
     });
+    this.atna.recordAccess(user.tenantId, user.id, `${studyUid}/${seriesUid}/${instanceUid}`);
     res.set({
       "Content-Type": contentType,
       "Content-Disposition": 'inline; filename="instance.dcm"',
@@ -317,6 +343,11 @@ export class DicomController {
   async wadoUri(@Query() query: Record<string, string>, @Req() req: Request, @Res() res: Response) {
     const user = req.user as any;
     const { data, contentType } = await this.dicomWeb.wadoUri(user.tenantId, query);
+    this.atna.recordAccess(
+      user.tenantId,
+      user.id,
+      String(query.objectUID ?? query.uid ?? query.sopInstanceUID ?? query.identifier ?? "wado"),
+    );
     res.set({
       "Content-Type": contentType,
       "Content-Disposition": 'inline; filename="object.dcm"',
@@ -338,11 +369,23 @@ export class DicomController {
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Register a remote DICOM node (PACS/AE)" })
   createNode(
-    @Body() body: { name: string; aeTitle: string; hostname: string; port?: number; isLocal?: boolean },
+    @Body() body: { name: string; aeTitle: string; hostname: string; port?: number; isLocal?: boolean; tls?: boolean },
     @Req() req: Request,
   ) {
     const user = req.user as any;
-    return this.dicomService.createNode(user.tenantId, body);
+    const created = this.dicomService.createNode(user.tenantId, body);
+    this.atna.emit(user.tenantId, user.id, {
+      outcome: "0",
+      action: "C",
+      eventIdCode: "110100",
+      eventIdLabel: "Application Activity",
+      eventTypeLabel: "DICOM node registered",
+      initiator: { userId: user.id, role: "110164", roleLabel: "User" },
+      objects: [
+        { id: body.name || body.aeTitle, role: ATNA_CODES.ROLE_RESOURCE, roleLabel: "Resource" },
+      ],
+    }, "DICOM_NODE", body.name);
+    return created;
   }
 
   @Post("dicom/nodes/:id")
@@ -351,11 +394,23 @@ export class DicomController {
   @ApiOperation({ summary: "Update a DICOM node" })
   updateNode(
     @Param("id") id: string,
-    @Body() body: { name?: string; aeTitle?: string; hostname?: string; port?: number; isLocal?: boolean },
+    @Body() body: { name?: string; aeTitle?: string; hostname?: string; port?: number; isLocal?: boolean; tls?: boolean },
     @Req() req: Request,
   ) {
     const user = req.user as any;
-    return this.dicomService.updateNode(user.tenantId, id, body);
+    const updated = this.dicomService.updateNode(user.tenantId, id, body);
+    this.atna.emit(user.tenantId, user.id, {
+      outcome: "0",
+      action: "U",
+      eventIdCode: "110100",
+      eventIdLabel: "Application Activity",
+      eventTypeLabel: "DICOM node updated",
+      initiator: { userId: user.id, role: "110164", roleLabel: "User" },
+      objects: [
+        { id: id, role: ATNA_CODES.ROLE_RESOURCE, roleLabel: "Resource" },
+      ],
+    }, "DICOM_NODE", id);
+    return updated;
   }
 
   @Delete("dicom/nodes/:id")
@@ -364,7 +419,19 @@ export class DicomController {
   @ApiOperation({ summary: "Remove a DICOM node" })
   deleteNode(@Param("id") id: string, @Req() req: Request) {
     const user = req.user as any;
-    return this.dicomService.deleteNode(user.tenantId, id);
+    const removed = this.dicomService.deleteNode(user.tenantId, id);
+    this.atna.emit(user.tenantId, user.id, {
+      outcome: "0",
+      action: "D",
+      eventIdCode: "110100",
+      eventIdLabel: "Application Activity",
+      eventTypeLabel: "DICOM node removed",
+      initiator: { userId: user.id, role: "110164", roleLabel: "User" },
+      objects: [
+        { id: id, role: ATNA_CODES.ROLE_RESOURCE, roleLabel: "Resource" },
+      ],
+    }, "DICOM_NODE", id);
+    return removed;
   }
 
   @Post("dicom/nodes/:id/echo")
@@ -373,7 +440,11 @@ export class DicomController {
   @ApiOperation({ summary: "Perform a DICOM C-ECHO against a configured node (full association)" })
   async echoNode(@Param("id") id: string, @Req() req: Request) {
     const user = req.user as any;
-    return this.dicomScu.echoNode(user.tenantId, id);
+    const result = await this.dicomScu.echoNode(user.tenantId, id);
+    const node = await this.dicomService.listNodes(user.tenantId);
+    const name = node.find((n) => n.id === id)?.name ?? id;
+    this.atna.recordNodeAuth(user.tenantId, user.id, name, result.connected);
+    return result;
   }
 
   @Post("dicom/nodes/:id/send")
@@ -386,7 +457,14 @@ export class DicomController {
     @Req() req: Request,
   ) {
     const user = req.user as any;
-    return this.dicomScu.sendStudyToNode(user.tenantId, id, body.studyId);
+    const results = this.dicomScu.sendStudyToNode(user.tenantId, id, body.studyId);
+    this.atna.recordExport(
+      user.tenantId,
+      user.id,
+      id,
+      [{ id: body.studyId, role: ATNA_CODES.ROLE_STUDY, roleLabel: "Study" }],
+    );
+    return results;
   }
 
   // ---- DICOM SCP listener (local storage AE) ----
@@ -408,6 +486,7 @@ export class DicomController {
   async listenerStart(@Body() body: { nodeId: string }, @Req() req: Request) {
     const user = req.user as any;
     await this.dicomScp.start(body.nodeId, user.tenantId);
+    this.atna.recordAppLifecycle(user.tenantId, user.id, body.nodeId, true);
     return { running: true, stats: this.dicomScp.getStats() };
   }
 
@@ -415,8 +494,11 @@ export class DicomController {
   @HttpCode(200)
   @Permissions(PermissionAction.EDIT)
   @ApiOperation({ summary: "Stop the DICOM SCP listener" })
-  async listenerStop() {
+  async listenerStop(@Req() req: Request) {
+    const user = req.user as any;
+    const nodeId = this.dicomScp.getNodeId();
     await this.dicomScp.stop();
+    if (nodeId) this.atna.recordAppLifecycle(user.tenantId, user.id, nodeId, false);
     return { running: false };
   }
 
@@ -427,7 +509,7 @@ export class DicomController {
   @ApiOperation({ summary: "Modality worklist: scheduled radiology orders" })
   mwl(@Query() query: Record<string, string>, @Req() req: Request) {
     const user = req.user as any;
-    return this.dicomMwl.list(user.tenantId, {
+    const result = this.dicomMwl.list(user.tenantId, {
       modality: query.modality,
       status: query.status,
       from: query.from,
@@ -437,6 +519,8 @@ export class DicomController {
       limit: query.limit ? Number(query.limit) : undefined,
       offset: query.offset ? Number(query.offset) : undefined,
     });
+    this.atna.recordAccess(user.tenantId, user.id, "ModalityWorklist", "MWL query");
+    return result;
   }
 
   @Post("dicom/mwl/:orderId/performed")

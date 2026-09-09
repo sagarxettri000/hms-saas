@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
+import * as crypto from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 
 const MAX_LIMIT = 100;
@@ -73,7 +74,13 @@ export class DoctorsService {
     });
     if (existing) throw new ConflictException("Email already in use");
 
-    const passwordHash = await bcrypt.hash(dto.password || "Doctor@123", 12);
+    // Never fall back to a well-known default password. When no password is
+    // provided, generate an unguessable temporary one and surface it to the
+    // creating admin so they can share it with the doctor.
+    const password = dto.password || this.generateTemporaryPassword();
+    let temporaryPassword: string | undefined;
+    if (!dto.password) temporaryPassword = password;
+    const passwordHash = await bcrypt.hash(password, 12);
 
     const user = await this.prisma.user.create({
       data: {
@@ -106,7 +113,7 @@ export class DoctorsService {
       },
     });
 
-    return this.prisma.doctorProfile.findUnique({
+    const doctorRecord = await this.prisma.doctorProfile.findUnique({
       where: { id: doctor.id },
       include: {
         user: {
@@ -122,6 +129,9 @@ export class DoctorsService {
         department: true,
       },
     });
+
+    if (!temporaryPassword) return doctorRecord;
+    return { ...doctorRecord, temporaryPassword };
   }
 
   async findAll(
@@ -500,5 +510,16 @@ export class DoctorsService {
     const [hours, mins] = time.split(":").map(Number);
     const total = hours * 60 + mins + minutes;
     return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+  }
+
+  private generateTemporaryPassword(): string {
+    const chars =
+      "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*";
+    const buf = crypto.randomBytes(16);
+    let password = "";
+    for (let i = 0; i < 16; i++) {
+      password += chars[buf[i] % chars.length];
+    }
+    return password;
   }
 }

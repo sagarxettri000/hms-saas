@@ -54,10 +54,16 @@ export class RequestLoggerInterceptor implements NestInterceptor {
     correlationId: string,
     error?: string,
   ) {
+    // Log the path without the query string so sensitive values passed via
+    // the URL (e.g. short-lived SSE stream tokens) never reach the logs.
+    const path =
+      typeof req.path === "string"
+        ? req.path
+        : (req.originalUrl || req.url || "/").split("?")[0];
     const meta: Record<string, any> = {
       correlationId,
       method: req.method,
-      path: req.originalUrl || req.url,
+      path,
       status,
       durationMs,
       ip: req.ip,
@@ -71,7 +77,7 @@ export class RequestLoggerInterceptor implements NestInterceptor {
     if (error) meta.error = error;
 
     const level = status >= 500 ? "error" : status >= 400 ? "warn" : "log";
-    const msg = `${req.method} ${req.originalUrl || req.url} ${status} ${durationMs}ms`;
+    const msg = `${req.method} ${path} ${status} ${durationMs}ms`;
     this.logger[level](msg, meta);
   }
 }

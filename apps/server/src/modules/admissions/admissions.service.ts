@@ -94,8 +94,16 @@ export class AdmissionsService {
     });
 
     if (bed) {
-      await this.prisma.$transaction([
-        this.prisma.bedAllocation.create({
+      // Atomically claim the bed so concurrent admissions cannot double-book.
+      await this.prisma.$transaction(async (tx) => {
+        const claimed = await tx.bed.updateMany({
+          where: { id: bed.id, tenantId, status: { not: "OCCUPIED" } },
+          data: { status: "OCCUPIED" },
+        });
+        if (claimed.count === 0) {
+          throw new ConflictException("Bed is already occupied");
+        }
+        await tx.bedAllocation.create({
           data: {
             tenantId,
             bedId: bed.id,
@@ -103,12 +111,8 @@ export class AdmissionsService {
             status: "OCCUPIED",
             createdBy: userId,
           },
-        }),
-        this.prisma.bed.update({
-          where: { id: bed.id },
-          data: { status: "OCCUPIED" },
-        }),
-      ]);
+        });
+      });
     }
 
     if (dto.encounterId) {

@@ -985,8 +985,10 @@ export class BillingService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.refund.update({
-        where: { id },
+      // Atomically claim the refund while it is still REQUESTED so concurrent
+      // approvals cannot both pass the state check and double-pay.
+      const claimed = await tx.refund.updateMany({
+        where: { id, tenantId, status: "REQUESTED" },
         data: {
           status: "COMPLETED",
           approvedBy: userId,
@@ -995,6 +997,10 @@ export class BillingService {
           refundedAt: new Date(),
         },
       });
+      if (claimed.count === 0) {
+        throw new ConflictException("Refund is not in requested state");
+      }
+      const updated = await tx.refund.findUniqueOrThrow({ where: { id } });
 
       if (refund.invoiceId) {
         const invoice = await tx.invoice.findUnique({

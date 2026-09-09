@@ -138,6 +138,17 @@ export class TenantsService {
             emailVerifiedAt: null,
             mustChangePassword: true,
           },
+          // Never expose passwordHash, twoFactorSecret, or other credential
+          // fields back to the (possibly anonymous) onboarding caller.
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            role: true,
+            status: true,
+            mustChangePassword: true,
+          },
         });
         if (!dto.adminPassword) temporaryPassword = password;
       }
@@ -179,16 +190,21 @@ export class TenantsService {
     return result;
   }
 
-  async findAll(params: {
-    page?: number;
-    limit?: number;
-    search?: string;
-    status?: string;
-  }) {
+  async findAll(
+    params: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      status?: string;
+    },
+    scopeTenantId?: string,
+  ) {
     const page = Number(params.page) || 1;
     const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { deletedAt: null };
+    // Non-super admins only ever see their own hospital in the registry.
+    if (scopeTenantId) where.id = scopeTenantId;
     if (params.status) where.status = params.status;
     if (params.search) {
       where.OR = [

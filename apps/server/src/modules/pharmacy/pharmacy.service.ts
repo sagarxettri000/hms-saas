@@ -485,10 +485,24 @@ export class PharmacyService {
       throw new ConflictException("Insufficient stock for this transaction");
 
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.inventoryItem.update({
-        where: { id },
-        data: { currentStock: newStock },
-      });
+      let updated: any;
+      if (isInflow || adjustmentInflow) {
+        updated = await tx.inventoryItem.update({
+          where: { id },
+          data: { currentStock: { increment: quantity } },
+        });
+      } else {
+        // Atomic claim: only succeeds if the current stock is still large
+        // enough, so concurrent adjustments cannot double-spend stock.
+        const claimed = await tx.inventoryItem.updateMany({
+          where: { id, tenantId, currentStock: { gte: quantity } },
+          data: { currentStock: { decrement: quantity } },
+        });
+        if (claimed.count === 0) {
+          throw new ConflictException("Insufficient stock for this transaction");
+        }
+        updated = await tx.inventoryItem.findUniqueOrThrow({ where: { id } });
+      }
 
       await tx.inventoryTransaction.create({
         data: {

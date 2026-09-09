@@ -5,6 +5,9 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 import * as net from "net";
+import * as tls from "tls";
+import * as fs from "fs";
+import * as path from "path";
 import { PrismaService } from "../../prisma/prisma.service";
 import { buildAckMessage, parseHl7Message, parseHl7Timestamp } from "./hl7.parser";
 import {
@@ -19,7 +22,7 @@ import {
 @Injectable()
 export class Hl7Service implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(Hl7Service.name);
-  private mllpServer?: net.Server;
+  private mllpServer?: net.Server | tls.Server;
   private mllpConfig?: Hl7ListenerConfig;
 
   constructor(private readonly prisma: PrismaService) {}
@@ -43,20 +46,39 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
     const host = config.host || "0.0.0.0";
     const port = Number(config.port) || 2575;
 
-    const server = net.createServer((socket) => {
+    const createHandler = (socket: net.Socket | tls.TLSSocket) => {
       socket.on("data", (chunk: Buffer) => this.handleMllpFrame(tenantId, chunk, socket));
       socket.on("error", (err: Error) => this.logger.warn(`MLLP socket error: ${err.message}`));
-    });
+    };
+
+    const server = config.tls?.enabled
+      ? tls.createServer(
+          {
+            cert: config.tls.certPath
+              ? fs.readFileSync(config.tls.certPath)
+              : path.join(process.cwd(), "certs", "hl7-server.crt"),
+            key: config.tls.keyPath
+              ? fs.readFileSync(config.tls.keyPath)
+              : path.join(process.cwd(), "certs", "hl7-server.key"),
+            ...(config.tls.caPath
+              ? { ca: fs.readFileSync(config.tls.caPath), requestCert: true }
+              : {}),
+            rejectUnauthorized: config.tls.rejectUnauthorized ?? false,
+          },
+          createHandler,
+        )
+      : net.createServer(createHandler);
 
     this.mllpServer = server;
-    this.mllpConfig = { host, port, enabled: true };
+    this.mllpConfig = { host, port, enabled: true, tls: config.tls };
 
     try {
       await new Promise<void>((resolve, reject) => {
         server.once("error", reject);
         server.listen(port, host, () => {
           server.removeListener("error", reject);
-          this.logger.log(`HL7 MLLP listener on ${host}:${port}`);
+          const proto = config.tls?.enabled ? "MLLPS (TLS)" : "MLLP";
+          this.logger.log(`HL7 ${proto} listener on ${host}:${port}`);
           resolve();
         });
       });
@@ -83,7 +105,11 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
     return Boolean(this.mllpServer && this.mllpConfig?.enabled);
   }
 
-  private handleMllpFrame(tenantId: string, chunk: Buffer, socket: net.Socket) {
+  isMllpTlsEnabled(): boolean {
+    return Boolean(this.mllpServer && this.mllpConfig?.tls?.enabled);
+  }
+
+  private handleMllpFrame(tenantId: string, chunk: Buffer, socket: net.Socket | tls.TLSSocket) {
     const SOB = 0x0b;
     const EOB = 0x1c;
     const CR = 0x0d;

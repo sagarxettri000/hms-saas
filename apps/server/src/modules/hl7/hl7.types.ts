@@ -25,14 +25,14 @@ export interface ParsedHl7Message {
 }
 
 export type Hl7ActionType =
-  | "PATIENT_UPSERTED"
-  | "RADIOLOGY_ORDER_CREATED"
-  | "RADIOLOGY_ORDER_SCHEDULED"
-  | "RADIOLOGY_ORDER_REPORTED"
-  | "LAB_ORDER_REPORTED"
-  | "APPOINTMENT_SCHEDULED"
-  | "IGNORED"
-  | "ERROR";
+  | 'PATIENT_UPSERTED'
+  | 'RADIOLOGY_ORDER_CREATED'
+  | 'RADIOLOGY_ORDER_SCHEDULED'
+  | 'RADIOLOGY_ORDER_REPORTED'
+  | 'LAB_ORDER_REPORTED'
+  | 'APPOINTMENT_SCHEDULED'
+  | 'IGNORED'
+  | 'ERROR';
 
 export interface Hl7Action {
   type: Hl7ActionType;
@@ -60,4 +60,35 @@ export interface Hl7ListenerConfig {
   host?: string;
   port?: number;
   enabled?: boolean;
+  tls?: {
+    enabled: boolean;
+    certPath?: string;
+    keyPath?: string;
+    caPath?: string;
+    rejectUnauthorized?: boolean;
+  };
+}
+
+export interface Hl7IngestJobData {
+  raw: string;
+  options: Hl7ProcessOptions;
+  attempt: number;
+  source: 'http' | 'mllp';
+}
+
+export interface Hl7JobResult {
+  accepted: boolean;
+  result: Hl7ProcessResult;
+  messageControlId: string;
+}
+
+export interface Hl7Metrics {
+  totalReceived: number;
+  totalProcessed: number;
+  totalFailed: number;
+  totalRetried: number;
+  totalDeadLettered: number;
+  avgProcessingTimeMs: number;
+  queueDepth: number;
+  byMessageType: Record<string, { received: number; failed: number }>;
 }

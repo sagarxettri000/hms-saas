@@ -28,6 +28,9 @@ import {
 import { PermissionAction } from "@hms/shared";
 import { DicomService, DicomUploadFile, StudySearchParams } from "./dicom.service";
 import { DicomWebService } from "./dicomweb.service";
+import { DicomMwlService } from "./net/dicom-mwl.service";
+import { DicomScpService } from "./net/dicom-scp.service";
+import { DicomScuService } from "./net/dicom-scu.service";
 import { readRawBody } from "./multipart-related";
 
 @ApiTags("DICOM")
@@ -39,6 +42,9 @@ export class DicomController {
   constructor(
     private readonly dicomService: DicomService,
     private readonly dicomWeb: DicomWebService,
+    private readonly dicomScp: DicomScpService,
+    private readonly dicomScu: DicomScuService,
+    private readonly dicomMwl: DicomMwlService,
   ) {}
 
   @Post("dicom/upload")
@@ -364,10 +370,91 @@ export class DicomController {
   @Post("dicom/nodes/:id/echo")
   @HttpCode(200)
   @Permissions(PermissionAction.VIEW)
-  @ApiOperation({ summary: "Check DICOM node reachability (TCP)" })
-  echoNode(@Param("id") id: string, @Req() req: Request) {
+  @ApiOperation({ summary: "Perform a DICOM C-ECHO against a configured node (full association)" })
+  async echoNode(@Param("id") id: string, @Req() req: Request) {
     const user = req.user as any;
-    return this.dicomService.echoNode(user.tenantId, id);
+    return this.dicomScu.echoNode(user.tenantId, id);
+  }
+
+  @Post("dicom/nodes/:id/send")
+  @HttpCode(200)
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Push a study to a remote node via C-STORE (SCU)" })
+  sendStudy(
+    @Param("id") id: string,
+    @Body() body: { studyId: string },
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    return this.dicomScu.sendStudyToNode(user.tenantId, id, body.studyId);
+  }
+
+  // ---- DICOM SCP listener (local storage AE) ----
+
+  @Get("dicom/listener")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "DICOM SCP listener status and stats" })
+  listenerStatus() {
+    return {
+      running: this.dicomScp.isRunning(),
+      stats: this.dicomScp.getStats(),
+    };
+  }
+
+  @Post("dicom/listener/start")
+  @HttpCode(200)
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Start the DICOM SCP listener on a local node" })
+  async listenerStart(@Body() body: { nodeId: string }, @Req() req: Request) {
+    const user = req.user as any;
+    await this.dicomScp.start(body.nodeId, user.tenantId);
+    return { running: true, stats: this.dicomScp.getStats() };
+  }
+
+  @Post("dicom/listener/stop")
+  @HttpCode(200)
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Stop the DICOM SCP listener" })
+  async listenerStop() {
+    await this.dicomScp.stop();
+    return { running: false };
+  }
+
+  // ---- Modality worklist (HL7 ORM/SIU -> MWL) ----
+
+  @Get("dicom/mwl")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Modality worklist: scheduled radiology orders" })
+  mwl(@Query() query: Record<string, string>, @Req() req: Request) {
+    const user = req.user as any;
+    return this.dicomMwl.list(user.tenantId, {
+      modality: query.modality,
+      status: query.status,
+      from: query.from,
+      to: query.to,
+      query: query.query,
+      patientId: query.patientId,
+      limit: query.limit ? Number(query.limit) : undefined,
+      offset: query.offset ? Number(query.offset) : undefined,
+    });
+  }
+
+  @Post("dicom/mwl/:orderId/performed")
+  @HttpCode(200)
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Report a scheduled order as performed (images captured)" })
+  mwlPerformed(@Param("orderId") orderId: string, @Req() req: Request) {
+    const user = req.user as any;
+    return this.dicomMwl.markPerformed(user.tenantId, orderId);
+  }
+
+  @Post("dicom/mwl/:orderId/completed")
+  @HttpCode(200)
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Mark a worklist order as completed (images uploaded)" })
+  mwlCompleted(@Param("orderId") orderId: string, @Req() req: Request) {
+    const user = req.user as any;
+    return this.dicomMwl.markCompleted(user.tenantId, orderId);
   }
 }
 

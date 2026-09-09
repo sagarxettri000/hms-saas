@@ -34,6 +34,7 @@ interface NavItem {
   href: string;
   icon: string;
   roles?: string[];
+  flag?: string;
 }
 
 const SECTIONS: { title: string; items: NavItem[] }[] = [
@@ -50,41 +51,41 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { label: 'Doctors', href: '/doctors', icon: '✚', roles: [...CLINICAL_WIDE_NO_NURSE] },
       { label: 'Encounters', href: '/encounters', icon: '✎', roles: [...CLINICAL, ...ADMIN, ...SUPER, 'DEPARTMENT_HEAD'] },
       { label: 'Emergency', href: '/emergency', icon: '⚠', roles: [...CLINICAL_WIDE] },
-      { label: 'Nursing', href: '/nursing', icon: '♡', roles: ['NURSE', 'OT_NURSE', 'WARD_INCHARGE', 'ICU_STAFF', ...ADMIN, ...SUPER] },
+      { label: 'Nursing', href: '/nursing', icon: '♡', roles: ['NURSE', 'OT_NURSE', 'WARD_INCHARGE', 'ICU_STAFF', ...ADMIN, ...SUPER], flag: 'ipd_nursing' },
       { label: 'Adverse Events', href: '/adverse-events', icon: '✖', roles: [...CLINICAL, ...ADMIN, ...SUPER, ...QUALITY] },
-      { label: 'Theatre (OT)', href: '/ot', icon: '⌁', roles: [...CLINICAL_WIDE, ...OT] },
+      { label: 'Theatre (OT)', href: '/ot', icon: '⌁', roles: [...CLINICAL_WIDE, ...OT], flag: 'ot_management' },
       { label: 'Approvals', href: '/approvals', icon: '✓', roles: ['DEPARTMENT_HEAD', 'WARD_INCHARGE', ...ADMIN, ...SUPER] },
     ],
   },
   {
     title: 'Diagnostics',
     items: [
-      { label: 'Laboratory', href: '/laboratory', icon: '◉', roles: [...LAB, ...CLINICAL_WIDE] },
-      { label: 'Radiology', href: '/radiology', icon: '▤', roles: [...RAD, ...CLINICAL_WIDE] },
-      { label: 'DICOM', href: '/dicom', icon: '◫', roles: [...RAD, ...ADMIN, ...SUPER] },
-      { label: 'Blood Bank', href: '/blood-bank', icon: '✖', roles: [...CLINICAL_NO_DOCTOR, 'BLOOD_BANK_STAFF'] },
+      { label: 'Laboratory', href: '/laboratory', icon: '◉', roles: [...LAB, ...CLINICAL_WIDE], flag: 'laboratory' },
+      { label: 'Radiology', href: '/radiology', icon: '▤', roles: [...RAD, ...CLINICAL_WIDE], flag: 'radiology' },
+      { label: 'DICOM', href: '/dicom', icon: '◫', roles: [...RAD, ...ADMIN, ...SUPER], flag: 'radiology' },
+      { label: 'Blood Bank', href: '/blood-bank', icon: '✖', roles: [...CLINICAL_NO_DOCTOR, 'BLOOD_BANK_STAFF'], flag: 'blood_bank' },
     ],
   },
   {
     title: 'Pharmacy',
     items: [
-      { label: 'Billing', href: '/pharmacy?tab=billing', icon: '₨', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER] },
-      { label: 'Medicines', href: '/pharmacy?tab=medicines', icon: '☤', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER] },
-      { label: 'Bills', href: '/pharmacy?tab=bills', icon: '▧', roles: [...PHARMACY, ...ADMIN, ...SUPER] },
-      { label: 'Stores & Stock', href: '/pharmacy?tab=stores', icon: '▥', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER] },
-      { label: 'Stock Alerts', href: '/pharmacy?tab=alerts', icon: '▲', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER] },
+      { label: 'Billing', href: '/pharmacy?tab=billing', icon: '₨', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER], flag: 'pharmacy' },
+      { label: 'Medicines', href: '/pharmacy?tab=medicines', icon: '☤', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER], flag: 'pharmacy' },
+      { label: 'Bills', href: '/pharmacy?tab=bills', icon: '▧', roles: [...PHARMACY, ...ADMIN, ...SUPER], flag: 'pharmacy' },
+      { label: 'Stores & Stock', href: '/pharmacy?tab=stores', icon: '▥', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER], flag: 'pharmacy' },
+      { label: 'Stock Alerts', href: '/pharmacy?tab=alerts', icon: '▲', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER], flag: 'pharmacy' },
     ],
   },
   {
     title: 'Revenue',
     items: [
-      { label: 'Insurance', href: '/insurance', icon: '◈', roles: [...FINANCE, ...ADMIN, ...SUPER, ...INSURANCE] },
+      { label: 'Insurance', href: '/insurance', icon: '◈', roles: [...FINANCE, ...ADMIN, ...SUPER, ...INSURANCE], flag: 'insurance' },
       { label: 'Memberships', href: '/memberships', icon: '★', roles: [...FINANCE, ...ADMIN, ...SUPER, ...FRONT] },
       { label: 'Doctor Share', href: '/doctor-share', icon: '➗', roles: [...ADMIN, ...SUPER] },
-      { label: 'Accounting', href: '/accounting', icon: '⇄', roles: [...ADMIN, ...SUPER] },
+      { label: 'Accounting', href: '/accounting', icon: '⇄', roles: [...ADMIN, ...SUPER], flag: 'accounting' },
       { label: 'Reports', href: '/reports', icon: '▦', roles: [...ADMIN, ...SUPER] },
       { label: 'Procurement', href: '/procurement', icon: '↦', roles: [...ADMIN, ...SUPER] },
-      { label: 'CRM', href: '/crm', icon: '⊞', roles: [...ADMIN, ...SUPER] },
+      { label: 'CRM', href: '/crm', icon: '⊞', roles: [...ADMIN, ...SUPER], flag: 'crm' },
     ],
   },
   {
@@ -99,7 +100,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     title: 'People',
     items: [
       { label: 'Departments', href: '/departments', icon: '❏', roles: [...ADMIN, ...SUPER] },
-      { label: 'HR & Staff', href: '/hr', icon: '☷', roles: [...ADMIN, ...SUPER] },
+      { label: 'HR & Staff', href: '/hr', icon: '☷', roles: [...ADMIN, ...SUPER], flag: 'hrms' },
     ],
   },
   {
@@ -119,6 +120,10 @@ function canAccess(item: NavItem, role: string): boolean {
   return !item.roles || item.roles.includes(role);
 }
 
+function isFlagDisabled(item: NavItem, flags: Record<string, boolean>): boolean {
+  return !!item.flag && Object.keys(flags).length > 0 && flags[item.flag] === false;
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -126,6 +131,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [userName, setUserName] = useState('');
   const [tenantName, setTenantName] = useState('');
   const [role, setRole] = useState('');
+  const [flags, setFlags] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (isPublic) {
@@ -166,6 +172,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         if (tenantName) {
           localStorage.setItem('tenantName', tenantName);
           setTenantName(tenantName);
+        }
+        if (Array.isArray(u.featureFlags)) {
+          const map: Record<string, boolean> = {};
+          for (const f of u.featureFlags) map[f.key] = f.enabled === true;
+          setFlags(map);
         }
       } catch {
         // Keep the local values already applied above.
@@ -219,7 +230,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {SECTIONS.map((section) => {
-          const items = section.items.filter((item) => canAccess(item, role));
+          const items = section.items.filter((item) => canAccess(item, role) && !isFlagDisabled(item, flags));
           if (items.length === 0) return null;
           return (
             <div key={section.title}>

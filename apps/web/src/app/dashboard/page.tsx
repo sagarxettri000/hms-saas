@@ -253,6 +253,7 @@ export default function DashboardPage() {
   const [radMeta, setRadMeta] = useState<any>(null);
   const [radVerifyRows, setRadVerifyRows] = useState<any[]>([]);
   const [radScheduledRows, setRadScheduledRows] = useState<any[]>([]);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -268,6 +269,10 @@ export default function DashboardPage() {
     setGroup(g);
     load(g);
   }, [pathname]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!group) return;
@@ -1143,22 +1148,26 @@ export default function DashboardPage() {
     ]);
   }
 
-  const greeting = (() => {
-    const h = new Date().getHours();
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    return 'Good evening';
-  })();
+  const greeting = mounted
+    ? (() => {
+        const h = new Date().getHours();
+        if (h < 12) return 'Good morning';
+        if (h < 17) return 'Good afternoon';
+        return 'Good evening';
+      })()
+    : 'Welcome';
 
   const roleLabel = role
     ? role.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase())
     : 'Workspace';
 
-  const todayLabel = new Date().toLocaleDateString(undefined, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  });
+  const todayLabel = mounted
+    ? new Date().toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      })
+    : '';
 
   const finRole = group === 'ADMIN' || group === 'FINANCE' || group === 'RECEPTION';
   const isDoctor = role === 'DOCTOR';
@@ -1257,9 +1266,9 @@ export default function DashboardPage() {
     <>
       <div className="page-header">
         <div>
-          <h1>{greeting}, {userName || 'User'}</h1>
+          <h1>{greeting && `${greeting}, `}{userName || 'User'}</h1>
           <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 13 }}>
-            {roleLabel} dashboard · {todayLabel}
+            {roleLabel} dashboard{mounted ? ` · ${todayLabel}` : ''}
           </p>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={() => load(group)} disabled={loading}>

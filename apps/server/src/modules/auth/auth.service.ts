@@ -493,7 +493,25 @@ export class AuthService {
       throw new UnauthorizedException("User not found");
     }
 
-    return user;
+    const result: any = { ...user, featureFlags: [] };
+
+    if (user.tenantId) {
+      const [catalog, tenantFlags] = await Promise.all([
+        this.prisma.featureFlag.findMany(),
+        this.prisma.tenantFeatureFlag.findMany({
+          where: { tenantId: user.tenantId },
+        }),
+      ]);
+      const effective = new Map(
+        tenantFlags.map((f) => [f.flagId, f.enabled]),
+      );
+      result.featureFlags = catalog.map((f) => ({
+        key: f.key,
+        enabled: effective.has(f.id) ? effective.get(f.id) : f.defaultEnabled,
+      }));
+    }
+
+    return result;
   }
 
   async setupTwoFactor(userId: string, email: string) {

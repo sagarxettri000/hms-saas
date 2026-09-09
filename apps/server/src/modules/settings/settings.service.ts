@@ -62,16 +62,25 @@ export class SettingsService {
     });
     if (!tenant) throw new NotFoundException("Tenant not found");
 
-    const flags = await this.prisma.tenantFeatureFlag.findMany({
-      where: { tenantId },
-      include: { flag: true },
-    });
+    const [flags, tenantFlags] = await Promise.all([
+      this.prisma.featureFlag.findMany({
+        orderBy: { name: "asc" },
+      }),
+      this.prisma.tenantFeatureFlag.findMany({
+        where: { tenantId },
+        include: { flag: true },
+      }),
+    ]);
+
+    const effective = new Map(
+      tenantFlags.map((f) => [f.flag.key, f.enabled]),
+    );
 
     return flags.map((f) => ({
-      key: f.flag.key,
-      name: f.flag.name,
-      description: f.flag.description,
-      enabled: f.enabled,
+      key: f.key,
+      name: f.name,
+      description: f.description,
+      enabled: effective.has(f.key) ? effective.get(f.key) : f.defaultEnabled,
     }));
   }
 

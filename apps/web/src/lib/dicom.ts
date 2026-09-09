@@ -23,7 +23,8 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.message || `Request failed (${res.status})`);
   }
-  return res.json();
+  const body = await res.json();
+  return (body.data ?? body) as T;
 }
 
 export interface DicomStudyListItem {
@@ -122,7 +123,7 @@ export const dicomApi = {
     return json(`/dicom/studies${qs ? `?${qs}` : ''}`);
   },
 
-  getStudy(studyId: string): Promise<{ data: DicomStudyDetail }> {
+  getStudy(studyId: string): Promise<DicomStudyDetail> {
     return json(`/dicom/studies/${studyId}`);
   },
 

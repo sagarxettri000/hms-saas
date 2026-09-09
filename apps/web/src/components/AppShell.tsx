@@ -61,6 +61,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { label: 'Laboratory', href: '/laboratory', icon: '◉', roles: [...LAB, ...CLINICAL_WIDE] },
       { label: 'Radiology', href: '/radiology', icon: '▤', roles: [...RAD, ...CLINICAL_WIDE] },
+      { label: 'DICOM', href: '/dicom', icon: '◫', roles: [...RAD, ...ADMIN, ...SUPER] },
       { label: 'Blood Bank', href: '/blood-bank', icon: '✖', roles: [...CLINICAL_NO_DOCTOR, 'BLOOD_BANK_STAFF'] },
     ],
   },

@@ -130,3 +130,122 @@ export const dicomApi = {
     return json(`/dicom/studies/${studyId}`, { method: 'DELETE' });
   },
 };
+
+export interface DicomNode {
+  id: string;
+  name: string;
+  aeTitle: string;
+  hostname: string;
+  port: number;
+  isLocal: boolean;
+  lastSeenAt: string | null;
+  createdAt: string;
+}
+
+export interface ListenerStats {
+  startedAt: string;
+  associations: number;
+  rejectedAssociations: number;
+  storedInstances: number;
+  failedInstances: number;
+  echoRequests: number;
+  lastError?: string;
+}
+
+export interface ListenerStatus {
+  running: boolean;
+  stats: ListenerStats;
+}
+
+export interface MwlEntry {
+  orderId: string;
+  accessionNumber: string | null;
+  requestedProcedureId: string | null;
+  modality: string | null;
+  status: string;
+  scheduledDateTime: string | null;
+  patient: {
+    id: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    mrn: string | null;
+    hospitalNumber: string | null;
+  };
+  orderNumber: string;
+}
+
+export interface EchoResult {
+  connected: boolean;
+  latencyMs: number;
+  status?: number;
+  error?: string;
+}
+
+export interface StoreResult {
+  sopInstanceUid: string;
+  status: number;
+  ok?: boolean;
+  error?: string;
+}
+
+export interface NodeForm {
+  name: string;
+  aeTitle: string;
+  hostname: string;
+  port: number;
+  isLocal: boolean;
+}
+
+export const dicomNodeApi = {
+  listNodes(): Promise<DicomNode[]> {
+    return json('/dicom/nodes');
+  },
+
+  createNode(body: NodeForm): Promise<DicomNode> {
+    return json('/dicom/nodes', { method: 'POST', body: JSON.stringify(body) });
+  },
+
+  updateNode(id: string, body: Partial<NodeForm>): Promise<DicomNode> {
+    return json(`/dicom/nodes/${id}`, { method: 'POST', body: JSON.stringify(body) });
+  },
+
+  deleteNode(id: string): Promise<{ deleted: boolean }> {
+    return json(`/dicom/nodes/${id}`, { method: 'DELETE' });
+  },
+
+  echoNode(id: string): Promise<EchoResult> {
+    return json(`/dicom/nodes/${id}/echo`, { method: 'POST' });
+  },
+
+  sendStudyToNode(id: string, studyId: string): Promise<StoreResult[]> {
+    return json(`/dicom/nodes/${id}/send`, { method: 'POST', body: JSON.stringify({ studyId }) });
+  },
+
+  listenerStatus(): Promise<ListenerStatus> {
+    return json('/dicom/listener');
+  },
+
+  startListener(nodeId: string): Promise<ListenerStatus> {
+    return json('/dicom/listener/start', { method: 'POST', body: JSON.stringify({ nodeId }) });
+  },
+
+  stopListener(): Promise<{ running: boolean }> {
+    return json('/dicom/listener/stop', { method: 'POST' });
+  },
+
+  listMwl(params: { status?: string; query?: string } = {}): Promise<MwlEntry[]> {
+    const p = new URLSearchParams();
+    if (params.status) p.set('status', params.status);
+    if (params.query) p.set('query', params.query);
+    const qs = p.toString();
+    return json(`/dicom/mwl${qs ? `?${qs}` : ''}`);
+  },
+
+  mwlPerformed(orderId: string): Promise<{ performed: boolean }> {
+    return json(`/dicom/mwl/${orderId}/performed`, { method: 'POST' });
+  },
+
+  mwlCompleted(orderId: string): Promise<{ completed: boolean }> {
+    return json(`/dicom/mwl/${orderId}/completed`, { method: 'POST' });
+  },
+};

@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   Param,
   Post,
@@ -27,6 +28,7 @@ import {
 import { PermissionAction } from "@hms/shared";
 import { DicomService, DicomUploadFile, StudySearchParams } from "./dicom.service";
 import { DicomWebService } from "./dicomweb.service";
+import { readRawBody } from "./multipart-related";
 
 @ApiTags("DICOM")
 @Controller()
@@ -112,14 +114,172 @@ export class DicomController {
     res.send(data);
   }
 
-  // ---- DICOMweb (STOW not exposed here; use /dicom/upload) ----
+  // ---- DICOMweb ----
 
+  // STOW-RS
+  @Post("dicomweb/studies")
+  @HttpCode(200)
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "STOW-RS: store DICOM instances (multipart/related)" })
+  async stow(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const user = req.user as any;
+    const contentType = String(req.headers["content-type"] || "");
+    const body = await readRawBody(req);
+    const result = await this.dicomWeb.stow(user.tenantId, user.id, body, contentType);
+    res.set({ "Content-Type": "application/dicom+json" });
+    return result;
+  }
+
+  @Post("dicomweb/studies/:studyUid")
+  @HttpCode(200)
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "STOW-RS: store instances into a study (multipart/related)" })
+  async stowIntoStudy(
+    @Param("studyUid") studyUid: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const user = req.user as any;
+    const contentType = String(req.headers["content-type"] || "");
+    const body = await readRawBody(req);
+    const result = await this.dicomWeb.stow(user.tenantId, user.id, body, contentType, studyUid);
+    res.set({ "Content-Type": "application/dicom+json" });
+    return result;
+  }
+
+  // QIDO-RS
   @Get("dicomweb/studies")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "QIDO-RS: query studies" })
   qidoStudies(@Query() query: Record<string, string>, @Req() req: Request) {
     const user = req.user as any;
     return this.dicomWeb.qidoStudies(user.tenantId, query);
+  }
+
+  @Get("dicomweb/series")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "QIDO-RS: query series" })
+  qidoSeriesAll(@Query() query: Record<string, string>, @Req() req: Request) {
+    const user = req.user as any;
+    return this.dicomWeb.qidoSeries(user.tenantId, undefined, query);
+  }
+
+  @Get("dicomweb/studies/:studyUid/series")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "QIDO-RS: query series within a study" })
+  qidoSeries(
+    @Param("studyUid") studyUid: string,
+    @Query() query: Record<string, string>,
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    return this.dicomWeb.qidoSeries(user.tenantId, studyUid, query);
+  }
+
+  @Get("dicomweb/instances")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "QIDO-RS: query instances across all studies" })
+  qidoInstances(@Query() query: Record<string, string>, @Req() req: Request) {
+    const user = req.user as any;
+    return this.dicomWeb.qidoInstances(user.tenantId, undefined, undefined, query);
+  }
+
+  @Get("dicomweb/studies/:studyUid/series/:seriesUid/instances")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "QIDO-RS: query instances within a study/series" })
+  async qidoInstancesInStudy(
+    @Param("studyUid") studyUid: string,
+    @Param("seriesUid") seriesUid: string,
+    @Query() query: Record<string, string>,
+    @Headers("accept") accept: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const user = req.user as any;
+    if ((accept || "").includes("multipart/related")) {
+      const { parts } = await this.dicomWeb.retrieveSeriesInstances(
+        user.tenantId,
+        studyUid,
+        seriesUid,
+      );
+      sendMultipart(res, parts);
+      return;
+    }
+    const result = await this.dicomWeb.qidoInstances(user.tenantId, studyUid, seriesUid, query);
+    res.set({ "Content-Type": "application/dicom+json" });
+    res.send(JSON.stringify(result));
+  }
+
+  // WADO-RS metadata
+  @Get("dicomweb/studies/:studyUid/metadata")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "WADO-RS: study metadata (application/dicom+json)" })
+  async metadataStudy(@Param("studyUid") studyUid: string, @Req() req: Request) {
+    const user = req.user as any;
+    return this.dicomWeb.metadataStudy(user.tenantId, studyUid);
+  }
+
+  @Get("dicomweb/series/:seriesUid/metadata")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "WADO-RS: series metadata (application/dicom+json)" })
+  async metadataSeries(@Param("seriesUid") seriesUid: string, @Req() req: Request) {
+    const user = req.user as any;
+    return this.dicomWeb.metadataSeries(user.tenantId, seriesUid);
+  }
+
+  @Get("dicomweb/studies/:studyUid/series/:seriesUid/instances/:instanceUid/metadata")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "WADO-RS: instance metadata (application/dicom+json)" })
+  async metadataInstance(
+    @Param("studyUid") studyUid: string,
+    @Param("seriesUid") seriesUid: string,
+    @Param("instanceUid") instanceUid: string,
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    return this.dicomWeb.metadataInstance(user.tenantId, studyUid, seriesUid, instanceUid);
+  }
+
+  // WADO-RS object/bulk retrieval
+  @Get("dicomweb/studies/:studyUid")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "WADO-RS: retrieve study (multipart) or metadata (JSON)" })
+  async retrieveStudy(
+    @Param("studyUid") studyUid: string,
+    @Headers("accept") accept: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const user = req.user as any;
+    if ((accept || "").includes("multipart/related")) {
+      const { parts } = await this.dicomWeb.retrieveStudy(user.tenantId, studyUid);
+      sendMultipart(res, parts);
+      return;
+    }
+    const result = await this.dicomWeb.metadataStudy(user.tenantId, studyUid);
+    res.set({ "Content-Type": "application/dicom+json" });
+    res.send(JSON.stringify(result));
+  }
+
+  @Get("dicomweb/studies/:studyUid/series/:seriesUid")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "WADO-RS: retrieve series instances (multipart) or metadata (JSON)" })
+  async retrieveSeries(
+    @Param("studyUid") studyUid: string,
+    @Param("seriesUid") seriesUid: string,
+    @Headers("accept") accept: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const user = req.user as any;
+    if ((accept || "").includes("multipart/related")) {
+      const { parts } = await this.dicomWeb.retrieveSeriesInstances(user.tenantId, studyUid, seriesUid);
+      sendMultipart(res, parts);
+      return;
+    }
+    const result = await this.dicomWeb.metadataSeries(user.tenantId, seriesUid);
+    res.set({ "Content-Type": "application/dicom+json" });
+    res.send(JSON.stringify(result));
   }
 
   @Get("dicomweb/studies/:studyUid/series/:seriesUid/instances/:instanceUid")
@@ -209,4 +369,26 @@ export class DicomController {
     const user = req.user as any;
     return this.dicomService.echoNode(user.tenantId, id);
   }
+}
+
+function sendMultipart(
+  res: Response,
+  parts: { data: Buffer; contentType: string }[],
+) {
+  const boundary = `--hms-dicomweb-${Date.now()}`;
+  const chunks: Buffer[] = [];
+  for (const part of parts) {
+    chunks.push(
+      Buffer.from(
+        `\r\n--${boundary}\r\nContent-Type: ${part.contentType}\r\nContent-Length: ${part.data.length}\r\n\r\n`,
+        "utf8",
+      ),
+    );
+    chunks.push(part.data);
+  }
+  chunks.push(Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"));
+  res.set({
+    "Content-Type": `multipart/related; type="application/dicom"; boundary=${boundary}`,
+  });
+  res.send(Buffer.concat(chunks));
 }

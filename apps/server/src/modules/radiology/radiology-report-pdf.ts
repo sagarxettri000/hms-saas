@@ -191,6 +191,9 @@ interface RadiologyReportData {
   report: string;
   imageCount: number;
   generatedBy?: string;
+  signedByName?: string;
+  verifiedByName?: string;
+  approvedByName?: string;
 }
 
 export function buildRadiologyReportPdf(data: RadiologyReportData): Buffer {
@@ -286,8 +289,34 @@ export function buildRadiologyReportPdf(data: RadiologyReportData): Buffer {
   p.gap(4);
   p.text(MARGIN, p.y, `Attached Images: ${data.imageCount}`, 10);
 
+  // Signature block
+  const signatures = [
+    { label: "Signed by", name: data.signedByName, at: data.reportedAt },
+    { label: "Verified by", name: data.verifiedByName, at: data.verifiedAt },
+    { label: "Approved by", name: data.approvedByName, at: data.approvedAt },
+  ].filter((s) => !!s.name);
+  if (signatures.length) {
+    p.gap(20);
+    p.line(MARGIN, p.y, right, p.y);
+    p.gap(12);
+    for (const s of signatures) {
+      if (!s.name) continue;
+      const when = s.at ? dateTimeStr(s.at) : "";
+      p.text(MARGIN, p.y, s.label, 9, "0.4 0.4 0.4");
+      p.text(MARGIN + 75, p.y, s.name, 10);
+      if (when) p.text(right, p.y, when, 9, "0.4 0.4 0.4");
+      p.gap(15);
+    }
+  } else if (data.generatedBy) {
+    p.gap(20);
+    p.line(MARGIN, p.y, right, p.y);
+    p.gap(12);
+    p.text(MARGIN, p.y, "Signed by", 9, "0.4 0.4 0.4");
+    p.text(MARGIN + 75, p.y, data.generatedBy, 10);
+  }
+
   // Footer
-  p.moveTo(60);
+  p.moveTo(66);
   p.line(MARGIN, p.y + 16, right, p.y + 16);
   p.gap(4);
   p.text(MARGIN, p.y, "This is a computer-generated radiology report.", 8, "0.5 0.5 0.5");

@@ -129,6 +129,18 @@ export const dicomApi = {
   deleteStudy(studyId: string): Promise<{ deleted: boolean }> {
     return json(`/dicom/studies/${studyId}`, { method: 'DELETE' });
   },
+
+  associateStudy(studyId: string, orderId: string): Promise<{ studyId: string; radiologyOrderId: string }> {
+    return json(`/dicom/studies/${studyId}/associate`, { method: 'POST', body: JSON.stringify({ orderId }) });
+  },
+
+  unassociateStudy(studyId: string): Promise<{ studyId: string; radiologyOrderId: null }> {
+    return json(`/dicom/studies/${studyId}/unassociate`, { method: 'POST' });
+  },
+
+  createOrderFromStudy(studyId: string): Promise<{ id: string; orderNumber: string }> {
+    return json(`/dicom/studies/${studyId}/orders`, { method: 'POST', body: JSON.stringify({}) });
+  },
 };
 
 export interface DicomNode {

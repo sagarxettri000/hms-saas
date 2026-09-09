@@ -125,6 +125,46 @@ export class DicomController {
     return this.dicomService.deleteStudy(user.tenantId, id);
   }
 
+  @Post("dicom/studies/:studyId/associate")
+  @HttpCode(200)
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Link an orphan DICOM study to a radiology order" })
+  async associateStudy(
+    @Param("studyId") studyId: string,
+    @Body() body: { orderId: string },
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    if (!body.orderId) throw new BadRequestException("orderId is required");
+    return this.dicomService.associateStudy(user.tenantId, studyId, body.orderId, user.id);
+  }
+
+  @Post("dicom/studies/:studyId/unassociate")
+  @HttpCode(200)
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Remove the link between a DICOM study and its radiology order" })
+  async unassociateStudy(@Param("studyId") studyId: string, @Req() req: Request) {
+    const user = req.user as any;
+    return this.dicomService.unassociateStudy(user.tenantId, studyId, user.id);
+  }
+
+  @Post("dicom/studies/:studyId/orders")
+  @HttpCode(201)
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Create a radiology order from an orphan DICOM study" })
+  async createOrderFromStudy(
+    @Param("studyId") studyId: string,
+    @Body() body: { bodyPart?: string; clinicalHistory?: string; referringDoctorId?: string },
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    return this.dicomService.createOrderFromStudy(user.tenantId, studyId, {
+      bodyPart: body.bodyPart,
+      clinicalHistory: body.clinicalHistory,
+      referringDoctorId: body.referringDoctorId,
+    }, user.id);
+  }
+
   @Get("dicom/studies/:studyId/instances/:instanceId/wado")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "WADO-URI-like retrieval of a single DICOM instance" })

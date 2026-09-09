@@ -800,17 +800,21 @@ export default function DashboardPage() {
   }
 
   async function loadRadData() {
-    const [summaryR, verifiedR, recentR, verifyR, scheduledR] = await Promise.all([
+    const [summaryR, verifiedR, recentR, verifyR, scheduledR, tatR, criticalR] = await Promise.all([
       safe(api('/radiology/summary')),
       safe(api('/radiology/orders?limit=1&status=VERIFIED')),
       safe(api('/radiology/orders?limit=8')),
       safe(api('/radiology/orders?limit=6&status=REPORTED')),
       safe(api('/radiology/orders?limit=6&status=SCHEDULED')),
+      safe(api('/radiology/tat-metrics?from=2026-01-01')),
+      safe(api('/radiology/orders?limit=5&isCritical=true')),
     ]);
     const s = summaryOf(summaryR);
     const pendingReports = (s.newOrders ?? 0) + (s.inProgress ?? 0);
     const verifyList = listOf(verifyR);
     const scheduledList = listOf(scheduledR);
+    const tat = tatR?.data ?? tatR ?? {};
+    const criticalList = listOf(criticalR);
 
     setRadMeta({
       newOrders: s.newOrders ?? 0,
@@ -818,6 +822,10 @@ export default function DashboardPage() {
       pendingReports,
       verifyCount: verifyList.length,
       scheduledToday: scheduledList.length,
+      criticalCount: s.criticalCount ?? 0,
+      avgReportHours: tat?.overall?.avgReportHours,
+      avgVerifyHours: tat?.overall?.avgVerifyHours,
+      criticalList,
     });
     setRadVerifyRows(
       verifyList.map((o: any) => ({
@@ -841,6 +849,13 @@ export default function DashboardPage() {
       { label: 'Pending reports', value: pendingReports, tone: pendingReports > 0 ? 'amber' : 'green', icon: '⏳' },
       { label: 'Completed today', value: s.completedToday ?? 0, tone: 'green', icon: '✅' },
       { label: 'Verified', value: countOf(verifiedR), tone: 'purple', icon: '✔' },
+      {
+        label: 'Critical findings',
+        value: s.criticalCount ?? 0,
+        tone: (s.criticalCount ?? 0) > 0 ? 'red' : 'green',
+        icon: '🚨',
+        href: '/radiology',
+      },
     ]);
 
     setFocus({
@@ -1348,6 +1363,36 @@ export default function DashboardPage() {
                     action={<a className="dash-link" href="/dicom">DICOM worklist</a>}
                   >
                     <Leaderboard rows={radScheduledRows} empty="No studies scheduled today." />
+                  </WidgetCard>
+                )}
+                {(radMeta?.criticalCount ?? 0) > 0 && (
+                  <WidgetCard
+                    title="Critical findings"
+                    action={<a className="dash-link" href="/radiology">Review all</a>}
+                  >
+                    <Leaderboard
+                      rows={(radMeta.criticalList || []).map((o: any) => ({
+                        label: personName(o.patient),
+                        sublabel: `${o.orderNumber || o.id} · ${String(o.modality || '—')} · ${String(o.status || '')}`,
+                        value: 'Critical',
+                        tone: 'red',
+                      }))}
+                      empty="No critical findings."
+                    />
+                  </WidgetCard>
+                )}
+                {isRadiologist && radMeta.avgReportHours != null && (
+                  <WidgetCard
+                    title="Turnaround time (30d)"
+                    action={<a className="dash-link" href="/radiology?tab=summary">Details</a>}
+                  >
+                    <Leaderboard
+                      rows={[
+                        { label: 'Avg time to report', sublabel: 'Order placed → report signed', value: `${radMeta.avgReportHours} h`, tone: radMeta.avgReportHours <= 24 ? 'green' : 'amber' },
+                        ...(radMeta.avgVerifyHours != null ? [{ label: 'Avg time to verify', sublabel: 'Reported → verified', value: `${radMeta.avgVerifyHours} h`, tone: 'blue' }] : []),
+                      ]}
+                      empty="No TAT data yet."
+                    />
                   </WidgetCard>
                 )}
               </div>

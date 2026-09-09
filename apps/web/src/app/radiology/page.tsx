@@ -169,6 +169,22 @@ export default function RadiologyPage() {
   const [transitioning, setTransitioning] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
+  // Radiology feature state
+  const [radiologists, setRadiologists] = useState<any[]>([]);
+  const [revisions, setRevisions] = useState<any[]>([]);
+  const [orderReviews, setOrderReviews] = useState<any[]>([]);
+  const [reviewQueue, setReviewQueue] = useState<any[]>([]);
+  const [addingRevision, setAddingRevision] = useState(false);
+  const [addingReview, setAddingReview] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [reviewNote, setReviewNote] = useState('');
+  const [reviewerId, setReviewerId] = useState('');
+  const [revisionReason, setRevisionReason] = useState('');
+  const [linkTarget, setLinkTarget] = useState<DicomStudyListItem | null>(null);
+  const [linkOrderId, setLinkOrderId] = useState('');
+  const [linkOrders, setLinkOrders] = useState<any[]>([]);
+  const [linking, setLinking] = useState(false);
+
   const loadRef = useRef<() => void>(() => {});
 
   const queryKey = useMemo(() => {
@@ -317,6 +333,174 @@ export default function RadiologyPage() {
     setSavingReport(false);
   };
 
+  const fetchRadiologists = useCallback(async () => {
+    try {
+      const res: any = await api('/users?role=RADIOLOGIST&limit=200');
+      const arr = listOf(res);
+      setRadiologists(arr.map((u: any) => ({ id: u.id, name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email, email: u.email })));
+    } catch {
+      setRadiologists([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (canReport) fetchRadiologists();
+  }, [canReport, fetchRadiologists]);
+
+  const loadRevisions = useCallback(async (orderId: string) => {
+    try {
+      const res: any = await api(`/radiology/orders/${orderId}/revisions`);
+      setRevisions(listOf(res));
+    } catch {
+      setRevisions([]);
+    }
+  }, []);
+
+  const loadOrderReviews = useCallback(async (orderId: string) => {
+    try {
+      const res: any = await api(`/radiology/orders/${orderId}/peer-reviews`);
+      setOrderReviews(listOf(res));
+    } catch {
+      setOrderReviews([]);
+    }
+  }, []);
+
+  const loadReviewQueue = useCallback(async () => {
+    try {
+      const res: any = await api('/radiology/peer-reviews');
+      setReviewQueue(listOf(res).filter((r: any) => r.status === 'REQUESTED'));
+    } catch {
+      setReviewQueue([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!detailId) return;
+    loadRevisions(detailId);
+    loadOrderReviews(detailId);
+  }, [detailId, loadRevisions, loadOrderReviews]);
+
+  useEffect(() => {
+    if (activeTab === 'summary') loadReviewQueue();
+  }, [activeTab, loadReviewQueue]);
+
+  const submitRevision = async () => {
+    if (!detailId) return;
+    setAddingRevision(true);
+    try {
+      await api(`/radiology/orders/${detailId}/revisions`, { method: 'POST', body: JSON.stringify({ ...reportFields, reason: revisionReason || 'Addendum' }) });
+      setFlash('Addendum saved');
+      setRevisionReason('');
+      setDetailId(detailId);
+      loadRevisions(detailId);
+    } catch (e) {
+      setFlash(e instanceof Error ? e.message : 'Failed to save addendum');
+    }
+    setAddingRevision(false);
+  };
+
+  const toggleCritical = async (isCritical: boolean) => {
+    if (!detailId) return;
+    try {
+      await api(`/radiology/orders/${detailId}/critical`, { method: 'POST', body: JSON.stringify({ isCritical }) });
+      setFlash(isCritical ? 'Flagged as critical finding' : 'Critical flag cleared');
+      setDetailId(detailId);
+    } catch (e) {
+      setFlash(e instanceof Error ? e.message : 'Flag update failed');
+    }
+  };
+
+  const assignRadiologist = async (id?: string) => {
+    if (!detailId) return;
+    setAssigning(true);
+    try {
+      await api(`/radiology/orders/${detailId}/assign`, { method: 'POST', body: JSON.stringify(id ? { radiologistId: id } : {}) });
+      setFlash('Assignment updated');
+      setDetailId(detailId);
+      loadRef.current();
+    } catch (e) {
+      setFlash(e instanceof Error ? e.message : 'Assignment failed');
+    }
+    setAssigning(false);
+  };
+
+  const submitPeerReview = async () => {
+    if (!detailId || !reviewerId) {
+      setFlash('Select a reviewer first');
+      return;
+    }
+    setAddingReview(true);
+    try {
+      await api(`/radiology/orders/${detailId}/peer-review`, { method: 'POST', body: JSON.stringify({ reviewerId, note: reviewNote || undefined }) });
+      setFlash('Peer review requested');
+      setReviewerId('');
+      setReviewNote('');
+      loadOrderReviews(detailId);
+    } catch (e) {
+      setFlash(e instanceof Error ? e.message : 'Request failed');
+    }
+    setAddingReview(false);
+  };
+
+  const decideReview = async (reviewId: string, status: string, note?: string) => {
+    try {
+      await api(`/radiology/peer-reviews/${reviewId}/decide`, { method: 'POST', body: JSON.stringify({ status, note }) });
+      setFlash(`Review ${status.toLowerCase()}`);
+      if (detailId) loadOrderReviews(detailId);
+      loadReviewQueue();
+    } catch (e) {
+      setFlash(e instanceof Error ? e.message : 'Decision failed');
+    }
+  };
+
+  const openLinkModal = async (study: DicomStudyListItem) => {
+    setLinkTarget(study);
+    setLinkOrderId('');
+    setLinking(false);
+    try {
+      const res: any = await api('/radiology/orders?limit=100');
+      setLinkOrders((Array.isArray(res?.data) ? res.data : res?.data?.data ?? []).filter((o: any) => o.status !== 'CANCELLED'));
+    } catch {
+      setLinkOrders([]);
+    }
+  };
+
+  const confirmLink = async () => {
+    if (!linkTarget || !linkOrderId) return;
+    setLinking(true);
+    try {
+      await dicomApi.associateStudy(linkTarget.id, linkOrderId);
+      setLinkTarget(null);
+      setFlash('Study linked to order');
+      loadStudies();
+    } catch (e) {
+      setFlash(e instanceof Error ? e.message : 'Link failed');
+    }
+    setLinking(false);
+  };
+
+  const createOrderFromStudy = async (study: DicomStudyListItem) => {
+    try {
+      const created: any = await dicomApi.createOrderFromStudy(study.id);
+      setLinkTarget(null);
+      setFlash(`Order ${created.orderNumber} created from study`);
+      loadStudies();
+    } catch (e) {
+      setFlash(e instanceof Error ? e.message : 'Failed to create order');
+    }
+  };
+
+  const unlinkStudy = async (study: DicomStudyListItem) => {
+    if (!window.confirm('Unlink this study from its radiology order?')) return;
+    try {
+      await dicomApi.unassociateStudy(study.id);
+      setFlash('Study unlinked');
+      loadStudies();
+    } catch (e) {
+      setFlash(e instanceof Error ? e.message : 'Unlink failed');
+    }
+  };
+
   useEffect(() => {
     if (!flash) return;
     const t = setTimeout(() => setFlash(null), 4000);
@@ -418,6 +602,8 @@ export default function RadiologyPage() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {detail.isCritical && <span className="badge badge-red" style={{ background: 'var(--danger)', color: '#fff' }}>CRITICAL</span>}
+            {detail.criticalSuggested && !detail.isCritical && <span className="badge badge-yellow" title="The report text contains language that may indicate a critical finding.">Suggested critical</span>}
             {priorityBadge(detail.isEmergency)}
             {statusBadge(detail.status)}
             <button className="btn btn-secondary btn-sm" onClick={() => window.open(`${API_URL}/radiology/orders/${detail.id}/pdf`, '_blank')}>Download PDF</button>
@@ -491,6 +677,142 @@ export default function RadiologyPage() {
         )}
 
         <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ fontWeight: 600 }}>Assignment & Critical Flag</div>
+            {canReport && (
+              <button
+                className="btn btn-sm"
+                style={{ background: detail.isCritical ? 'var(--muted)' : 'var(--danger)', color: '#fff' }}
+                disabled={savingReport}
+                onClick={() => toggleCritical(!detail.isCritical)}
+              >
+                {detail.isCritical ? 'Clear critical flag' : 'Flag as critical'}
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 2 }}>
+            <div>
+              Assigned radiologist:{' '}
+              <span style={{ color: 'var(--text)' }}>
+                {detail.assignedRadiologist
+                  ? [detail.assignedRadiologist.firstName, detail.assignedRadiologist.lastName].filter(Boolean).join(' ')
+                  : 'Unassigned'}
+              </span>
+            </div>
+            <div style={{ color: 'var(--text-muted)' }}>
+              {detail.isCritical
+                ? `Flagged${detail.criticalFlaggedAt ? ` on ${formatDateTime(detail.criticalFlaggedAt)}` : ''}. The referring physician has been notified.`
+                : detail.criticalSuggested
+                  ? 'Keyword scan suggests this report may contain a critical finding — confirm or clear above.'
+                  : 'No critical finding flagged. Keyword scan runs when the report is saved.'}
+            </div>
+          </div>
+          {canReport && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13 }}>Reassign to:</span>
+              <select className="input" style={{ minWidth: 220 }} value="" onChange={(e) => { if (e.target.value) assignRadiologist(e.target.value); }}>
+                <option value="">{assigning ? 'Assigning…' : 'Select radiologist…'}</option>
+                {radiologists.map((r: any) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+              <button className="btn btn-secondary btn-sm" disabled={assigning} onClick={() => assignRadiologist()}>Auto-assign</button>
+            </div>
+          )}
+        </div>
+
+        {detail.dicomStudies && detail.dicomStudies.length > 0 && (
+          <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+            <div style={{ fontWeight: 600, marginBottom: 12 }}>Linked Studies ({detail.dicomStudies.length})</div>
+            <div className="table-wrap">
+              <table className="table">
+                <thead><tr><th>Accession No.</th><th>Modality</th><th>Study Date</th><th>Study UID</th></tr></thead>
+                <tbody>
+                  {detail.dicomStudies.map((st: any) => (
+                    <tr key={st.id}>
+                      <td>{st.accessionNumber || '—'}</td>
+                      <td>{st.modality || '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{st.studyDate ? formatDate(st.studyDate) : '—'}</td>
+                      <td className="mono" style={{ fontSize: 11 }}>{st.studyInstanceUid ? st.studyInstanceUid.slice(0, 40) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+
+        {revisions.length > 0 && (
+          <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+            <div style={{ fontWeight: 600, marginBottom: 12 }}>Revision History</div>
+            <div className="table-wrap">
+              <table className="table">
+                <thead><tr><th>Version</th><th>Reason</th><th>Findings</th><th>Impression</th><th>Report</th></tr></thead>
+                <tbody>
+                  {revisions.map((rev: any) => (
+                    <tr key={rev.id}>
+                      <td>v{rev.version}</td>
+                      <td>{rev.reason || '—'}</td>
+                      <td style={{ fontSize: 12 }}>{rev.findings || '—'}</td>
+                      <td style={{ fontSize: 12 }}>{rev.impression || '—'}</td>
+                      <td style={{ fontSize: 12 }}>{rev.report || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, marginBottom: 12 }}>Peer Review & Second Opinion</div>
+          {canReport && detail.reportedAt && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+              <select className="input" style={{ minWidth: 220 }} value={reviewerId} onChange={(e) => setReviewerId(e.target.value)}>
+                <option value="">Select reviewer…</option>
+                {radiologists.map((r: any) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+              <input className="input" style={{ minWidth: 220, flex: 1 }} placeholder="Note to reviewer (optional)" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} />
+              <button className="btn btn-sm" style={{ background: 'var(--primary)', color: '#fff' }} disabled={addingReview} onClick={submitPeerReview}>
+                {addingReview ? 'Requesting…' : 'Request peer review'}
+              </button>
+            </div>
+          )}
+          {orderReviews.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No peer review requests for this order.</div>
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead><tr><th>Status</th><th>Reviewer</th><th>Requested by</th><th>Requested</th><th>Notes</th><th style={{ width: 1 }}>Actions</th></tr></thead>
+                <tbody>
+                  {orderReviews.map((rev: any) => (
+                    <tr key={rev.id}>
+                      <td><span className={`badge badge-${rev.status === 'APPROVED' ? 'green' : rev.status === 'REJECTED' ? 'red' : rev.status === 'OVERRIDE' ? 'yellow' : 'blue'}`}>{rev.status}</span></td>
+                      <td>{rev.reviewerName || '—'}</td>
+                      <td>{rev.requestedByName || '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{formatDateTime(rev.requestedAt)}</td>
+                      <td style={{ fontSize: 12 }}>{rev.notes || '—'}</td>
+                      <td>
+                        {rev.status === 'REQUESTED' && canReport && (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button className="btn btn-sm btn-ghost" onClick={() => decideReview(rev.id, 'APPROVED')}>Approve</button>
+                            <button className="btn btn-sm btn-ghost" onClick={() => { const n = window.prompt('Rejection note (optional)') || ''; decideReview(rev.id, 'REJECTED', n); }}>Reject</button>
+                            <button className="btn btn-sm btn-ghost" onClick={() => { const n = window.prompt('Override note (optional)') || ''; decideReview(rev.id, 'OVERRIDE', n); }}>Override</button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
           <div style={{ fontWeight: 600, marginBottom: 12 }}>Report</div>
           {canReport ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -508,6 +830,14 @@ export default function RadiologyPage() {
               </div>
               <div>
                 <button className="btn" style={{ background: 'var(--primary)', color: '#fff' }} disabled={savingReport} onClick={submitReport}>{savingReport ? 'Saving…' : 'Save Report'}</button>
+                {detail.reportedAt && (
+                  <button className="btn btn-secondary" style={{ marginLeft: 8 }} disabled={addingRevision} onClick={submitRevision}>
+                    {addingRevision ? 'Saving…' : 'Save as Addendum (v' + ((detail.reportVersion ?? 1) + 1) + ')'}
+                  </button>
+                )}
+                {detail.reportedAt && (
+                  <input className="input" style={{ marginLeft: 8, maxWidth: 260 }} placeholder="Addendum reason (optional)" value={revisionReason} onChange={(e) => setRevisionReason(e.target.value)} />
+                )}
               </div>
             </div>
           ) : (
@@ -575,6 +905,37 @@ export default function RadiologyPage() {
                 </div>
               ))}
             </div>
+            <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>Peer review queue ({reviewQueue.length})</div>
+              {reviewQueue.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No pending peer review requests.</div>
+              ) : (
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead><tr><th>Order</th><th>Patient</th><th>Requested by</th><th>Requested</th><th>Notes</th><th style={{ width: 1 }}>Actions</th></tr></thead>
+                    <tbody>
+                      {reviewQueue.map((rev: any) => (
+                        <tr key={rev.id}>
+                          <td className="mono" style={{ fontSize: 12 }}>{rev.radiologyOrder?.orderNumber || rev.radiologyOrderId}</td>
+                          <td>{rev.radiologyOrder?.patient ? [rev.radiologyOrder.patient.firstName, rev.radiologyOrder.patient.lastName].filter(Boolean).join(' ') : '—'}</td>
+                          <td>{rev.requestedByName || '—'}</td>
+                          <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{formatDateTime(rev.requestedAt)}</td>
+                          <td style={{ fontSize: 12 }}>{rev.notes || '—'}</td>
+                          <td>
+                            {canReport && (
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <button className="btn btn-sm btn-ghost" onClick={() => decideReview(rev.id, 'APPROVED')}>Approve</button>
+                                <button className="btn btn-sm btn-ghost" onClick={() => { const n = window.prompt('Rejection note (optional)') || ''; decideReview(rev.id, 'REJECTED', n); }}>Reject</button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
             <div className="card" style={{ padding: 16 }}>
               <div style={{ fontWeight: 600, marginBottom: 8 }}>About this summary</div>
               <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.9 }}>
@@ -582,6 +943,7 @@ export default function RadiologyPage() {
                 <div>New Orders (Ordered / Scheduled): {summary?.newOrders ?? 0}</div>
                 <div>In Progress (In Progress / Images Uploaded): {summary?.inProgress ?? 0}</div>
                 <div>Reported (Reported / Verified / Approved): {summary?.reported ?? 0}</div>
+                <div>Critical Findings: {summary?.criticalCount ?? 0}</div>
               </div>
             </div>
           </>
@@ -721,6 +1083,32 @@ export default function RadiologyPage() {
                     <td style={{ whiteSpace: 'nowrap' }}>{formatDate(st.studyDate)}</td>
                     <td>
                       <button className="btn btn-sm btn-ghost" onClick={() => setViewStudyId(st.id)}>View</button>
+                      {st.radiologyOrderId ? (
+                        <button
+                          className="btn btn-sm"
+                          style={{ marginLeft: 4, color: 'var(--warning)' }}
+                          onClick={() => unlinkStudy(st)}
+                        >
+                          Unlink
+                        </button>
+                      ) : st.patientId ? (
+                        <>
+                          <button
+                            className="btn btn-sm btn-ghost"
+                            style={{ marginLeft: 4 }}
+                            onClick={() => openLinkModal(st)}
+                          >
+                            Link to order
+                          </button>
+                          <button
+                            className="btn btn-sm btn-ghost"
+                            style={{ marginLeft: 4 }}
+                            onClick={() => createOrderFromStudy(st)}
+                          >
+                            Create order
+                          </button>
+                        </>
+                      ) : null}
                       <button
                         className="btn btn-sm btn-danger"
                         style={{ marginLeft: 4 }}
@@ -760,6 +1148,8 @@ export default function RadiologyPage() {
                 <th>Priority</th>
                 {isStudies && <th>Performed</th>}
                 <th>Scheduled</th>
+                <th>Assignee</th>
+                <th>Critical</th>
                 <th>Status</th>
                 <th style={{ width: 1 }}>Actions</th>
               </tr>
@@ -777,6 +1167,18 @@ export default function RadiologyPage() {
                   <td>{priorityBadge(r.isEmergency)}</td>
                   {isStudies && <td style={{ whiteSpace: 'nowrap' }}>{r.performedAt ? formatDateTime(r.performedAt) : '—'}</td>}
                   <td style={{ whiteSpace: 'nowrap' }}>{r.scheduledAt ? formatDateTime(r.scheduledAt) : '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+                    {r.assignedRadiologist
+                      ? [r.assignedRadiologist.firstName, r.assignedRadiologist.lastName].filter(Boolean).join(' ')
+                      : <span style={{ color: 'var(--text-muted)' }}>Unassigned</span>}
+                  </td>
+                  <td>
+                    {r.isCritical
+                      ? <span className="badge badge-red" style={{ background: 'var(--danger)', color: '#fff' }}>Critical</span>
+                      : r.criticalSuggested
+                        ? <span className="badge badge-yellow">Suggested</span>
+                        : '—'}
+                  </td>
                   <td>{statusBadge(r.status)}</td>
                   <td>
                     <button className="btn btn-sm btn-ghost" onClick={() => setDetailId(r.id)}>View</button>
@@ -889,6 +1291,34 @@ export default function RadiologyPage() {
                 <button type="submit" className="btn" disabled={saving}>{saving ? 'Creating…' : 'Create Imaging Order'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {linkTarget && (
+        <div className="modal-backdrop" onClick={() => setLinkTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">Link study to radiology order</h3>
+              <button className="modal-close" onClick={() => setLinkTarget(null)} aria-label="Close">×</button>
+            </div>
+            <div style={{ padding: 16 }}>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+                {linkTarget.studyDescription || 'Study'} · {linkTarget.accessionNumber || 'no accession'} — choose the matching order.
+              </div>
+              <select className="input" style={{ width: '100%', marginBottom: 12 }} value={linkOrderId} onChange={(e) => setLinkOrderId(e.target.value)}>
+                <option value="">Select radiology order…</option>
+                {linkOrders.map((o: any) => (
+                  <option key={o.id} value={o.id}>
+                    {o.orderNumber} · {[o.patient?.firstName, o.patient?.lastName].filter(Boolean).join(' ') || '—'} · {o.modality}
+                  </option>
+                ))}
+              </select>
+              <div className="form-actions">
+                <button className="btn btn-secondary" onClick={() => setLinkTarget(null)}>Cancel</button>
+                <button className="btn" disabled={!linkOrderId || linking} onClick={confirmLink}>{linking ? 'Linking…' : 'Link study'}</button>
+              </div>
+            </div>
           </div>
         </div>
       )}

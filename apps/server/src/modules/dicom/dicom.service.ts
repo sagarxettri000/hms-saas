@@ -299,6 +299,156 @@ export class DicomService {
     return study;
   }
 
+  async associateStudy(tenantId: string, studyId: string, orderId: string, userId?: string) {
+    const study = await this.prisma.dicomStudy.findFirst({
+      where: { id: studyId, tenantId },
+      select: { id: true, radiologyOrderId: true },
+    });
+    if (!study) throw new NotFoundException("DICOM study not found");
+
+    const order = await this.prisma.radiologyOrder.findFirst({
+      where: { id: orderId, tenantId },
+      select: { id: true, status: true },
+    });
+    if (!order) throw new NotFoundException("Radiology order not found");
+
+    await this.prisma.dicomStudy.update({
+      where: { id: studyId },
+      data: { radiologyOrderId: order.id },
+    });
+    await this.prisma.radiologyOrder.updateMany({
+      where: { id: order.id, tenantId, status: { in: ["ORDERED", "SCHEDULED", "IN_PROGRESS"] } },
+      data: { status: "IMAGES_UPLOADED" },
+    });
+
+    if (userId) {
+      await this.prisma.auditLog.create({
+        data: {
+          tenantId,
+          userId,
+          entity: "DicomStudy",
+          entityId: studyId,
+          action: "UPDATE" as any,
+          metadata: { action: "STUDY_ASSOCIATED", radiologyOrderId: order.id },
+        },
+      }).catch(() => {});
+    }
+
+    return { studyId: study.id, radiologyOrderId: order.id };
+  }
+
+  async unassociateStudy(tenantId: string, studyId: string, userId?: string) {
+    const study = await this.prisma.dicomStudy.findFirst({
+      where: { id: studyId, tenantId },
+      select: { id: true, radiologyOrderId: true },
+    });
+    if (!study) throw new NotFoundException("DICOM study not found");
+
+    await this.prisma.dicomStudy.update({
+      where: { id: studyId },
+      data: { radiologyOrderId: null },
+    });
+
+    if (userId) {
+      await this.prisma.auditLog.create({
+        data: {
+          tenantId,
+          userId,
+          entity: "DicomStudy",
+          entityId: studyId,
+          action: "UPDATE" as any,
+          metadata: { action: "STUDY_UNASSOCIATED" },
+        },
+      }).catch(() => {});
+    }
+
+    return { studyId: study.id, radiologyOrderId: null };
+  }
+
+  async createOrderFromStudy(
+    tenantId: string,
+    studyId: string,
+    dto: { bodyPart?: string; clinicalHistory?: string; referringDoctorId?: string },
+    userId?: string,
+  ) {
+    const study = await this.prisma.dicomStudy.findFirst({
+      where: { id: studyId, tenantId },
+      select: {
+        id: true,
+        patientId: true,
+        accessionNumber: true,
+        modality: true,
+        bodyPart: true,
+        radiologyOrderId: true,
+      },
+    });
+    if (!study) throw new NotFoundException("DICOM study not found");
+    if (!study.patientId) {
+      throw new BadRequestException(
+        "Cannot create an order for a study without a linked patient",
+      );
+    }
+    if (study.radiologyOrderId) {
+      throw new BadRequestException("This study is already linked to a radiology order");
+    }
+
+    const modalityMap: Record<string, string> = {
+      CT: "CT",
+      MR: "MRI",
+      US: "ULTRASOUND",
+      DX: "XRAY",
+      CR: "XRAY",
+      MG: "XRAY",
+      XA: "XRAY",
+      RF: "XRAY",
+      OT: "OTHERS",
+      ECG: "ECG",
+    };
+    const modality = (modalityMap[study.modality ?? "OT"] ?? "OTHERS") as any;
+
+    const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const latest = await this.prisma.radiologyOrder.findFirst({
+      where: { tenantId, orderNumber: { startsWith: `RAD-${ymd}` } },
+      orderBy: { createdAt: "desc" },
+      select: { orderNumber: true },
+    });
+    const seq = latest ? parseInt(latest.orderNumber.split("-").pop() ?? "0", 10) + 1 : 1;
+    const orderNumber = `RAD-${ymd}-${String(seq).padStart(4, "0")}`;
+
+    const order = await this.prisma.radiologyOrder.create({
+      data: {
+        tenantId,
+        patientId: study.patientId,
+        doctorId: dto.referringDoctorId,
+        orderNumber,
+        accessionNumber: study.accessionNumber ?? undefined,
+        modality,
+        bodyPart: dto.bodyPart ?? study.bodyPart ?? undefined,
+        clinicalHistory: dto.clinicalHistory,
+      },
+    });
+
+    await this.prisma.dicomStudy.update({
+      where: { id: study.id },
+      data: { radiologyOrderId: order.id },
+    });
+
+    if (userId) {
+      await this.prisma.auditLog.create({
+        data: {
+          tenantId,
+          userId,
+          entity: "RadiologyOrder",
+          entityId: order.id,
+          action: "CREATE" as any,
+          metadata: { source: "DICOM_STUDY", studyId: study.id },
+        },
+      }).catch(() => {});
+    }
+
+    return order;
+  }
+
   async findInstance(tenantId: string, studyId: string, instanceId: string) {
     const instance = await this.prisma.dicomInstance.findFirst({
       where: {

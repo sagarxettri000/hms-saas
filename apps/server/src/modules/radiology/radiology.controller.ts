@@ -127,6 +127,154 @@ export class RadiologyController {
     );
   }
 
+  @Post("orders/:id/revisions")
+  @Permissions(PermissionAction.EDIT)
+  @Roles(
+    UserRole.RADIOLOGIST,
+    UserRole.HOSPITAL_ADMIN,
+    UserRole.HOSPITAL_OWNER,
+    UserRole.PLATFORM_SUPER_ADMIN,
+    UserRole.IT_ADMIN,
+  )
+  @ApiOperation({ summary: "Add a report addendum/revision" })
+  addRevision(
+    @Param("id") id: string,
+    @Body() dto: { findings?: string; impression?: string; report?: string; reason?: string },
+    @Req() req: any,
+  ) {
+    return this.radiologyService.addRevision(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user.id,
+      req.user.role,
+    );
+  }
+
+  @Get("orders/:id/revisions")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List report revisions for an order" })
+  listRevisions(@Param("id") id: string, @Req() req: any) {
+    return this.radiologyService.listRevisions(req.user.tenantId, id);
+  }
+
+  @Post("orders/:id/critical")
+  @Permissions(PermissionAction.EDIT)
+  @Roles(
+    UserRole.RADIOLOGIST,
+    UserRole.HOSPITAL_ADMIN,
+    UserRole.HOSPITAL_OWNER,
+    UserRole.PLATFORM_SUPER_ADMIN,
+    UserRole.IT_ADMIN,
+  )
+  @ApiOperation({ summary: "Flag or clear a critical finding" })
+  setCriticalFlag(
+    @Param("id") id: string,
+    @Body() dto: { isCritical: boolean; note?: string },
+    @Req() req: any,
+  ) {
+    return this.radiologyService.setCriticalFlag(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user.id,
+      req.user.role,
+    );
+  }
+
+  @Post("orders/:id/assign")
+  @Permissions(PermissionAction.EDIT)
+  @Roles(
+    UserRole.RADIOLOGIST,
+    UserRole.HOSPITAL_ADMIN,
+    UserRole.HOSPITAL_OWNER,
+    UserRole.PLATFORM_SUPER_ADMIN,
+    UserRole.IT_ADMIN,
+    UserRole.RADIOLOGY_TECHNICIAN,
+  )
+  @ApiOperation({ summary: "Assign or auto-assign a radiologist to an order" })
+  assignRadiologist(
+    @Param("id") id: string,
+    @Body() dto: { radiologistId?: string },
+    @Req() req: any,
+  ) {
+    return this.radiologyService.assignRadiologist(
+      req.user.tenantId,
+      id,
+      dto.radiologistId,
+      req.user.id,
+    );
+  }
+
+  @Get("tat-metrics")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Radiologist turnaround-time metrics" })
+  getTatMetrics(@Query() query: { from?: string; to?: string }, @Req() req: any) {
+    return this.radiologyService.tatMetrics(req.user.tenantId, query);
+  }
+
+  @Post("orders/:id/peer-review")
+  @Permissions(PermissionAction.EDIT)
+  @Roles(
+    UserRole.RADIOLOGIST,
+    UserRole.HOSPITAL_ADMIN,
+    UserRole.HOSPITAL_OWNER,
+    UserRole.PLATFORM_SUPER_ADMIN,
+    UserRole.IT_ADMIN,
+  )
+  @ApiOperation({ summary: "Request a peer review / second opinion" })
+  requestPeerReview(
+    @Param("id") id: string,
+    @Body() dto: { reviewerId: string; note?: string },
+    @Req() req: any,
+  ) {
+    return this.radiologyService.requestPeerReview(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user.id,
+      req.user.role,
+    );
+  }
+
+  @Get("orders/:id/peer-reviews")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List peer reviews for an order" })
+  listOrderPeerReviews(@Param("id") id: string, @Req() req: any) {
+    return this.radiologyService.listPeerReviews(req.user.tenantId, id);
+  }
+
+  @Get("peer-reviews")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List pending peer reviews" })
+  listPeerReviews(@Req() req: any) {
+    return this.radiologyService.listPeerReviews(req.user.tenantId);
+  }
+
+  @Post("peer-reviews/:id/decide")
+  @Permissions(PermissionAction.EDIT)
+  @Roles(
+    UserRole.RADIOLOGIST,
+    UserRole.HOSPITAL_ADMIN,
+    UserRole.HOSPITAL_OWNER,
+    UserRole.PLATFORM_SUPER_ADMIN,
+    UserRole.IT_ADMIN,
+  )
+  @ApiOperation({ summary: "Decide a peer review (approve/reject/override)" })
+  decidePeerReview(
+    @Param("id") id: string,
+    @Body() dto: { status: "APPROVED" | "REJECTED" | "OVERRIDE"; note?: string },
+    @Req() req: any,
+  ) {
+    return this.radiologyService.decidePeerReview(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user.id,
+      req.user.role,
+    );
+  }
+
   @Get("orders/:id/pdf")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Download radiology report PDF" })

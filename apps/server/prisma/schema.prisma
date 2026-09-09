@@ -627,6 +627,8 @@ model Tenant {
   integrationSettings     IntegrationSetting[]
   labOrders               LabOrder[]
   radiologyOrders         RadiologyOrder[]
+  radiologyReportRevisions RadiologyReportRevision[]
+  radiologyPeerReviews     RadiologyPeerReview[]
   otCases                 OTCase[]
   emergencyCases          EmergencyCase[]
   bloodDonors             BloodDonor[]
@@ -1918,6 +1920,7 @@ model RadiologyOrder {
   scheduledAt     DateTime?
   performedAt     DateTime?
   reportedAt      DateTime?
+  reportedBy      String?
   verifiedAt      DateTime?
   approvedAt      DateTime?
   verifiedBy      String?
@@ -1927,15 +1930,25 @@ model RadiologyOrder {
   impression      String?
   report          String?
   isEmergency     Boolean              @default(false)
+  assignedRadiologistId String?
+  reportVersion   Int                  @default(1)
+  isCritical      Boolean              @default(false)
+  criticalSuggested Boolean            @default(false)
+  criticalFlaggedBy String?
+  criticalFlaggedAt DateTime?
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
   images RadiologyImage[]
   dicomStudies DicomStudy[]
+  revisions RadiologyReportRevision[]
+  peerReviews RadiologyPeerReview[]
 
   @@index([tenantId, patientId])
   @@index([status])
   @@index([accessionNumber])
+  @@index([assignedRadiologistId])
+  @@index([isCritical])
   @@map("radiology_orders")
   @@index([encounterId])
   @@index([patientId])
@@ -1957,6 +1970,54 @@ model RadiologyImage {
 
   @@index([radiologyOrderId])
   @@map("radiology_images")
+}
+
+model RadiologyReportRevision {
+  id               String         @id @default(cuid())
+  tenantId         String
+  tenant           Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  radiologyOrderId String
+  radiologyOrder   RadiologyOrder @relation(fields: [radiologyOrderId], references: [id], onDelete: Cascade)
+  version          Int
+  findings         String?
+  impression       String?
+  report           String?
+  reason           String?
+  authoredBy       String?
+  createdAt        DateTime       @default(now())
+
+  @@unique([radiologyOrderId, version])
+  @@index([tenantId])
+  @@map("radiology_report_revisions")
+}
+
+enum RadiologyPeerReviewStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  OVERRIDE
+}
+
+model RadiologyPeerReview {
+  id               String                    @id @default(cuid())
+  tenantId         String
+  tenant           Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  radiologyOrderId String
+  radiologyOrder   RadiologyOrder            @relation(fields: [radiologyOrderId], references: [id], onDelete: Cascade)
+  requestedBy      String?
+  requestedAt      DateTime                  @default(now())
+  reviewerId       String?
+  status           RadiologyPeerReviewStatus @default(REQUESTED)
+  notes            String?
+  decidedBy        String?
+  decidedAt        DateTime?
+  createdAt        DateTime                  @default(now())
+
+  @@index([tenantId])
+  @@index([radiologyOrderId])
+  @@index([reviewerId, status])
+  @@index([status])
+  @@map("radiology_peer_reviews")
 }
 
 model DicomStudy {

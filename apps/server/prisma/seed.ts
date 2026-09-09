@@ -46,6 +46,9 @@ async function main() {
   // Create staff (nurses, receptionists, etc.)
   await seedStaff(tenant.id, departments);
 
+  // Create the demo radiologist login (role RADIOLOGIST)
+  await seedRadiologist(tenant.id, departments);
+
   // Create wards, rooms, beds
   await seedBeds(tenant.id, departments);
 
@@ -79,6 +82,7 @@ async function main() {
   console.log(`  Platform Super Admin: superadmin@nbmaitri.com / SuperAdmin@123`);
   console.log(`  Hospital Admin: admin@nbmaitri.com / Admin@123`);
   console.log(`  Doctor: doctor@nbmaitri.com / Doctor@123`);
+  console.log(`  Radiologist: radiologist@nbmaitri.com / Radiologist@123`);
   console.log('----------------------------------------');
 }
 
@@ -576,6 +580,72 @@ async function seedDoctors(tenantId: string, departments: Record<string, string>
 
   console.log(`  ✓ ${doctorData.length} doctors seeded`);
   return doctors;
+}
+
+async function seedRadiologist(tenantId: string, departments: Record<string, string>) {
+  const email = 'radiologist@nbmaitri.com';
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    console.log('  ✓ demo radiologist already present');
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash('Radiologist@123', 12);
+  const user = await prisma.user.create({
+    data: {
+      tenantId,
+      email,
+      passwordHash,
+      firstName: 'Rajan',
+      lastName: 'Shrestha',
+      role: 'RADIOLOGIST',
+      status: 'ACTIVE',
+      emailVerifiedAt: new Date(),
+      mustChangePassword: false,
+      staffProfile: {
+        create: {
+          tenantId,
+          employeeCode: 'RAD-002',
+          designation: 'RADIOLOGIST',
+          employmentStatus: 'ACTIVE',
+          departmentId: departments['Radiology'],
+          joiningDate: new Date('2023-04-01'),
+        },
+      },
+      doctorProfile: {
+        create: {
+          tenantId,
+          departmentId: departments['Radiology'],
+          specialization: 'Diagnostic Radiology',
+          qualification: 'MD (Radiology)',
+          licenseNumber: 'NMC-9001',
+          consultationFee: 600,
+          experienceYears: 12,
+        },
+      },
+    },
+    include: { doctorProfile: true },
+  });
+
+  const profile = user.doctorProfile;
+  if (profile) {
+    for (let day = 0; day < 6; day++) {
+      await prisma.doctorSchedule.create({
+        data: {
+          tenantId,
+          doctorId: profile.id,
+          dayOfWeek: day,
+          startTime: '09:00',
+          endTime: '17:00',
+          slotDuration: 15,
+          breakStart: '13:00',
+          breakEnd: '14:00',
+        },
+      });
+    }
+  }
+
+  console.log('  ✓ demo radiologist seeded (radiologist@nbmaitri.com / Radiologist@123)');
 }
 
 async function seedStaff(tenantId: string, departments: Record<string, string>) {

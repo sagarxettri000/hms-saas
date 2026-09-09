@@ -250,6 +250,9 @@ export default function DashboardPage() {
   const [clinic, setClinic] = useState<any>(null);
   const [todayAppts, setTodayAppts] = useState<any[]>([]);
   const [nurseData, setNurseData] = useState<any>(null);
+  const [radMeta, setRadMeta] = useState<any>(null);
+  const [radVerifyRows, setRadVerifyRows] = useState<any[]>([]);
+  const [radScheduledRows, setRadScheduledRows] = useState<any[]>([]);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -797,13 +800,41 @@ export default function DashboardPage() {
   }
 
   async function loadRadData() {
-    const [summaryR, verifiedR, recentR] = await Promise.all([
+    const [summaryR, verifiedR, recentR, verifyR, scheduledR] = await Promise.all([
       safe(api('/radiology/summary')),
       safe(api('/radiology/orders?limit=1&status=VERIFIED')),
       safe(api('/radiology/orders?limit=8')),
+      safe(api('/radiology/orders?limit=6&status=REPORTED')),
+      safe(api('/radiology/orders?limit=6&status=SCHEDULED')),
     ]);
     const s = summaryOf(summaryR);
     const pendingReports = (s.newOrders ?? 0) + (s.inProgress ?? 0);
+    const verifyList = listOf(verifyR);
+    const scheduledList = listOf(scheduledR);
+
+    setRadMeta({
+      newOrders: s.newOrders ?? 0,
+      inProgress: s.inProgress ?? 0,
+      pendingReports,
+      verifyCount: verifyList.length,
+      scheduledToday: scheduledList.length,
+    });
+    setRadVerifyRows(
+      verifyList.map((o: any) => ({
+        label: personName(o.patient),
+        sublabel: `${o.orderNumber || o.id} · ${String(o.modality || '—')}`,
+        value: 'Verify',
+        tone: 'green',
+      })),
+    );
+    setRadScheduledRows(
+      scheduledList.map((o: any) => ({
+        label: personName(o.patient),
+        sublabel: `${o.orderNumber || o.id} · ${String(o.modality || '—')}`,
+        value: 'Scheduled',
+        tone: 'blue',
+      })),
+    );
 
     setStats([
       { label: 'Total orders', value: s.totalOrders ?? 0, tone: 'blue', icon: '📷' },
@@ -1117,6 +1148,8 @@ export default function DashboardPage() {
   const finRole = group === 'ADMIN' || group === 'FINANCE' || group === 'RECEPTION';
   const isDoctor = role === 'DOCTOR';
   const isNurse = ['NURSE', 'WARD_INCHARGE', 'ICU_STAFF'].includes(role);
+  const isRadiologist = role === 'RADIOLOGIST';
+  const isTechnician = role === 'RADIOLOGY_TECHNICIAN';
   const trend = (finance?.trend || []).map((t: any) => ({
     date: t.date,
     revenue: Number(t.revenue) || 0,
@@ -1259,6 +1292,67 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+
+          {group === 'RAD' && radMeta && (
+            <>
+              <div className="dash-hero dash-hero-blue">
+                <div className="dash-hero-copy">
+                  <div className="dash-hero-label">Radiology dashboard</div>
+                  <div className="dash-hero-title">
+                    {greeting}, {userName || (isTechnician ? 'Technician' : 'Radiologist')}
+                    <span>
+                      {' '}· {isTechnician ? `${radMeta.scheduledToday ?? 0} studies to perform today` : `${radMeta.pendingReports ?? 0} reports pending`}
+                    </span>
+                  </div>
+                  <div className="dash-hero-sub">
+                    {isTechnician
+                      ? `${radMeta.inProgress ?? 0} in progress · ${radMeta.newOrders ?? 0} new orders`
+                      : `${radMeta.inProgress ?? 0} ready for report · ${radMeta.verifyCount ?? 0} awaiting verification`}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {isTechnician ? (
+                    <>
+                      <button className="btn btn-light" onClick={() => router.push('/dicom')}>
+                        Perform study (MWL) →
+                      </button>
+                      <button className="btn btn-ghost-light" onClick={() => router.push('/radiology?tab=studies')}>
+                        Upload images
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="btn btn-light" onClick={() => router.push('/radiology')}>
+                        Write reports →
+                      </button>
+                      <button className="btn btn-ghost-light" onClick={() => router.push('/radiology')}>
+                        Verify queue
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="dash-widget-grid">
+                {isRadiologist && (
+                  <WidgetCard
+                    title="Awaiting verification"
+                    action={<a className="dash-link" href="/radiology">Open worklist</a>}
+                  >
+                    <Leaderboard rows={radVerifyRows} empty="No reports awaiting verification." />
+                  </WidgetCard>
+                )}
+                {isTechnician && (
+                  <WidgetCard
+                    title="Scheduled today"
+                    action={<a className="dash-link" href="/dicom">DICOM worklist</a>}
+                  >
+                    <Leaderboard rows={radScheduledRows} empty="No studies scheduled today." />
+                  </WidgetCard>
+                )}
+              </div>
+            </>
+          )}
 
           {group === 'CLINICAL' && isDoctor && clinic && (
             <>

@@ -23,7 +23,7 @@ interface TrainingRecord {
   certificateDate: string;
 }
 
-const ROLES = ['DOCTOR', 'NURSE', 'PHARMACIST', 'LAB_TECHNICIAN', 'RECEPTIONIST', 'HR_MANAGER', 'INVENTORY_MANAGER', 'ADMIN'];
+const ROLES = ['DOCTOR', 'NURSE', 'PHARMACIST', 'LAB_TECHNICIAN', 'RECEPTIONIST', 'HR_MANAGER', 'INVENTORY_MANAGER', 'RADIOLOGIST', 'RADIOLOGY_TECHNICIAN', 'ADMIN'];
 
 const ROLE_COLORS: Record<string, string> = {
   DOCTOR: '#2563eb',
@@ -34,6 +34,8 @@ const ROLE_COLORS: Record<string, string> = {
   ADMIN: '#dc2626',
   HR_MANAGER: '#0891b2',
   INVENTORY_MANAGER: '#ca8a04',
+  RADIOLOGIST: '#7c3aed',
+  RADIOLOGY_TECHNICIAN: '#c2410c',
 };
 
 const TRAINING_PROGRAMS = ['Basic Life Support', 'Fire Safety', 'Infection Control', 'Patient Rights', 'Data Privacy'];

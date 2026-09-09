@@ -21,6 +21,7 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "seed:radiologist": "tsx prisma/ensure-radiologist.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

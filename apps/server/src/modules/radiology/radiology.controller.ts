@@ -18,16 +18,18 @@ import {
 } from "./radiology.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
+import { RolesGuard } from "../../common/guards/roles.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
 import {
   Permissions,
+  Roles,
   TenantScoped,
 } from "../../common/decorators/permissions.decorator";
-import { PermissionAction } from "@hms/shared";
+import { PermissionAction, UserRole } from "@hms/shared";
 
 @ApiTags("Radiology")
 @Controller("radiology")
-@UseGuards(JwtAuthGuard, PermissionsGuard, TenantGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, TenantGuard, RolesGuard)
 @TenantScoped()
 @ApiBearerAuth()
 export class RadiologyController {
@@ -74,6 +76,7 @@ export class RadiologyController {
       id,
       body.status,
       req.user.id,
+      req.user.role,
     );
   }
 
@@ -102,6 +105,13 @@ export class RadiologyController {
 
   @Patch("orders/:id/report")
   @Permissions(PermissionAction.EDIT)
+  @Roles(
+    UserRole.RADIOLOGIST,
+    UserRole.HOSPITAL_ADMIN,
+    UserRole.HOSPITAL_OWNER,
+    UserRole.PLATFORM_SUPER_ADMIN,
+    UserRole.IT_ADMIN,
+  )
   @ApiOperation({ summary: "Write radiology report" })
   writeReport(
     @Param("id") id: string,
@@ -113,6 +123,7 @@ export class RadiologyController {
       id,
       dto,
       req.user.id,
+      req.user.role,
     );
   }
 

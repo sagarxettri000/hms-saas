@@ -128,6 +128,8 @@ const EMPTY_ORDER: CreateOrderState = {
 
 export default function RadiologyPage() {
   const router = useRouter();
+  const [role] = useState(() => (typeof window === 'undefined' ? '' : window.localStorage.getItem('role') || ''));
+  const canReport = ['RADIOLOGIST', 'HOSPITAL_ADMIN', 'HOSPITAL_OWNER', 'PLATFORM_SUPER_ADMIN', 'IT_ADMIN'].includes(role);
   const [activeTab, setActiveTab] = useState<Tab>('orders');
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<any>(null);
@@ -473,9 +475,9 @@ export default function RadiologyPage() {
             {canTransition(detail.status, 'SCHEDULED') && <button className="btn btn-sm" style={{ background: 'var(--primary)', color: '#fff' }} disabled={transitioning === 'SCHEDULED'} onClick={() => transitionStatus('SCHEDULED')}>Schedule</button>}
             {canTransition(detail.status, 'IN_PROGRESS') && <button className="btn btn-sm" style={{ background: 'var(--primary)', color: '#fff' }} disabled={transitioning === 'IN_PROGRESS'} onClick={() => transitionStatus('IN_PROGRESS')}>Start Study</button>}
             {canTransition(detail.status, 'IMAGES_UPLOADED') && <button className="btn btn-sm" style={{ background: 'var(--info)', color: '#fff' }} disabled={transitioning === 'IMAGES_UPLOADED'} onClick={() => transitionStatus('IMAGES_UPLOADED')}>Images Uploaded</button>}
-            {canTransition(detail.status, 'REPORTED') && <button className="btn btn-sm" style={{ background: 'var(--success)', color: '#fff' }} disabled={transitioning === 'REPORTED'} onClick={() => transitionStatus('REPORTED')}>Finalize Report</button>}
-            {detail.status === 'REPORTED' && <button className="btn btn-sm" style={{ background: 'var(--success)', color: '#fff' }} disabled={transitioning === 'VERIFIED'} onClick={() => transitionStatus('VERIFIED')}>Verify</button>}
-            {detail.status === 'VERIFIED' && <button className="btn btn-sm" style={{ background: 'var(--success)', color: '#fff' }} disabled={transitioning === 'APPROVED'} onClick={() => transitionStatus('APPROVED')}>Approve</button>}
+            {canTransition(detail.status, 'REPORTED') && canReport && <button className="btn btn-sm" style={{ background: 'var(--success)', color: '#fff' }} disabled={transitioning === 'REPORTED'} onClick={() => transitionStatus('REPORTED')}>Finalize Report</button>}
+            {detail.status === 'REPORTED' && canReport && <button className="btn btn-sm" style={{ background: 'var(--success)', color: '#fff' }} disabled={transitioning === 'VERIFIED'} onClick={() => transitionStatus('VERIFIED')}>Verify</button>}
+            {detail.status === 'VERIFIED' && canReport && <button className="btn btn-sm" style={{ background: 'var(--success)', color: '#fff' }} disabled={transitioning === 'APPROVED'} onClick={() => transitionStatus('APPROVED')}>Approve</button>}
             {detail.status === 'APPROVED' && <button className="btn btn-sm" style={{ background: 'var(--muted)', color: '#fff' }} disabled={transitioning === 'DELIVERED'} onClick={() => transitionStatus('DELIVERED')}>Deliver</button>}
             {canTransition(detail.status, 'CANCELLED') && <button className="btn btn-sm btn-danger" disabled={transitioning === 'CANCELLED'} onClick={() => transitionStatus('CANCELLED')}>Cancel</button>}
           </div>
@@ -490,23 +492,32 @@ export default function RadiologyPage() {
 
         <div className="card" style={{ padding: 16, marginBottom: 16 }}>
           <div style={{ fontWeight: 600, marginBottom: 12 }}>Report</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div>
-              <label className="label">Findings</label>
-              <textarea className="textarea" style={{ width: '100%', minHeight: 80 }} value={reportFields.findings} onChange={(e) => setReportFields({ ...reportFields, findings: e.target.value })} placeholder="Enter findings…" />
+          {canReport ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label className="label">Findings</label>
+                <textarea className="textarea" style={{ width: '100%', minHeight: 80 }} value={reportFields.findings} onChange={(e) => setReportFields({ ...reportFields, findings: e.target.value })} placeholder="Enter findings…" />
+              </div>
+              <div>
+                <label className="label">Impression</label>
+                <textarea className="textarea" style={{ width: '100%', minHeight: 60 }} value={reportFields.impression} onChange={(e) => setReportFields({ ...reportFields, impression: e.target.value })} placeholder="Enter impression…" />
+              </div>
+              <div>
+                <label className="label">Full Report</label>
+                <textarea className="textarea" style={{ width: '100%', minHeight: 100 }} value={reportFields.report} onChange={(e) => setReportFields({ ...reportFields, report: e.target.value })} placeholder="Enter detailed report…" />
+              </div>
+              <div>
+                <button className="btn" style={{ background: 'var(--primary)', color: '#fff' }} disabled={savingReport} onClick={submitReport}>{savingReport ? 'Saving…' : 'Save Report'}</button>
+              </div>
             </div>
-            <div>
-              <label className="label">Impression</label>
-              <textarea className="textarea" style={{ width: '100%', minHeight: 60 }} value={reportFields.impression} onChange={(e) => setReportFields({ ...reportFields, impression: e.target.value })} placeholder="Enter impression…" />
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.9 }}>
+              <div><span style={{ fontWeight: 600 }}>Findings:</span> {detail.findings || '—'}</div>
+              <div><span style={{ fontWeight: 600 }}>Impression:</span> {detail.impression || '—'}</div>
+              <div><span style={{ fontWeight: 600 }}>Report:</span> {detail.report || '—'}</div>
+              <div style={{ marginTop: 10 }}>Only radiologists can write and verify reports.</div>
             </div>
-            <div>
-              <label className="label">Full Report</label>
-              <textarea className="textarea" style={{ width: '100%', minHeight: 100 }} value={reportFields.report} onChange={(e) => setReportFields({ ...reportFields, report: e.target.value })} placeholder="Enter detailed report…" />
-            </div>
-            <div>
-              <button className="btn" style={{ background: 'var(--primary)', color: '#fff' }} disabled={savingReport} onClick={submitReport}>{savingReport ? 'Saving…' : 'Save Report'}</button>
-            </div>
-          </div>
+          )}
         </div>
 
         {detail.images && detail.images.length > 0 && (

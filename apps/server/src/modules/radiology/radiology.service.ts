@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   Optional,
@@ -42,12 +43,28 @@ const ORDER_FLOW: Record<string, string[]> = {
   DELIVERED: [],
 };
 
+const RADIOLOGY_REPORTING_ROLES = new Set([
+  "RADIOLOGIST",
+  "HOSPITAL_ADMIN",
+  "HOSPITAL_OWNER",
+  "PLATFORM_SUPER_ADMIN",
+  "IT_ADMIN",
+]);
+
 @Injectable()
 export class RadiologyService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly hl7Outbound?: Hl7OutboundService,
   ) {}
+
+  private assertCanReport(role?: string) {
+    if (role && !RADIOLOGY_REPORTING_ROLES.has(role)) {
+      throw new ForbiddenException(
+        "Only radiologists can write and verify radiology reports",
+      );
+    }
+  }
 
   async create(
     tenantId: string,
@@ -173,7 +190,11 @@ export class RadiologyService {
     id: string,
     toStatus: string,
     userId?: string,
+    role?: string,
   ) {
+    if (["REPORTED", "VERIFIED", "APPROVED"].includes(toStatus)) {
+      this.assertCanReport(role);
+    }
     const order = await this.prisma.radiologyOrder.findFirst({
       where: { id, tenantId },
     });
@@ -255,7 +276,9 @@ export class RadiologyService {
     id: string,
     dto: { findings?: string; impression?: string; report?: string },
     userId?: string,
+    role?: string,
   ) {
+    this.assertCanReport(role);
     const order = await this.prisma.radiologyOrder.findFirst({
       where: { id, tenantId },
     });

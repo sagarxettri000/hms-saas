@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import ModulePage from '@/components/ModulePage';
 import IntegrationSettings from '@/components/IntegrationSettings';
+import TwoFactorManager from '@/components/auth/TwoFactorManager';
 import { api } from '@/lib/api';
 
 function ToggleList({ path }: { path: string }) {
@@ -246,6 +247,11 @@ export default function SettingsPage() {
           key: 'integrations',
           label: 'Integrations',
           render: () => <IntegrationSettings />,
+        },
+        {
+          key: 'security',
+          label: 'Security',
+          render: () => <TwoFactorManager />,
         },
       ]}
     />

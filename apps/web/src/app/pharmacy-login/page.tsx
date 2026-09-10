@@ -16,6 +16,8 @@ export default function PharmacyLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [codeStep, setCodeStep] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [emailTouched, setEmailTouched] = useState(false);
@@ -32,13 +34,31 @@ export default function PharmacyLoginPage() {
       setPasswordTouched(true);
       return;
     }
+    if (codeStep && !/^\d{6}$/.test(code.trim())) {
+      setError('Enter the 6-digit code from your authenticator app.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const res = await api('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password, rememberMe: true }),
+        body: JSON.stringify({
+          email,
+          password,
+          rememberMe: true,
+          twoFactorCode: codeStep ? code.trim() : undefined,
+        }),
       });
+      if (res.data.mustSetupTwoFactor && res.data.twoFactorSetupToken) {
+        sessionStorage.setItem('twoFactorSetupToken', res.data.twoFactorSetupToken);
+        router.push(`/2fa-setup?email=${encodeURIComponent(email)}`);
+        return;
+      }
+      if (res.data.twoFactorRequired) {
+        setCodeStep(true);
+        return;
+      }
       const role = res.data.user.role;
       if (role !== 'PHARMACIST') {
         setError('Only pharmacy staff can sign in here.');
@@ -102,6 +122,20 @@ export default function PharmacyLoginPage() {
           error={passwordTouched && password.trim() === '' ? 'Password is required.' : null}
           autoComplete="current-password"
         />
+
+        {codeStep && (
+          <AuthField
+            id="code"
+            label="Authenticator code"
+            type="text"
+            inputMode="numeric"
+            value={code}
+            onChange={(v) => { setCode(v); if (error) setError(null); }}
+            error={null}
+            autoComplete="one-time-code"
+            placeholder="6-digit code"
+          />
+        )}
 
         <div style={{ marginTop: '-4px' }}>
           <Link href="/forgot-password" className="auth-link">

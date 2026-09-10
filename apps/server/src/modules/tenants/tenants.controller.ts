@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -83,6 +84,12 @@ export class TenantsController {
     @Param("id") id: string,
     @Body() dto: Partial<CreateTenantDto>,
   ) {
+    const payload = dto as Record<string, unknown>;
+    if (payload.requireTwoFactor !== undefined && !this.isSuperAdmin(req.user)) {
+      throw new ForbiddenException(
+        "Only platform administrators can change the two-factor authentication policy.",
+      );
+    }
     return this.tenantsService.update(this.resolveTenantId(req, id), dto);
   }
 

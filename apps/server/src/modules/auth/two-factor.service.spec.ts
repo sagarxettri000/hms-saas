@@ -3,11 +3,33 @@ import * as crypto from "crypto";
 import { TwoFactorService } from "./two-factor.service";
 
 describe("TwoFactorService", () => {
-  const service = new TwoFactorService();
+  const service = new TwoFactorService({
+    sign: jest.fn(),
+    verify: jest.fn(),
+  } as any);
 
   // Reference TOTP implementation (RFC 6238, HMAC-SHA1, 30s, 6 digits)
+  function fromBase32(input: string): Buffer {
+    const a = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    const clean = input.toUpperCase().replace(/=+$/, "").replace(/\s+/g, "");
+    let bits = 0;
+    let value = 0;
+    const out: number[] = [];
+    for (const c of clean) {
+      const v = a.indexOf(c);
+      if (v < 0) continue;
+      value = (value << 5) | v;
+      bits += 5;
+      if (bits >= 8) {
+        out.push((value >>> (bits - 8)) & 0xff);
+        bits -= 8;
+      }
+    }
+    return Buffer.from(out);
+  }
+
   function totp(secret: string, counter: number): string {
-    const key = Buffer.from(secret, "base64");
+    const key = fromBase32(secret);
     const buf = Buffer.alloc(8);
     buf.writeBigInt64BE(BigInt(counter));
     const digest = crypto.createHmac("sha1", key).update(buf).digest();
@@ -20,17 +42,18 @@ describe("TwoFactorService", () => {
     return (binary % 1000000).toString().padStart(6, "0");
   }
 
-  it("generates a base64 secret", () => {
+  it("generates a base32 secret usable by authenticator apps", () => {
     const secret = service.generateSecret();
     expect(secret).toBeTruthy();
-    const decoded = Buffer.from(secret, "base64");
-    expect(decoded.length).toBe(20);
+    expect(secret).toMatch(/^[A-Z2-7]+$/);
+    expect(secret.length).toBe(32);
+    expect(fromBase32(secret).length).toBe(20);
   });
 
   it("builds an otpauth:// TOTP URL with the email and issuer", () => {
-    const url = service.generateOtpUrl("doctor@hosp.com", "c2VjcmV0");
+    const url = service.generateOtpUrl("doctor@hosp.com", "MFRGGZDFMY");
     expect(url).toContain("otpauth://totp/");
-    expect(url).toContain("secret=c2VjcmV0");
+    expect(url).toContain("secret=MFRGGZDFMY");
     expect(url).toContain("digits=6");
     expect(url).toContain("period=30");
     expect(url).toContain("algorithm=SHA1");

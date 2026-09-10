@@ -145,7 +145,16 @@ export class AuthService {
 
     this.checkUserAccessible(user);
 
-    if (user.twoFactorEnabled && user.twoFactorSecret) {
+    const orgRequires2fa = user.tenant?.requireTwoFactor === true;
+    const twoFactorActive = user.twoFactorEnabled && !!user.twoFactorSecret;
+
+    if (twoFactorActive) {
+      // A user with 2FA enabled must supply a valid code. When the code is
+      // missing, return a distinct soft signal so the client can show the 2FA
+      // step (regardless of whether 2FA was optional or enforced).
+      if (!dto.twoFactorCode) {
+        return { twoFactorRequired: true, user: this.publicUser(user) };
+      }
       this.canAttemptTwoFactor(dto.email);
       try {
         this.twoFactorService.assertValid(user.twoFactorSecret, dto.twoFactorCode);
@@ -154,6 +163,20 @@ export class AuthService {
         this.recordTwoFactorFailure(dto.email);
         throw err;
       }
+    } else if (orgRequires2fa) {
+      // Organisation enforces 2FA but this user has not enrolled. Do NOT issue
+      // a session; hand out a short-lived setup token so they can self-enroll,
+      // then sign in again with an authenticator code.
+      return {
+        mustSetupTwoFactor: true,
+        twoFactorSetupToken: this.twoFactorService.signSetupToken({
+          sub: user.id,
+          email: user.email,
+          tenantId: user.tenantId,
+          role: user.role,
+        }),
+        user: this.publicUser(user),
+      };
     }
 
     const permissions = this.getUserPermissions(user.role);
@@ -231,6 +254,7 @@ export class AuthService {
         permissions,
         doctorProfileId: user.doctorProfile?.id,
         mustChangePassword: user.mustChangePassword,
+        twoFactorEnabled: user.twoFactorEnabled,
       },
       sessionId: session.id,
     };
@@ -456,6 +480,7 @@ export class AuthService {
         tenantId: true,
         createdAt: true,
         mustChangePassword: true,
+        twoFactorEnabled: true,
         tenant: {
           select: {
             id: true,
@@ -559,8 +584,17 @@ export class AuthService {
   }
 
   async disableTwoFactor(userId: string, dto: DisableTwoFactorDto) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { tenant: { select: { requireTwoFactor: true } } },
+    });
     if (!user) throw new UnauthorizedException("User not found");
+
+    if (user.tenant?.requireTwoFactor) {
+      throw new BadRequestException(
+        "Your organisation requires two-factor authentication and it cannot be disabled for your account.",
+      );
+    }
 
     if (!user.twoFactorSecret) {
       throw new BadRequestException("2FA is not enabled");
@@ -584,6 +618,26 @@ export class AuthService {
     );
 
     return { message: "2FA disabled" };
+  }
+
+  private publicUser(user: {
+    id: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    role: string;
+    tenantId: string | null;
+    twoFactorEnabled?: boolean;
+  }) {
+    return {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      tenantId: user.tenantId,
+      twoFactorEnabled: user.twoFactorEnabled === true,
+    };
   }
 
   private getUserPermissions(role: string): string[] {

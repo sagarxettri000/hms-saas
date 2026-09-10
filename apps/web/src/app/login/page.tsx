@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -18,11 +18,19 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [codeStep, setCodeStep] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [emailTouched, setEmailTouched] = useState(false);
   const [passwordTouched, setPasswordTouched] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('2fa') === 'set') {
+      setMessage('Two-factor authentication is enabled. Sign in with your authenticator code.');
+    }
+  }, []);
 
   const emailError =
     emailTouched && email.trim() !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
@@ -39,14 +47,35 @@ export default function LoginPage() {
       setPasswordTouched(true);
       return;
     }
+    if (codeStep && !/^\d{6}$/.test(code.trim())) {
+      setError('Enter the 6-digit code from your authenticator app.');
+      return;
+    }
     setLoading(true);
     setError(null);
     setMessage(null);
     try {
       const res = await api('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password, rememberMe: true }),
+        body: JSON.stringify({
+          email,
+          password,
+          rememberMe: true,
+          twoFactorCode: codeStep ? code.trim() : undefined,
+        }),
       });
+
+      if (res.data.mustSetupTwoFactor && res.data.twoFactorSetupToken) {
+        sessionStorage.setItem('twoFactorSetupToken', res.data.twoFactorSetupToken);
+        router.push(`/2fa-setup?email=${encodeURIComponent(email)}`);
+        return;
+      }
+
+      if (res.data.twoFactorRequired) {
+        setCodeStep(true);
+        return;
+      }
+
       localStorage.setItem('role', res.data.user.role);
       localStorage.setItem(
         'userName',
@@ -116,11 +145,27 @@ export default function LoginPage() {
           autoComplete="current-password"
         />
 
-        <div style={{ marginTop: '-4px' }}>
-          <Link href="/forgot-password" className="auth-link">
-            Forgot Password?
-          </Link>
-        </div>
+        {codeStep && (
+          <AuthField
+            id="code"
+            label="Authenticator code"
+            type="text"
+            inputMode="numeric"
+            value={code}
+            onChange={(v) => { setCode(v); if (error) setError(null); }}
+            error={null}
+            autoComplete="one-time-code"
+            placeholder="6-digit code"
+          />
+        )}
+
+        {!codeStep && (
+          <div style={{ marginTop: '-4px' }}>
+            <Link href="/forgot-password" className="auth-link">
+              Forgot Password?
+            </Link>
+          </div>
+        )}
 
         {message && <AuthMessage message={message} />}
         {error && <AuthError message={error} />}

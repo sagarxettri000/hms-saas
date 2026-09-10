@@ -7,6 +7,7 @@ import {
   Post,
   Req,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -14,6 +15,7 @@ import { Throttle, ThrottlerGuard } from "@nestjs/throttler";
 import { AuthService } from "./auth.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { Public } from "../../common/decorators/permissions.decorator";
+import { TwoFactorSetupGuard } from "./guards/two-factor-setup.guard";
 import {
   LoginDto,
   RegisterDto,
@@ -51,7 +53,9 @@ export class AuthController {
       req.headers["user-agent"],
       req.ip,
     );
-    this.setAuthCookies(res, result, dto.rememberMe);
+    if (result && (result as any).accessToken) {
+      this.setAuthCookies(res, result as { accessToken: string; refreshToken: string }, dto.rememberMe);
+    }
     return result;
   }
 
@@ -63,6 +67,9 @@ export class AuthController {
   @ApiOperation({ summary: "Refresh access token" })
   async refreshToken(@Body() dto: RefreshTokenDto, @Req() req: any, @Res({ passthrough: true }) res: any) {
     const refreshToken = dto.refreshToken || req.cookies?.hms_refresh;
+    if (!refreshToken) {
+      throw new UnauthorizedException("Invalid refresh token");
+    }
     const result = await this.authService.refreshToken(
       refreshToken,
       req.headers["user-agent"],
@@ -139,17 +146,17 @@ export class AuthController {
   }
 
   @Post("2fa/setup")
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  @Public()
+  @UseGuards(TwoFactorSetupGuard)
   @ApiOperation({ summary: "Generate a 2FA secret and authenticator URL" })
   setupTwoFactor(@Req() req: any) {
     return this.authService.setupTwoFactor(req.user.id, req.user.email);
   }
 
   @Post("2fa/enable")
-  @UseGuards(JwtAuthGuard, ThrottlerGuard)
+  @Public()
+  @UseGuards(TwoFactorSetupGuard, ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
-  @ApiBearerAuth()
   @ApiOperation({ summary: "Verify a code and enable 2FA" })
   enableTwoFactor(@Body() dto: EnableTwoFactorDto, @Req() req: any) {
     return this.authService.enableTwoFactor(req.user.id, dto);

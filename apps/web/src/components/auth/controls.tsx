@@ -12,6 +12,7 @@ export function AuthField({
   placeholder,
   error,
   autoComplete,
+  inputMode,
   children,
 }: {
   id: string;
@@ -23,6 +24,7 @@ export function AuthField({
   placeholder?: string;
   error?: string | null;
   autoComplete?: string;
+  inputMode?: 'text' | 'numeric' | 'email' | 'tel' | 'url';
   children?: React.ReactNode;
 }) {
   const [showPassword, setShowPassword] = useState(false);
@@ -44,6 +46,7 @@ export function AuthField({
           onBlur={onBlurHandled}
           placeholder={placeholder}
           autoComplete={autoComplete}
+          inputMode={inputMode}
           aria-invalid={!!error}
           aria-describedby={error ? `${id}-error` : undefined}
         />

@@ -4,7 +4,10 @@ import { TwoFactorService } from "./two-factor.service";
 import { UserRole } from "@hms/shared";
 
 function makeService(prisma: any, jwtService: any, mailService: any): AuthService {
-  return new AuthService(prisma, jwtService, mailService, new TwoFactorService());
+  return new AuthService(prisma, jwtService, mailService, new TwoFactorService({
+    sign: jest.fn(),
+    verify: jest.fn(),
+  } as any));
 }
 
 describe("AuthService", () => {
@@ -108,7 +111,7 @@ describe("AuthService", () => {
       const result = await service.login({ email: "test@test.com", password: "Password123" });
       expect(result.accessToken).toBe("mock-access-token");
       expect(result.refreshToken).toBeDefined();
-      expect(result.user.mustChangePassword).toBe(true);
+      expect((result as any).user.mustChangePassword).toBe(true);
       expect(result.sessionId).toBe("session-1");
     });
 

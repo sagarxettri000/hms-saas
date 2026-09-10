@@ -577,6 +577,7 @@ model Tenant {
   logoUrl     String?
   description String?
   status      TenantStatus @default(TRIAL)
+  requireTwoFactor  Boolean @default(false)
   timezone    String       @default("Asia/Kathmandu")
   currency    String       @default("NPR")
   language    String       @default("en")

@@ -47,6 +47,40 @@ export default function TenantsPage() {
           onClick: (r) => apiPatch(`/tenants/${r.id}/status`, { status: 'ACTIVE' }),
         },
         {
+          label: 'Enforce 2FA',
+          tone: 'primary',
+          condition: (r) =>
+            r.requireTwoFactor !== true &&
+            typeof window !== 'undefined' &&
+            localStorage.getItem('role') === 'PLATFORM_SUPER_ADMIN',
+          onClick: (r) => {
+            if (
+              window.confirm(
+                `Require two-factor authentication for all users of ${r.name}? Existing users must set up 2FA at their next sign-in.`,
+              )
+            ) {
+              return apiPatch(`/tenants/${r.id}`, { requireTwoFactor: true });
+            }
+          },
+        },
+        {
+          label: 'Allow optional 2FA',
+          tone: 'ghost',
+          condition: (r) =>
+            r.requireTwoFactor === true &&
+            typeof window !== 'undefined' &&
+            localStorage.getItem('role') === 'PLATFORM_SUPER_ADMIN',
+          onClick: (r) => {
+            if (
+              window.confirm(
+                `Stop requiring two-factor authentication for ${r.name}? Users can keep or disable 2FA individually.`,
+              )
+            ) {
+              return apiPatch(`/tenants/${r.id}`, { requireTwoFactor: false });
+            }
+          },
+        },
+        {
           label: 'Suspend',
           tone: 'secondary',
           condition: (r) => r.status !== 'SUSPENDED' && r.status !== 'ARCHIVED',

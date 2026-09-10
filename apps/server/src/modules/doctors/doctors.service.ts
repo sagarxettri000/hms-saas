@@ -7,6 +7,7 @@ import {
 import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
+import { MailService } from "../auth/mail.service";
 
 const MAX_LIMIT = 100;
 
@@ -48,7 +49,10 @@ export interface CreateSlotDto {
 
 @Injectable()
 export class DoctorsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mailService: MailService,
+  ) {}
 
   async create(tenantId: string, dto: CreateDoctorDto) {
     if (!tenantId) throw new BadRequestException("Tenant ID is required");
@@ -74,12 +78,13 @@ export class DoctorsService {
     });
     if (existing) throw new ConflictException("Email already in use");
 
-    // Never fall back to a well-known default password. When no password is
-    // provided, generate an unguessable temporary one and surface it to the
-    // creating admin so they can share it with the doctor.
-    const password = dto.password || this.generateTemporaryPassword();
-    let temporaryPassword: string | undefined;
-    if (!dto.password) temporaryPassword = password;
+    // Onboarding: the admin either supplies a password to share directly, or we
+    // email the doctor a set-your-password invitation link. We still hash an
+    // unguessable placeholder credential so login never sees a null hash before
+    // the invite is accepted; resetPassword() replaces it when the doctor
+    // chooses their real password.
+    const suppliedPassword = dto.password ? String(dto.password) : undefined;
+    const password = suppliedPassword || this.generateTemporaryPassword();
     const passwordHash = await bcrypt.hash(password, 12);
 
     const user = await this.prisma.user.create({
@@ -130,8 +135,47 @@ export class DoctorsService {
       },
     });
 
-    if (!temporaryPassword) return doctorRecord;
-    return { ...doctorRecord, temporaryPassword };
+    // Invite the doctor to set their own password (only when the admin did not
+    // supply one). If the email cannot be delivered (SMTP unconfigured or a
+    // send failure), fall back to returning the temporary password so the
+    // creating admin can share it — onboarding should never dead-end.
+    let temporaryPassword: string | undefined;
+    let invitationSent = false;
+    if (!suppliedPassword) {
+      const token = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto
+        .createHash("sha256")
+        .update(token)
+        .digest("hex");
+      await this.prisma.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          token: tokenHash,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      });
+
+      const fullName = [dto.firstName, dto.middleName, dto.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      const setPasswordUrl = `${process.env.APP_URL || "http://localhost:3000"}/reset-password?token=${token}`;
+      const sent = await this.mailService.send({
+        to: user.email,
+        subject: `${fullName}, set your Swasthya HMS password`,
+        text: `Welcome to Swasthya HMS. An account has been created for you. Open this link to set your password (valid for 24 hours):\n\n${setPasswordUrl}\n\nIf you were not expecting this invitation, you can ignore this email.`,
+        html: `<p>Welcome to Swasthya HMS. An account has been created for you. Open this link to set your password (valid for 24 hours):</p><p><a href="${setPasswordUrl}">${setPasswordUrl}</a></p><p>If you were not expecting this invitation, you can ignore this email.</p>`,
+      });
+      if (sent) {
+        invitationSent = true;
+      } else {
+        temporaryPassword = password;
+      }
+    }
+
+    if (invitationSent) return { ...doctorRecord, invitationSent: true };
+    if (temporaryPassword) return { ...doctorRecord, temporaryPassword };
+    return doctorRecord;
   }
 
   async findAll(

@@ -76,6 +76,7 @@ export default function DoctorsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [savingDoctor, setSavingDoctor] = useState(false);
   const [addError, setAddError] = useState('');
+  const [addSuccess, setAddSuccess] = useState('');
   const [docForm, setDocForm] = useState({
     firstName: '', lastName: '', email: '', phone: '', gender: 'MALE', departmentId: '',
     specialization: '', qualification: '', licenseNumber: '', consultationFee: '', experienceYears: '', bio: '',
@@ -317,8 +318,9 @@ export default function DoctorsPage() {
     }
     setSavingDoctor(true);
     setAddError('');
+    setAddSuccess('');
     try {
-      await api('/doctors', {
+      const res: any = await api('/doctors', {
         method: 'POST',
         body: JSON.stringify({
           firstName: docForm.firstName,
@@ -335,12 +337,22 @@ export default function DoctorsPage() {
           bio: docForm.bio || undefined,
         }),
       });
+      const inner: any = res?.data?.data ?? res?.data ?? res ?? {};
+      const invitationSent = inner?.invitationSent === true;
+      const temporaryPassword: string | undefined = inner?.temporaryPassword;
       setShowAdd(false);
       setDocForm({
         firstName: '', lastName: '', email: '', phone: '', gender: 'MALE', departmentId: '',
         specialization: '', qualification: '', licenseNumber: '', consultationFee: '', experienceYears: '', bio: '',
       });
       loadDoctors();
+      if (invitationSent) {
+        setAddSuccess(`Invitation emailed to ${docForm.email.trim()}. They can set their password from the link in the email (valid for 24 hours).`);
+      } else if (temporaryPassword) {
+        setAddSuccess(`Doctor added, but no email could be sent (SMTP not configured). Share this one-time password with ${docForm.firstName} ${docForm.lastName}: ${temporaryPassword} — they will be asked to change it at first sign-in.`);
+      } else {
+        setAddSuccess(`Doctor ${docForm.firstName} ${docForm.lastName} added.`);
+      }
     } catch (e) {
       setAddError(e instanceof Error ? e.message : 'Failed to create doctor');
     }
@@ -830,6 +842,13 @@ export default function DoctorsPage() {
           </button>
         ))}
       </div>
+
+      {addSuccess && (
+        <div className="alert alert-success" style={{ marginTop: 12 }}>
+          {addSuccess}
+          <button type="button" onClick={() => setAddSuccess('')} aria-label="Dismiss" style={{ marginLeft: 8, border: 0, background: 'none', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+        </div>
+      )}
 
       {tab === 'directory' && renderDirectory()}
       {tab === 'schedule' && renderSchedule()}

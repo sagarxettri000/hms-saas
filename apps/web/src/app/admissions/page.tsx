@@ -25,6 +25,7 @@ interface AdmissionForm {
   admittingDoctorId: string;
   departmentId: string;
   admissionType: string;
+  bedId: string;
   provisionalDiagnosis: string;
   referringDoctor: string;
   notes: string;
@@ -65,7 +66,7 @@ export default function AdmissionsPage() {
   const [patientError, setPatientError] = useState('');
   const [admissionForm, setAdmissionForm] = useState<AdmissionForm>({
     patientId: '', admittingDoctorId: '', departmentId: '', admissionType: 'GENERAL',
-    provisionalDiagnosis: '', referringDoctor: '', notes: '',
+    bedId: '', provisionalDiagnosis: '', referringDoctor: '', notes: '',
   });
   const [savingAdmission, setSavingAdmission] = useState(false);
   const [admissionError, setAdmissionError] = useState('');
@@ -195,13 +196,14 @@ export default function AdmissionsPage() {
       if (admissionForm.admittingDoctorId) payload.admittingDoctorId = admissionForm.admittingDoctorId;
       if (admissionForm.departmentId) payload.departmentId = admissionForm.departmentId;
       if (admissionForm.admissionType) payload.admissionType = admissionForm.admissionType;
+      if (admissionForm.bedId) payload.bedId = admissionForm.bedId;
       if (admissionForm.provisionalDiagnosis.trim()) payload.provisionalDiagnosis = admissionForm.provisionalDiagnosis.trim();
       if (admissionForm.referringDoctor.trim()) payload.referringDoctor = admissionForm.referringDoctor.trim();
       if (admissionForm.notes.trim()) payload.notes = admissionForm.notes.trim();
       await api('/admissions', { method: 'POST', body: JSON.stringify(payload) });
       setShowAdmitModal(false);
       setSelectedPatient(null);
-      setAdmissionForm({ patientId: '', admittingDoctorId: '', departmentId: '', admissionType: 'GENERAL', provisionalDiagnosis: '', referringDoctor: '', notes: '' });
+      setAdmissionForm({ patientId: '', admittingDoctorId: '', departmentId: '', admissionType: 'GENERAL', bedId: '', provisionalDiagnosis: '', referringDoctor: '', notes: '' });
       setFlash('Patient admitted successfully');
       loadData();
     } catch (err) {
@@ -401,7 +403,21 @@ export default function AdmissionsPage() {
                   <input className="input" value={admissionForm.referringDoctor} onChange={(e) => setAdmissionForm((f) => ({ ...f, referringDoctor: e.target.value }))} />
                 </div>
                 <div className="field">
-                  <label className="label">Available beds</label>
+                  <label className="label">Bed (optional)</label>
+                  <select
+                    className="input"
+                    value={admissionForm.bedId}
+                    onChange={(e) => setAdmissionForm((f) => ({ ...f, bedId: e.target.value }))}
+                  >
+                    <option value="">-- Assign later --</option>
+                    {beds
+                      .filter((b: any) => b.status === 'AVAILABLE')
+                      .map((b: any) => (
+                        <option key={b.id} value={b.id}>
+                          {b.bedNumber}{b.ward?.name ? ` · ${b.ward.name}` : ''}
+                        </option>
+                      ))}
+                  </select>
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '6px 0' }}>
                     {availableBeds.length} bed{availableBeds.length !== 1 ? 's' : ''} available
                   </div>

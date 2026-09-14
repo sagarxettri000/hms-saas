@@ -1,7 +1,15 @@
-import { UnauthorizedException, ConflictException, BadRequestException } from "@nestjs/common";
+import { UnauthorizedException, BadRequestException } from "@nestjs/common";
+import * as jwt from "jsonwebtoken";
 import { AuthService } from "./auth.service";
 import { TwoFactorService } from "./two-factor.service";
 import { UserRole } from "@hms/shared";
+
+// signAccessToken signs RS256 directly with jsonwebtoken (not via JwtService),
+// so the parser must be mocked for deterministic token assertions.
+jest.mock("jsonwebtoken", () => ({
+  ...jest.requireActual("jsonwebtoken"),
+  sign: jest.fn(),
+}));
 
 function makeService(prisma: any, jwtService: any, mailService: any): AuthService {
   return new AuthService(prisma, jwtService, mailService, new TwoFactorService({
@@ -30,11 +38,21 @@ describe("AuthService", () => {
       prisma.user.findUnique.mockResolvedValue(null);
     });
 
-    it("rejects duplicate email", async () => {
+    it("returns a generic success for duplicate email to avoid leaking account existence", async () => {
       prisma.user.findUnique.mockResolvedValue({ id: "existing" });
-      await expect(
-        service.register({ email: "test@test.com", password: "Password123", firstName: "Test", lastName: "User" }),
-      ).rejects.toThrow(ConflictException);
+      const result = await service.register({
+        email: "test@test.com",
+        password: "Password123",
+        firstName: "Test",
+        lastName: "User",
+      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          email: "test@test.com",
+          message: expect.stringContaining("created"),
+        }),
+      );
+      expect(prisma.user.create).not.toHaveBeenCalled();
     });
 
     it("creates user with correct defaults", async () => {
@@ -88,6 +106,7 @@ describe("AuthService", () => {
       jest.clearAllMocks();
       prisma.user.findUnique.mockResolvedValue(mockUser);
       prisma.session.create.mockResolvedValue({ id: "session-1", token: "mock-access-token" });
+      (jwt.sign as jest.Mock).mockReturnValue("mock-access-token");
     });
 
     it("rejects invalid credentials", async () => {
@@ -95,6 +114,31 @@ describe("AuthService", () => {
       await expect(
         service.login({ email: "test@test.com", password: "wrong" }),
       ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it("uses one generic message for all failure states to prevent enumeration", async () => {
+      const pending = { ...mockUser, status: "PENDING" };
+      prisma.user.findUnique.mockResolvedValue(pending);
+      let err: any;
+      try {
+        await service.login({ email: "test@test.com", password: "Password123" });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(UnauthorizedException);
+      const first = err.message;
+
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(
+        service.login({ email: "x@y.z", password: "wrong" }),
+      ).rejects.toThrow(`Invalid email or password`);
+
+      prisma.user.findUnique.mockResolvedValue({ ...mockUser, status: "SUSPENDED" });
+      await expect(
+        service.login({ email: "test@test.com", password: "Password123" }),
+      ).rejects.toThrow("Invalid email or password");
+
+      expect(first).toBe("Invalid email or password");
     });
 
     it("rejects wrong password", async () => {
@@ -148,6 +192,7 @@ describe("AuthService", () => {
 
     beforeEach(() => {
       jest.clearAllMocks();
+      (jwt.sign as jest.Mock).mockReturnValue("new-access-token");
     });
 
     it("rejects invalid refresh token", async () => {

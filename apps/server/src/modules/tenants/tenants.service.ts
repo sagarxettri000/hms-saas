@@ -131,10 +131,12 @@ export class TenantsService {
             firstName: dto.adminFirstName,
             lastName: dto.adminLastName,
             role: "HOSPITAL_ADMIN",
-            status: "ACTIVE",
-            // Unauthenticated onboarding: do NOT claim the email is verified and
-            // force the admin to set their own password on first login so an
-            // anonymous caller cannot obtain a live, usable admin account.
+            // Unauthenticated onboarding: the account is created PENDING so an
+            // anonymous caller cannot obtain a live, usable admin account. A
+            // platform admin must first activate it (login rejects PENDING).
+            // Email is NOT claimed verified; the admin sets their password on
+            // first sign-in after activation.
+            status: "PENDING",
             emailVerifiedAt: null,
             mustChangePassword: true,
           },

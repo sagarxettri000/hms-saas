@@ -7,9 +7,11 @@ import QRCode from 'qrcode';
 export default function TwoFactorSetupForm({
   bearerToken,
   onEnabled,
+  variant = 'dark',
 }: {
   bearerToken?: string | null;
   onEnabled: () => void;
+  variant?: 'light' | 'dark';
 }) {
   const [loading, setLoading] = useState(true);
   const [enabling, setEnabling] = useState(false);
@@ -23,6 +25,33 @@ export default function TwoFactorSetupForm({
   const authHeaders: Record<string, string> | undefined = bearerToken
     ? { Authorization: `Bearer ${bearerToken}` }
     : undefined;
+
+  const light = variant === 'light';
+  const c = light
+    ? {
+        body: 'var(--text-muted)',
+        faint: 'var(--text-muted)',
+        danger: 'var(--danger)',
+        success: 'var(--success)',
+        keyText: 'var(--primary-dark)',
+        keyBg: 'var(--primary-light)',
+        inputBg: 'var(--bg)',
+        inputBorder: 'var(--border-strong)',
+        inputText: 'var(--text)',
+        buttonBg: 'var(--primary)',
+      }
+    : {
+        body: 'rgba(255,255,255,0.65)',
+        faint: 'rgba(255,255,255,0.4)',
+        danger: '#f87171',
+        success: '#4ade80',
+        keyText: '#55d9ff',
+        keyBg: 'rgba(85,217,255,0.08)',
+        inputBg: 'rgba(255,255,255,0.06)',
+        inputBorder: 'rgba(85,217,255,0.12)',
+        inputText: '#fff',
+        buttonBg: '#0e7490',
+      };
 
   useEffect(() => {
     let cancelled = false;
@@ -76,16 +105,16 @@ export default function TwoFactorSetupForm({
   }
 
   if (loading) {
-    return <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>Preparing setup...</p>;
+    return <p style={{ textAlign: 'center', color: c.faint, fontSize: 13 }}>Preparing setup...</p>;
   }
 
   if (error && !secret) {
-    return <p style={{ textAlign: 'center', color: '#f87171', fontSize: 13 }}>{error}</p>;
+    return <p style={{ textAlign: 'center', color: c.danger, fontSize: 13 }}>{error}</p>;
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-      <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, lineHeight: 1.6, textAlign: 'center', maxWidth: 420 }}>
+      <p style={{ color: c.body, fontSize: 13, lineHeight: 1.6, textAlign: 'center', maxWidth: 420 }}>
         Scan the QR code with your authenticator app (Google Authenticator, Authy, or similar). If you cannot scan, enter
         the setup key manually. Then enter the 6-digit code to confirm.
       </p>
@@ -100,12 +129,12 @@ export default function TwoFactorSetupForm({
 
       {secret && (
         <div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginBottom: 4 }}>
+          <div style={{ fontSize: 11, color: c.faint, textAlign: 'center', marginBottom: 4 }}>
             Manual setup key
           </div>
           <code
             style={{
-              fontSize: 13, color: '#55d9ff', background: 'rgba(85,217,255,0.08)',
+              fontSize: 13, color: c.keyText, background: c.keyBg,
               padding: '6px 10px', borderRadius: 8, wordBreak: 'break-all',
             }}
           >
@@ -122,20 +151,20 @@ export default function TwoFactorSetupForm({
           value={code}
           onChange={(e) => { setCode(e.target.value); if (error) setError(null); }}
           style={{
-            background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(85,217,255,0.12)', color: '#fff',
+            background: c.inputBg, border: `1px solid ${c.inputBorder}`, color: c.inputText,
             borderRadius: 8, padding: '10px 12px', fontSize: 14, textAlign: 'center', letterSpacing: 4,
             outline: 'none',
           }}
         />
 
-        {error && <p style={{ color: '#f87171', fontSize: 13, textAlign: 'center', margin: 0 }}>{error}</p>}
-        {success && <p style={{ color: '#4ade80', fontSize: 13, textAlign: 'center', margin: 0 }}>{success}</p>}
+        {error && <p style={{ color: c.danger, fontSize: 13, textAlign: 'center', margin: 0 }}>{error}</p>}
+        {success && <p style={{ color: c.success, fontSize: 13, textAlign: 'center', margin: 0 }}>{success}</p>}
 
         <button
           type="submit"
           disabled={enabling}
           style={{
-            background: '#0e7490', color: '#fff', border: 'none', borderRadius: 8,
+            background: c.buttonBg, color: '#fff', border: 'none', borderRadius: 8,
             padding: '10px', fontSize: 14, fontWeight: 600, cursor: enabling ? 'default' : 'pointer', opacity: enabling ? 0.6 : 1,
           }}
         >

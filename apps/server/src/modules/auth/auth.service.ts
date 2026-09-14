@@ -2,10 +2,10 @@ import {
   Injectable,
   Logger,
   UnauthorizedException,
-  ConflictException,
   BadRequestException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+import * as jwt from "jsonwebtoken";
 import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
 import { Prisma } from "@prisma/client";
@@ -14,7 +14,10 @@ import { UserRole, getRolePermissions } from "@hms/shared";
 import { LoginDto, RegisterDto, ResetPasswordDto, ChangePasswordDto, EnableTwoFactorDto, DisableTwoFactorDto } from "./dto/auth.dto";
 import { MailService } from "./mail.service";
 import { TwoFactorService } from "./two-factor.service";
-import { JwtStrategy } from "./strategies/jwt.strategy";
+import {
+  accessPrivatePem,
+  accessSigningKid,
+} from "./token-keys";
 
 export interface AuthUser {
   id: string;
@@ -35,6 +38,7 @@ export class AuthService {
   >();
   private static readonly TWO_FACTOR_MAX_ATTEMPTS = 5;
   private static readonly TWO_FACTOR_WINDOW_MS = 15 * 60 * 1000;
+  private static readonly GENERIC_LOGIN_FAILURE = "Invalid email or password";
 
   constructor(
     private readonly prisma: PrismaService,
@@ -43,20 +47,43 @@ export class AuthService {
     private readonly twoFactorService: TwoFactorService,
   ) {}
 
+  private signAccessToken(payload: Record<string, unknown>): string {
+    const privatePem = accessPrivatePem();
+    if (privatePem) {
+      // Sign directly with jsonwebtoken: @nestjs/jwt resolves the module-level
+      // `secret` (JwtModule.register) ahead of any per-call `privateKey`, which
+      // would otherwise downgrade RS256 signing to the HS256 secret.
+      return jwt.sign(payload, privatePem, {
+        algorithm: "RS256",
+        keyid: accessSigningKid() ?? undefined,
+        expiresIn: "15m",
+      });
+    }
+    return this.jwtService.sign(payload, {
+      expiresIn: "15m",
+    });
+  }
+
   async register(dto: RegisterDto) {
+    const email = dto.email.toLowerCase();
     const existing = await this.prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase() },
+      where: { email },
     });
 
+    // Always return the same success response to avoid leaking account existence.
     if (existing) {
-      throw new ConflictException("User with this email already exists");
+      return {
+        email,
+        message:
+          "Account created. A platform administrator will review and activate your account.",
+      };
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
 
     const user = await this.prisma.user.create({
       data: {
-        email: dto.email.toLowerCase(),
+        email,
         passwordHash,
         firstName: dto.firstName,
         lastName: dto.lastName,
@@ -86,13 +113,13 @@ export class AuthService {
     isActive?: boolean;
   }): void {
     if (user.deletedAt) {
-      throw new UnauthorizedException("Invalid credentials");
+      throw new UnauthorizedException(AuthService.GENERIC_LOGIN_FAILURE);
     }
     if (user.status === "INACTIVE") {
-      throw new UnauthorizedException("Account deactivated");
+      throw new UnauthorizedException(AuthService.GENERIC_LOGIN_FAILURE);
     }
     if (user.isActive === false) {
-      throw new UnauthorizedException("Account deactivated");
+      throw new UnauthorizedException(AuthService.GENERIC_LOGIN_FAILURE);
     }
   }
 
@@ -108,13 +135,13 @@ export class AuthService {
     if (!user) {
       // Run a dummy compare to prevent timing-based email enumeration.
       await bcrypt.compare(dto.password, "$2a$12$x".padEnd(60, "0"));
-      throw new UnauthorizedException("Invalid credentials");
+      throw new UnauthorizedException(AuthService.GENERIC_LOGIN_FAILURE);
     }
 
     const passwordValid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordValid) {
       await this.recordFailedLogin(user.id);
-      throw new UnauthorizedException("Invalid credentials");
+      throw new UnauthorizedException(AuthService.GENERIC_LOGIN_FAILURE);
     }
 
     // If the lock window has passed, unlock the account and proceed.
@@ -125,22 +152,20 @@ export class AuthService {
           data: { status: "ACTIVE", failedLoginCount: 0, lockedUntil: null },
         });
       } else {
-        throw new UnauthorizedException(
-          "Account locked due to too many failed attempts",
-        );
+        throw new UnauthorizedException(AuthService.GENERIC_LOGIN_FAILURE);
       }
     }
 
     if (user.status === "SUSPENDED") {
-      throw new UnauthorizedException("Account suspended");
+      throw new UnauthorizedException(AuthService.GENERIC_LOGIN_FAILURE);
     }
 
     if (user.lockedUntil && user.lockedUntil > new Date()) {
-      throw new UnauthorizedException("Account locked. Try again later.");
+      throw new UnauthorizedException(AuthService.GENERIC_LOGIN_FAILURE);
     }
 
     if (user.status === "PENDING") {
-      throw new UnauthorizedException("Account not yet activated");
+      throw new UnauthorizedException(AuthService.GENERIC_LOGIN_FAILURE);
     }
 
     this.checkUserAccessible(user);
@@ -204,18 +229,15 @@ export class AuthService {
       },
     });
 
-    const accessToken = this.jwtService.sign(
-      {
-        sub: user.id,
-        email: user.email,
-        tenantId: user.tenantId,
-        role: user.role,
-        permissions,
-        mustChangePassword: user.mustChangePassword,
-        sid: session.id,
-      },
-      { secret: JwtStrategy.secretOrKey(), expiresIn: "15m" },
-    );
+    const accessToken = this.signAccessToken({
+      sub: user.id,
+      email: user.email,
+      tenantId: user.tenantId,
+      role: user.role,
+      permissions,
+      mustChangePassword: user.mustChangePassword,
+      sid: session.id,
+    });
 
     await this.prisma.session.update({
       where: { id: session.id },
@@ -298,18 +320,15 @@ export class AuthService {
       .update(newRefreshToken)
       .digest("hex");
 
-    const accessToken = this.jwtService.sign(
-      {
-        sub: user.id,
-        email: user.email,
-        tenantId: user.tenantId,
-        role: user.role,
-        permissions,
-        mustChangePassword: user.mustChangePassword,
-        sid: session.id,
-      },
-      { secret: JwtStrategy.secretOrKey(), expiresIn: "15m" },
-    );
+    const accessToken = this.signAccessToken({
+      sub: user.id,
+      email: user.email,
+      tenantId: user.tenantId,
+      role: user.role,
+      permissions,
+      mustChangePassword: user.mustChangePassword,
+      sid: session.id,
+    });
 
     await this.prisma.session.update({
       where: { id: session.id },

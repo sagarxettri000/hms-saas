@@ -29,7 +29,7 @@ export default function TenantsPage() {
         { name: 'adminFirstName', label: 'Admin first name', required: true },
         { name: 'adminLastName', label: 'Admin last name', required: true },
         { name: 'adminEmail', label: 'Admin email', type: 'email', required: true },
-        { name: 'adminPassword', label: 'Admin password', type: 'password', required: true },
+        { name: 'adminPassword', label: 'Admin password', type: 'password', required: true, hint: 'Used after the admin account is activated', },
         { name: 'phone', label: 'Phone' },
         { name: 'email', label: 'Email', type: 'email' },
         { name: 'addressLine1', label: 'Address line 1' },

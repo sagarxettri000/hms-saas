@@ -487,6 +487,13 @@ enum PurchaseRequestStatus {
   CONVERTED
 }
 
+enum PurchaseRequestPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
 enum StoreType {
   MAIN
   WARD
@@ -2376,14 +2383,20 @@ model PurchaseRequest {
   requestNumber String
   departmentId  String?
   requestedBy   String?
-  status        PurchaseRequestStatus @default(DRAFT)
+  status        PurchaseRequestStatus @default(PENDING)
+  priority      PurchaseRequestPriority @default(NORMAL)
+  neededBy      DateTime?
+  justification String?
   notes         String?
   approvedBy    String?
   approvedAt    DateTime?
+  rejectedBy    String?
+  rejectedAt    DateTime?
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
 
   items PurchaseRequestItem[]
+  purchaseOrders PurchaseOrder[]
 
   @@index([tenantId, status])
   @@map("purchase_requests")
@@ -2411,6 +2424,8 @@ model PurchaseOrder {
   poNumber        String
   supplierId      String?
   supplier        Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  purchaseRequestId String?
+  purchaseRequest PurchaseRequest?    @relation(fields: [purchaseRequestId], references: [id], onDelete: SetNull)
   storeId         String?
   store           Store?              @relation(fields: [storeId], references: [id], onDelete: SetNull)
   status          PurchaseOrderStatus @default(DRAFT)
@@ -2433,6 +2448,7 @@ model PurchaseOrder {
   @@map("purchase_orders")
   @@index([storeId])
   @@index([supplierId])
+  @@index([purchaseRequestId])
 }
 
 model PurchaseOrderItem {
@@ -3632,17 +3648,20 @@ model ControlledSubstanceLog {
 }
 
 model StockTransfer {
-  id            String      @id @default(cuid())
-  tenantId      String
-  fromStore     String?
-  toStore       String?
-  itemName      String?
-  quantity      Decimal     @db.Decimal(12, 3)
-  status        String      @default("COMPLETED")
-  transferredAt DateTime    @default(now())
-  createdBy     String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id              String      @id @default(cuid())
+  tenantId        String
+  fromStoreId     String?
+  toStoreId       String?
+  inventoryItemId String?
+  fromStore       String?
+  toStore         String?
+  itemName        String?
+  quantity        Decimal     @db.Decimal(12, 3)
+  status          String      @default("COMPLETED")
+  transferredAt   DateTime    @default(now())
+  createdBy       String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   @@index([tenantId, transferredAt])
   @@map("stock_transfers")

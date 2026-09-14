@@ -423,6 +423,7 @@ export class PharmacyService {
       "sku",
       "unit",
       "itemType",
+      "currentStock",
       "minStock",
       "maxStock",
       "reorderLevel",
@@ -431,6 +432,7 @@ export class PharmacyService {
       "batchNumber",
       "purchaseRate",
       "salesRate",
+      "isActive",
     ];
     const data: any = {};
     for (const field of ALLOWED) {
@@ -441,7 +443,7 @@ export class PharmacyService {
       if (!ITEM_TYPES.includes(data.itemType))
         throw new BadRequestException("Invalid item type");
     }
-    if (dto.expiryDate)
+    if (dto.expiryDate !== undefined && dto.expiryDate !== null && dto.expiryDate !== "")
       data.expiryDate = this.normalizeDate(dto.expiryDate);
     return this.prisma.inventoryItem.update({
       where: { id },

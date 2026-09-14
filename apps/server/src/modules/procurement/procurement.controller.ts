@@ -98,6 +98,38 @@ export class ProcurementController {
     );
   }
 
+  @Patch("purchase-requests/:id/reject")
+  @Permissions(PermissionAction.REJECT)
+  @ApiOperation({ summary: "Reject purchase request" })
+  rejectPurchaseRequest(
+    @Param("id") id: string,
+    @Body() body: { reason?: string },
+    @Req() req: any,
+  ) {
+    return this.procurementService.rejectPurchaseRequest(
+      req.user.tenantId,
+      id,
+      req.user.id,
+      body.reason,
+    );
+  }
+
+  @Post("purchase-requests/:id/convert")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Convert an approved purchase request into a PO" })
+  convertPurchaseRequestToPO(
+    @Param("id") id: string,
+    @Body() body: Partial<CreatePurchaseOrderDto>,
+    @Req() req: any,
+  ) {
+    return this.procurementService.convertPurchaseRequestToPO(
+      req.user.tenantId,
+      id,
+      body,
+      req.user.id,
+    );
+  }
+
   // ---------- Purchase Orders ----------
 
   @Get("purchase-orders")

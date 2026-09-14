@@ -129,6 +129,13 @@ export function badgeTone(value: any): any {
     SENT: 'blue',
     DELIVERED: 'green',
     READ: 'gray',
+    PARTIAL_RECEIVED: 'yellow',
+    RECEIVED: 'green',
+    INVOICED: 'blue',
+    URGENT: 'red',
+    HIGH: 'yellow',
+    LOW: 'blue',
+    NORMAL: 'gray',
   };
   return map[String(value)] || 'gray';
 }

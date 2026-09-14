@@ -256,6 +256,248 @@ function LineItemsEditor({
   );
 }
 
+function ProcurementLineItemsEditor({
+  value,
+  onChange,
+  priceKey = 'unitPrice',
+}: {
+  value: any[];
+  onChange: (v: any[]) => void;
+  priceKey?: string;
+}) {
+  const [rows, setRows] = useState<any[]>(() =>
+    value.length
+      ? value.map((r) => ({ ...r, _price: r[priceKey] ?? r.unitPrice ?? 0 }))
+      : [{ itemName: '', quantity: 1, unit: '', _price: 0 }],
+  );
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Row[]>([]);
+  const [showResults, setShowResults] = useState(false);
+  const [searching, setSearching] = useState(false);
+
+  function normalize(next: any[]) {
+    return next
+      .filter((r) => r.itemName && String(r.itemName).trim())
+      .map((r) => ({
+        itemName: String(r.itemName).trim(),
+        medicineId: r.medicineId,
+        quantity: Number(r.quantity) > 0 ? Number(r.quantity) : 1,
+        unit: r.unit || undefined,
+        [priceKey]: Number(r._price) > 0 ? Number(r._price) : 0,
+      }));
+  }
+
+  const runSearch = useCallback(async (term: string) => {
+    setSearching(true);
+    try {
+      const qs = new URLSearchParams({ limit: '8' });
+      if (term.trim()) qs.set('search', term.trim());
+      const res: ApiResponse<any> = await api(`/pharmacy/inventory?${qs.toString()}`);
+      const payload = res.data as any;
+      const list = Array.isArray(payload) ? payload : payload.data ?? [];
+      setResults(list);
+      setShowResults(true);
+    } catch {
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const cancelled = { current: false };
+    const id = setTimeout(() => {
+      if (!query.trim() || cancelled.current) {
+        setShowResults(false);
+        return;
+      }
+      runSearch(query);
+    }, 300);
+    return () => {
+      cancelled.current = true;
+      clearTimeout(id);
+    };
+  }, [query, runSearch]);
+
+  function update(index: number, patch: any) {
+    const next = rows.map((r, i) => (i === index ? { ...r, ...patch } : r));
+    setRows(next);
+    onChange(normalize(next));
+  }
+
+  function addRow() {
+    setRows([...rows, { itemName: '', quantity: 1, unit: '', _price: 0 }]);
+  }
+
+  function removeRow(index: number) {
+    const next = rows.filter((_, i) => i !== index);
+    const kept = next.length ? next : [{ itemName: '', quantity: 1, unit: '', _price: 0 }];
+    setRows(kept);
+    onChange(normalize(next));
+  }
+
+  function pickItem(item: Row) {
+    const next = [
+      ...rows.filter((r) => r.itemName && String(r.itemName).trim()),
+      {
+        itemName: item.name,
+        medicineId: item.medicineId || undefined,
+        quantity: 1,
+        unit: item.unit || '',
+        _price: Number(item.purchaseRate) || 0,
+      },
+    ];
+    setRows(next);
+    onChange(normalize(next));
+    setQuery('');
+    setShowResults(false);
+  }
+
+  const subtotal = rows.reduce(
+    (sum, r) => sum + (Number(r.quantity) || 0) * (Number(r._price) || 0),
+    0,
+  );
+
+  return (
+    <div>
+      <div style={{ position: 'relative', marginBottom: 8 }}>
+        <input
+          className="input"
+          value={query}
+          placeholder="Search inventory items by name or SKU…"
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => runSearch(query)}
+          onBlur={() => setTimeout(() => setShowResults(false), 150)}
+        />
+        {showResults && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              zIndex: 20,
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              maxHeight: 240,
+              overflowY: 'auto',
+              boxShadow: '0 6px 16px rgba(0,0,0,0.12)',
+            }}
+          >
+            {results.length === 0 ? (
+              <div className="note" style={{ padding: 10 }}>
+                No inventory items found.
+              </div>
+            ) : (
+              results.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pickItem(item)}
+                  style={{
+                    display: 'flex',
+                    width: '100%',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '8px 12px',
+                    border: 'none',
+                    borderBottom: '1px solid var(--border)',
+                    background: 'transparent',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                  }}
+                >
+                  <span className="mono" style={{ color: 'var(--text-muted)' }}>
+                    {item.store?.name || item.sku || ''}
+                  </span>
+                  <span style={{ flex: 1 }}>{item.name}</span>
+                  <span className="mono">{formatMoney(item.purchaseRate)}</span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th style={{ width: 110 }}>Unit</th>
+              <th style={{ width: 90 }}>Qty</th>
+              <th style={{ width: 110 }}>Rate (NPR)</th>
+              <th style={{ width: 110 }}>Amount</th>
+              <th style={{ width: 44 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td>
+                  <input
+                    className="input"
+                    value={r.itemName}
+                    placeholder="e.g. Paracetamol 500mg"
+                    onChange={(e) => update(i, { itemName: e.target.value })}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="input"
+                    value={r.unit}
+                    placeholder="e.g. strip"
+                    onChange={(e) => update(i, { unit: e.target.value })}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="input"
+                    type="number"
+                    min={1}
+                    value={r.quantity}
+                    onChange={(e) => update(i, { quantity: e.target.value })}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="input"
+                    type="number"
+                    min={0}
+                    value={r._price}
+                    onChange={(e) => update(i, { _price: e.target.value })}
+                  />
+                </td>
+                <td className="mono">
+                  {formatMoney((Number(r.quantity) || 0) * (Number(r._price) || 0))}
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-danger"
+                    onClick={() => removeRow(i)}
+                    aria-label="Remove line"
+                  >
+                    ×
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={addRow}>
+          + Add line
+        </button>
+        <span className="note">Subtotal: {formatMoney(subtotal)}</span>
+      </div>
+    </div>
+  );
+}
+
 function renderCell(column: Column, row: Row) {
   if (column.render) return column.render(row);
   const value = pick(row, column.key);
@@ -284,6 +526,15 @@ function FieldInput({
   const common = { className: field.type === 'textarea' ? 'textarea' : 'input' };
   if (field.type === 'items') {
     return <LineItemsEditor value={Array.isArray(value) ? value : []} onChange={onChange} />;
+  }
+  if (field.type === 'procItems') {
+    return (
+      <ProcurementLineItemsEditor
+        priceKey={field.priceKey || 'unitPrice'}
+        value={Array.isArray(value) ? value : []}
+        onChange={onChange}
+      />
+    );
   }
   if (field.type === 'select') {
     return (
@@ -485,7 +736,7 @@ function CreateModal({
       }
       if (f.type === 'number') value = Number(value);
       if (f.type === 'date') value = new Date(value).toISOString();
-      if (f.type === 'items') {
+      if (f.type === 'items' || f.type === 'procItems') {
         if (!Array.isArray(value) || value.length === 0) {
           if (f.required) throw new Error(`${f.label} is required`);
           continue;
@@ -672,7 +923,7 @@ function EditModal({
       }
       if (f.type === 'number') value = Number(value);
       if (f.type === 'date') value = new Date(value).toISOString();
-      if (f.type === 'items') {
+      if (f.type === 'items' || f.type === 'procItems') {
         if (!Array.isArray(value) || value.length === 0) {
           if (f.required) throw new Error(`${f.label} is required`);
           continue;

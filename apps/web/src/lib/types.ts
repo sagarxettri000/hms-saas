@@ -21,6 +21,7 @@ export type FieldType =
   | 'json'
   | 'checkbox'
   | 'items'
+  | 'procItems'
   | 'searchSelect'
   | 'allergies';
 
@@ -34,6 +35,7 @@ export interface FormField {
   defaultValue?: any;
   full?: boolean;
   hint?: string;
+  priceKey?: string;
   optionsFrom?: {
     endpoint: string;
     valueKey?: string;

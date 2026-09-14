@@ -6,6 +6,8 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
+import { AuditService } from "../audit/audit.service";
+import { buildPurchaseOrderPdf } from "./purchase-order-pdf";
 
 export interface CreateSupplierDto {
   name: string;
@@ -69,7 +71,10 @@ export interface CreateGoodsReceiptDto {
 export class ProcurementService {
   private readonly logger = new Logger(ProcurementService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // ---------- Suppliers ----------
 
@@ -440,6 +445,49 @@ export class ProcurementService {
     if (status === "APPROVED" || status === "CONFIRMED")
       data.approvedBy = userId;
     return this.prisma.purchaseOrder.update({ where: { id }, data });
+  }
+
+  // ---------- Purchase Order PDF ----------
+
+  async generatePurchaseOrderPdf(tenantId: string, id: string, userId?: string) {
+    const order = await this.findPurchaseOrderById(tenantId, id);
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        name: true,
+        addressLine1: true,
+        addressLine2: true,
+        city: true,
+        district: true,
+        province: true,
+        country: true,
+        phone: true,
+        email: true,
+      },
+    });
+    const user = userId
+      ? await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { firstName: true, middleName: true, lastName: true },
+        })
+      : null;
+    const generatedBy = user
+      ? [user.firstName, user.middleName, user.lastName]
+          .filter(Boolean)
+          .join(" ")
+      : undefined;
+
+    await this.audit.log(
+      tenantId,
+      userId,
+      "PurchaseOrder",
+      order.id,
+      "PRINT",
+      { action: "PDF", format: "purchase-order" },
+    );
+
+    const buffer = buildPurchaseOrderPdf(order as any, tenant as any, generatedBy);
+    return { buffer, filename: `${order.poNumber}.pdf` };
   }
 
   // ---------- Goods Receipts ----------

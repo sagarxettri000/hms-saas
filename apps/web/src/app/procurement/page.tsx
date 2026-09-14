@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import EntityPage from '@/components/EntityPage';
 import { api, unwrap } from '@/lib/api';
 import { formatDate, formatMoney } from '@/lib/hooks';
+import PurchaseOrderReceiptModal from '@/components/PurchaseOrderReceiptModal';
 import type { Action, FormField } from '@/lib/types';
 
 type Tab = 'orders' | 'requests' | 'items' | 'transfers' | 'expiry' | 'receipts';
@@ -53,6 +54,7 @@ export default function ProcurementPage() {
   const [grnOrder, setGrnOrder] = useState<any | null>(null);
   const [convertRequest, setConvertRequest] = useState<any | null>(null);
   const [adjustItem, setAdjustItem] = useState<any | null>(null);
+  const [poReceipt, setPoReceipt] = useState<any | null>(null);
 
   const loadTransfers = useCallback(async () => {
     try {
@@ -129,6 +131,12 @@ export default function ProcurementPage() {
   // ---------- Actions ----------
 
   const orderActions: Action[] = [
+    {
+      label: 'Receipt',
+      tone: 'secondary',
+      skipReload: true,
+      onClick: (row) => setPoReceipt(row),
+    },
     {
       label: 'Receive Stock',
       tone: 'primary',
@@ -741,6 +749,13 @@ export default function ProcurementPage() {
             setGrnOrder(null);
             reloadBase();
           }}
+        />
+      )}
+
+      {poReceipt && (
+        <PurchaseOrderReceiptModal
+          order={poReceipt}
+          onClose={() => setPoReceipt(null)}
         />
       )}
 

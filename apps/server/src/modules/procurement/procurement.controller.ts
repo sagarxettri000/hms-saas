@@ -7,6 +7,7 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -155,6 +156,27 @@ export class ProcurementController {
   @ApiOperation({ summary: "Get purchase order" })
   findPurchaseOrderById(@Param("id") id: string, @Req() req: any) {
     return this.procurementService.findPurchaseOrderById(req.user.tenantId, id);
+  }
+
+  @Get("purchase-orders/:id/pdf")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Download purchase order PDF" })
+  async downloadPurchaseOrderPdf(
+    @Param("id") id: string,
+    @Req() req: any,
+    @Res() res: any,
+  ) {
+    const { buffer, filename } =
+      await this.procurementService.generatePurchaseOrderPdf(
+        req.user.tenantId,
+        id,
+        req.user.id,
+      );
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+    });
+    res.send(buffer);
   }
 
   @Patch("purchase-orders/:id/status")

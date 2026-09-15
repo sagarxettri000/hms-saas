@@ -8,8 +8,6 @@ import ReceiptModal from '@/components/ReceiptModal';
 import PaymentModal from '@/components/PaymentModal';
 import PatientPrescriptions from '@/components/PatientPrescriptions';
 
-const REMOVED_KEY = 'pharmacy_expiry_removed';
-
 const VALID_TABS = ['medicines', 'billing', 'bills', 'stores', 'alerts', 'expiry'];
 
 const TAB_LABELS: Record<string, string> = {
@@ -18,7 +16,7 @@ const TAB_LABELS: Record<string, string> = {
   bills: 'Bills',
   stores: 'Stores',
   alerts: 'Alerts',
-  expiry: 'Expiry',
+  expiry: 'Expiry Tracking',
 };
 
 const CATEGORIES = [
@@ -117,15 +115,6 @@ function InvoiceStatusBadge({ status }: { status: string }) {
     status === 'OVERDUE' ? 'badge-red' :
     'badge-gray';
   return <span className={`badge ${tone}`}>{status}</span>;
-}
-
-function readRemoved(): string[] {
-  try {
-    const raw = localStorage.getItem(REMOVED_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
 }
 
 function getTab(params: URLSearchParams): string {
@@ -610,158 +599,227 @@ function MedicinesTab() {
   );
 }
 
-interface ExpiryRow {
-  key: string;
-  medicineId?: string;
-  name: string;
-  batch: string;
-  expiryDate: string;
-  stock: number;
+const EXPIRY_TRACKING_WINDOW_DAYS = 30;
+
+function expiryState(raw: any): 'expired' | 'expiring' | 'safe' | 'none' {
+  if (!raw) return 'none';
+  const diffDays = Math.round(
+    (new Date(raw).getTime() - Date.now()) / 86400000,
+  );
+  if (diffDays < 0) return 'expired';
+  if (diffDays <= EXPIRY_TRACKING_WINDOW_DAYS) return 'expiring';
+  return 'safe';
 }
 
-function buildExpiryRows(medicines: any[], inventory: any[]): ExpiryRow[] {
-  const invRows: ExpiryRow[] = inventory
-    .filter((i) => i.expiryDate)
-    .map((i) => ({
-      key: i.id,
-      medicineId: i.medicineId,
-      name: i.medicine?.name || i.name || 'Unknown item',
-      batch: i.batchNumber || '—',
-      expiryDate: i.expiryDate,
-      stock: Number(i.currentStock) || 0,
-    }));
-
-  if (invRows.length > 0) return invRows;
-
-  return medicines
-    .filter((m) => m.expiryDate)
-    .map((m) => ({
-      key: m.id,
-      medicineId: m.id,
-      name: m.name,
-      batch: m.batchNumber || '—',
-      expiryDate: m.expiryDate,
-      stock: Number(m.stock ?? m.currentStock ?? 0),
-    }));
-}
-
-function ExpiryTab() {
-  const [rows, setRows] = useState<ExpiryRow[]>([]);
+function ExpiryTrackingTab() {
+  const [items, setItems] = useState<any[]>([]);
+  const [stores, setStores] = useState<any[]>([]);
+  const [storeId, setStoreId] = useState('');
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('');
-  const [removed, setRemoved] = useState<string[]>([]);
+  const [savingId, setSavingId] = useState<string | null>(null);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    Promise.all([
-      api('/pharmacy/medicines?limit=200'),
-      api('/pharmacy/inventory?limit=200'),
-    ])
-      .then(([medRes, invRes]: any[]) => {
-        setRows(buildExpiryRows(toList(medRes), toList(invRes)));
-      })
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false));
-  }, []);
+    try {
+      const url = `/pharmacy/inventory?limit=500${storeId ? `&storeId=${storeId}` : ''}`;
+      const data = toList(await api(url));
+      setItems(Array.isArray(data) ? data : []);
+    } catch {
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [storeId]);
 
   useEffect(() => {
     load();
-    setRemoved(readRemoved());
   }, [load]);
 
-  function markRemoved(key: string) {
-    const next = removed.includes(key) ? removed.filter((k) => k !== key) : [...removed, key];
-    setRemoved(next);
+  useEffect(() => {
+    api('/pharmacy/stores?limit=200')
+      .then((r) => {
+        const d = toList(r);
+        setStores(Array.isArray(d) ? d : []);
+      })
+      .catch(() => setStores([]));
+  }, []);
+
+  const rows = useMemo(() => {
+    return items
+      .map((item: any) => {
+        const raw = item.expiryDate || '';
+        return { ...item, effectiveExpiry: raw, state: expiryState(raw) };
+      })
+      .sort((a: any, b: any) => {
+        if (!a.effectiveExpiry) return 1;
+        if (!b.effectiveExpiry) return -1;
+        return String(a.effectiveExpiry).localeCompare(String(b.effectiveExpiry));
+      });
+  }, [items]);
+
+  const trackedCount = rows.filter((r: any) => r.effectiveExpiry).length;
+  const expiredCount = rows.filter((r: any) => r.state === 'expired' && r.isActive !== false).length;
+  const expiringCount = rows.filter((r: any) => r.state === 'expiring' && r.isActive !== false).length;
+  const safeCount = rows.filter((r: any) => r.state === 'safe' && r.isActive !== false).length;
+
+  const saveExpiry = async (item: any, value: string) => {
+    setSavingId(item.id);
     try {
-      localStorage.setItem(REMOVED_KEY, JSON.stringify(next));
-    } catch {}
-  }
-
-  const withStatus = rows.map((r) => {
-    const days = daysUntil(r.expiryDate);
-    return { ...r, days, status: expiryStatus(days), isRemoved: removed.includes(r.key) };
-  });
-
-  const counts = {
-    total: withStatus.length,
-    expired: withStatus.filter((r) => r.status === 'EXPIRED').length,
-    exp30: withStatus.filter((r) => r.status === 'EXPIRING_30_DAYS').length,
-    exp60: withStatus.filter((r) => r.status === 'EXPIRING_60_DAYS').length,
+      await api(`/pharmacy/inventory/${item.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ expiryDate: value || null }),
+      });
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === item.id
+            ? { ...it, expiryDate: value ? `${value}T00:00:00.000Z` : null }
+            : it,
+        ),
+      );
+    } catch (err) {
+      window.alert(
+        err instanceof Error ? `Failed to save expiry date: ${err.message}` : 'Failed to save expiry date',
+      );
+    } finally {
+      setSavingId(null);
+    }
   };
 
-  const filtered = filter ? withStatus.filter((r) => r.status === filter) : withStatus;
+  const markRemoved = async (item: any) => {
+    if (!window.confirm(`Mark "${item.name}" as removed / write off?`)) return;
+    setSavingId(item.id);
+    try {
+      const qty = Number(item.currentStock) || 0;
+      if (qty > 0) {
+        await api(`/pharmacy/inventory/${item.id}/adjust`, {
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'ADJUSTMENT',
+            quantity: qty,
+            direction: 'OUT',
+            remarks: 'Marked removed / write-off',
+          }),
+        });
+      }
+      await api(`/pharmacy/inventory/${item.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: false }),
+      });
+      await load();
+    } catch (err) {
+      window.alert(
+        err instanceof Error ? err.message : 'Failed to mark item as removed',
+      );
+    } finally {
+      setSavingId(null);
+    }
+  };
 
   return (
     <>
-      <div className="stat-grid" style={{ marginBottom: 20 }}>
-        <div className="stat-card">
-          <div className="stat-label">Total Medicines</div>
-          <div className="stat-value stat-blue">{counts.total}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Expired</div>
-          <div className="stat-value stat-red">{counts.expired}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Expiring within 30 days</div>
-          <div className="stat-value" style={{ color: '#ea580c' }}>{counts.exp30}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Expiring within 60 days</div>
-          <div className="stat-value stat-amber">{counts.exp60}</div>
-        </div>
-      </div>
-
       <div className="toolbar" style={{ marginBottom: 16 }}>
-        <select className="input" style={{ width: 240 }} value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="">All Statuses</option>
-          <option value="SAFE">Safe</option>
-          <option value="EXPIRING_60_DAYS">Expiring in 60 Days</option>
-          <option value="EXPIRING_30_DAYS">Expiring in 30 Days</option>
-          <option value="EXPIRED">Expired</option>
+        <select className="input" style={{ width: 240 }} value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+          <option value="">All Stores</option>
+          {stores.map((s: any) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
         </select>
         <button className="btn btn-secondary" onClick={load}>Refresh</button>
       </div>
 
+      <div className="stat-grid" style={{ marginBottom: 20 }}>
+        <div className="stat-card">
+          <div className="stat-label">Tracked Items</div>
+          <div className="stat-value">{trackedCount}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Expired</div>
+          <div className="stat-value stat-red">{expiredCount}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Expiring ({EXPIRY_TRACKING_WINDOW_DAYS}d)</div>
+          <div className="stat-value" style={{ color: 'var(--warning)' }}>{expiringCount}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Safe</div>
+          <div className="stat-value stat-green">{safeCount}</div>
+        </div>
+      </div>
+
       {loading ? (
-        <div className="loading">Loading expiry data...</div>
-      ) : filtered.length === 0 ? (
-        <div className="empty">No batch records found.</div>
+        <div className="loading">Loading inventory items...</div>
+      ) : rows.length === 0 ? (
+        <div className="empty">No inventory items found.</div>
       ) : (
         <div className="table-wrap">
           <table className="table">
             <thead>
               <tr>
-                <th>Medicine Name</th>
-                <th>Batch</th>
+                <th>Item</th>
+                <th>Store</th>
                 <th>Expiry Date</th>
-                <th>Stock</th>
-                <th>Days Until Expiry</th>
                 <th>Status</th>
-                <th>Action</th>
+                <th>Value</th>
+                <th style={{ width: 1 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
-                <tr key={r.key} style={r.isRemoved ? { opacity: 0.5 } : r.status === 'EXPIRED' ? { background: '#fef2f2' } : undefined}>
-                  <td style={{ fontWeight: 600, textDecoration: r.isRemoved ? 'line-through' : undefined }}>{r.name}</td>
-                  <td className="mono">{r.batch}</td>
-                  <td>{formatDate(r.expiryDate)}</td>
-                  <td>{r.stock}</td>
-                  <td>{r.days === null ? '—' : r.days < 0 ? `${Math.abs(r.days)}d ago` : `${r.days}d`}</td>
-                  <td>
-                    <ExpiryBadge status={r.status} />
-                    {r.isRemoved && <span className="badge badge-gray" style={{ marginLeft: 4 }}>REMOVED</span>}
-                  </td>
-                  <td>
-                    {r.status === 'EXPIRED' && !r.isRemoved && (
-                      <button className="btn btn-sm btn-danger" onClick={() => markRemoved(r.key)}>
-                        Mark as Removed
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {rows.map((item: any) => {
+                const removed = item.isActive === false;
+                return (
+                  <tr key={item.id} style={removed ? { opacity: 0.5 } : undefined}>
+                    <td>
+                      <strong>{item.name}</strong>
+                      {item.batchNumber && (
+                        <div className="note">Batch: {item.batchNumber}</div>
+                      )}
+                    </td>
+                    <td>{item.store?.name || '—'}</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          className="input"
+                          type="date"
+                          style={{ maxWidth: 170 }}
+                          value={item.effectiveExpiry ? String(item.effectiveExpiry).slice(0, 10) : ''}
+                          onChange={(e) => saveExpiry(item, e.target.value)}
+                          disabled={removed || savingId === item.id}
+                        />
+                        {savingId === item.id && <span className="note">saving…</span>}
+                      </div>
+                    </td>
+                    <td>
+                      {removed ? (
+                        <span className="badge badge-gray">REMOVED</span>
+                      ) : item.state === 'expired' ? (
+                        <span className="badge badge-red">EXPIRED</span>
+                      ) : item.state === 'expiring' ? (
+                        <span className="badge badge-yellow">EXPIRING SOON</span>
+                      ) : item.state === 'safe' ? (
+                        <span className="badge badge-green">SAFE</span>
+                      ) : (
+                        <span className="badge badge-gray">NO DATE</span>
+                      )}
+                    </td>
+                    <td>
+                      {item.purchaseRate != null
+                        ? formatMoney(Number(item.purchaseRate) * (Number(item.currentStock) || 0))
+                        : '—'}
+                    </td>
+                    <td>
+                      {!removed && (
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => markRemoved(item)}
+                          disabled={savingId === item.id}
+                        >
+                          Mark Removed
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1905,7 +1963,7 @@ function PharmacyPageInner() {
       {activeTab === 'bills' && <BillsTab />}
       {activeTab === 'stores' && <StoresTab />}
       {activeTab === 'alerts' && <AlertsTab />}
-      {activeTab === 'expiry' && <ExpiryTab />}
+      {activeTab === 'expiry' && <ExpiryTrackingTab />}
     </>
   );
 }

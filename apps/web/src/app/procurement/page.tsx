@@ -7,7 +7,7 @@ import { formatDate, formatMoney } from '@/lib/hooks';
 import PurchaseOrderReceiptModal from '@/components/PurchaseOrderReceiptModal';
 import type { Action, FormField } from '@/lib/types';
 
-type Tab = 'orders' | 'requests' | 'items' | 'transfers' | 'expiry' | 'receipts';
+type Tab = 'orders' | 'requests' | 'items' | 'transfers' | 'receipts';
 
 interface StockTransfer {
   id: string;
@@ -17,12 +17,6 @@ interface StockTransfer {
   itemName: string;
   quantity: number;
   status: string;
-}
-
-const EXPIRY_WINDOW_DAYS = 30;
-
-function nowISO() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 export default function ProcurementPage() {
@@ -45,11 +39,6 @@ export default function ProcurementPage() {
   const [fromItems, setFromItems] = useState<any[]>([]);
   const [transferMsg, setTransferMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [savingTransfer, setSavingTransfer] = useState(false);
-
-  // ---------- Expiry state ----------
-  const [expiryItems, setExpiryItems] = useState<any[]>([]);
-  const [loadingExpiry, setLoadingExpiry] = useState(false);
-  const [expiryLoadingId, setExpiryLoadingId] = useState<string | null>(null);
 
   const [grnOrder, setGrnOrder] = useState<any | null>(null);
   const [convertRequest, setConvertRequest] = useState<any | null>(null);
@@ -77,19 +66,6 @@ export default function ProcurementPage() {
     }
   }, []);
 
-  const loadExpiry = useCallback(async () => {
-    setLoadingExpiry(true);
-    try {
-      const r = await api('/pharmacy/inventory?limit=500');
-      const data = unwrap(r);
-      setExpiryItems(Array.isArray(data) ? data : []);
-    } catch {
-      setExpiryItems([]);
-    } finally {
-      setLoadingExpiry(false);
-    }
-  }, []);
-
   useEffect(() => {
     api('/procurement/suppliers?limit=500')
       .then((r) => {
@@ -105,10 +81,6 @@ export default function ProcurementPage() {
       .catch(() => {});
     loadTransfers();
   }, [loadTransfers]);
-
-  useEffect(() => {
-    if (tab === 'expiry') loadExpiry();
-  }, [tab, loadExpiry]);
 
   useEffect(() => {
     if (tab === 'transfers') loadTransfers();
@@ -226,88 +198,6 @@ export default function ProcurementPage() {
     { name: 'location', label: 'Location' },
   ];
 
-  // ---------- Expiry helpers ----------
-
-  const expiryRows = useMemo(() => {
-    return expiryItems
-      .map((item: any) => {
-        const raw = item.expiryDate || '';
-        let state: 'expired' | 'expiring' | 'safe' | 'none' = 'none';
-        if (raw) {
-          const diffDays = Math.round(
-            (new Date(raw).getTime() - new Date(nowISO()).getTime()) / 86400000,
-          );
-          if (diffDays < 0) state = 'expired';
-          else if (diffDays <= EXPIRY_WINDOW_DAYS) state = 'expiring';
-          else state = 'safe';
-        }
-        return { ...item, effectiveExpiry: raw, state };
-      })
-      .sort((a: any, b: any) => {
-        if (!a.effectiveExpiry) return 1;
-        if (!b.effectiveExpiry) return -1;
-        return String(a.effectiveExpiry).localeCompare(String(b.effectiveExpiry));
-      });
-  }, [expiryItems]);
-
-  const trackedCount = expiryRows.filter((r: any) => r.effectiveExpiry).length;
-  const expiredCount = expiryRows.filter((r: any) => r.state === 'expired' && r.isActive !== false).length;
-  const expiringCount = expiryRows.filter((r: any) => r.state === 'expiring' && r.isActive !== false).length;
-  const safeCount = expiryRows.filter((r: any) => r.state === 'safe' && r.isActive !== false).length;
-
-  const saveExpiry = async (item: any, value: string) => {
-    setExpiryLoadingId(item.id);
-    try {
-      await api(`/pharmacy/inventory/${item.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ expiryDate: value || null }),
-      });
-      setExpiryItems((prev) =>
-        prev.map((it) =>
-          it.id === item.id
-            ? { ...it, expiryDate: value ? `${value}T00:00:00.000Z` : null }
-            : it,
-        ),
-      );
-    } catch (err) {
-      window.alert(
-        err instanceof Error ? `Failed to save expiry date: ${err.message}` : 'Failed to save expiry date',
-      );
-    } finally {
-      setExpiryLoadingId(null);
-    }
-  };
-
-  const markRemoved = async (item: any) => {
-    if (!window.confirm(`Mark "${item.name}" as removed / write off?`)) return;
-    setExpiryLoadingId(item.id);
-    try {
-      const qty = Number(item.currentStock) || 0;
-      if (qty > 0) {
-        await api(`/pharmacy/inventory/${item.id}/adjust`, {
-          method: 'POST',
-          body: JSON.stringify({
-            type: 'ADJUSTMENT',
-            quantity: qty,
-            direction: 'OUT',
-            remarks: 'Marked removed / write-off',
-          }),
-        });
-      }
-      await api(`/pharmacy/inventory/${item.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ isActive: false }),
-      });
-      await loadExpiry();
-    } catch (err) {
-      window.alert(
-        err instanceof Error ? err.message : 'Failed to mark item as removed',
-      );
-    } finally {
-      setExpiryLoadingId(null);
-    }
-  };
-
   // ---------- Transfer helpers ----------
 
   const selectedFromItem = fromItems.find(
@@ -375,7 +265,7 @@ export default function ProcurementPage() {
         <div>
           <h1>Procurement</h1>
           <p className="page-subtitle">
-            Purchase orders, requests, inventory items, transfers, goods receipts and expiry tracking
+            Purchase orders, requests, inventory items, transfers and goods receipts
           </p>
         </div>
       </div>
@@ -385,7 +275,6 @@ export default function ProcurementPage() {
         <button className={`tab ${tab === 'requests' ? 'active' : ''}`} onClick={() => setTab('requests')}>Purchase Requests</button>
         <button className={`tab ${tab === 'items' ? 'active' : ''}`} onClick={() => setTab('items')}>Inventory Items</button>
         <button className={`tab ${tab === 'transfers' ? 'active' : ''}`} onClick={() => setTab('transfers')}>Stock Transfers</button>
-        <button className={`tab ${tab === 'expiry' ? 'active' : ''}`} onClick={() => setTab('expiry')}>Expiry Tracking</button>
         <button className={`tab ${tab === 'receipts' ? 'active' : ''}`} onClick={() => setTab('receipts')}>Goods Receipts</button>
       </div>
 
@@ -611,107 +500,6 @@ export default function ProcurementPage() {
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
-
-      {tab === 'expiry' && (
-        <>
-          <div className="stat-grid">
-            <div className="stat-card">
-              <div className="stat-label">Tracked Items</div>
-              <div className="stat-value">{trackedCount}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Expired</div>
-              <div className="stat-value" style={{ color: 'var(--danger)' }}>{expiredCount}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Expiring ({EXPIRY_WINDOW_DAYS}d)</div>
-              <div className="stat-value" style={{ color: 'var(--warning)' }}>{expiringCount}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Safe</div>
-              <div className="stat-value" style={{ color: 'var(--success)' }}>{safeCount}</div>
-            </div>
-          </div>
-
-          {loadingExpiry ? (
-            <div className="loading">Loading inventory items...</div>
-          ) : expiryRows.length === 0 ? (
-            <div className="empty">No inventory items found.</div>
-          ) : (
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th>Store</th>
-                    <th>Expiry Date</th>
-                    <th>Status</th>
-                    <th>Value</th>
-                    <th style={{ width: 1 }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {expiryRows.map((item: any) => {
-                    const removed = item.isActive === false;
-                    return (
-                      <tr key={item.id} style={removed ? { opacity: 0.5 } : undefined}>
-                        <td>
-                          <strong>{item.name}</strong>
-                          {item.batchNumber && (
-                            <div className="note">Batch: {item.batchNumber}</div>
-                          )}
-                        </td>
-                        <td>{item.store?.name || '—'}</td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <input
-                              className="input"
-                              type="date"
-                              style={{ maxWidth: 170 }}
-                              value={item.effectiveExpiry ? String(item.effectiveExpiry).slice(0, 10) : ''}
-                              onChange={(e) => saveExpiry(item, e.target.value)}
-                            />
-                            {expiryLoadingId === item.id && <span className="note">saving…</span>}
-                          </div>
-                        </td>
-                        <td>
-                          {removed ? (
-                            <span className="badge badge-gray">REMOVED</span>
-                          ) : item.state === 'expired' ? (
-                            <span className="badge badge-red">EXPIRED</span>
-                          ) : item.state === 'expiring' ? (
-                            <span className="badge badge-yellow">EXPIRING SOON</span>
-                          ) : item.state === 'safe' ? (
-                            <span className="badge badge-green">SAFE</span>
-                          ) : (
-                            <span className="badge badge-gray">NO DATE</span>
-                          )}
-                        </td>
-                        <td>
-                          {item.purchaseRate != null
-                            ? formatMoney(Number(item.purchaseRate) * (Number(item.currentStock) || 0))
-                            : '—'}
-                        </td>
-                        <td>
-                          {!removed && (
-                            <button
-                              className="btn btn-sm btn-secondary"
-                              onClick={() => markRemoved(item)}
-                              disabled={expiryLoadingId === item.id}
-                            >
-                              Mark Removed
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
                 </tbody>
               </table>
             </div>

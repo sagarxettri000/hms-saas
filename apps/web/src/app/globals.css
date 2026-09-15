@@ -2066,7 +2066,7 @@ body {
   font-size: 13px;
 }
 
-.invoice-totals .receipt-grand.total-row {
+.invoice-totals .receipt-total-row.receipt-grand {
   font-size: 15px;
   font-weight: 800;
 }
@@ -2203,5 +2203,28 @@ body {
   }
   .invoice-totals {
     border-bottom: 2px solid #0f172a;
+  }
+  .modal-backdrop {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: none !important;
+  }
+  .modal {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+  .modal-header,
+  .modal-title,
+  .modal-close,
+  .modal-footer {
+    display: none !important;
   }
 }

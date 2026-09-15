@@ -56,6 +56,20 @@ function categoryOf(data: Row): string {
   return label || 'Normal / General Patient';
 }
 
+function statusBadgeClass(status: unknown): string {
+  switch (status) {
+    case 'PAID':
+      return 'badge-green';
+    case 'PARTIAL':
+      return 'badge-yellow';
+    case 'OVERDUE':
+    case 'REFUNDED':
+      return 'badge-red';
+    default:
+      return 'badge-gray';
+  }
+}
+
 export default function ReceiptModal({
   invoice,
   onClose,
@@ -153,6 +167,7 @@ export default function ReceiptModal({
 
   const items: Row[] = Array.isArray(data.items) ? data.items : [];
   const payments: Row[] = Array.isArray(data.payments) ? data.payments : [];
+  const refunds: Row[] = Array.isArray(data.refunds) ? data.refunds : [];
   const paidAmount = Number(data.paidAmount || 0);
   const totalAmount = Number(data.totalAmount || 0);
   const dueAmount = Number(data.dueAmount || 0);
@@ -268,7 +283,7 @@ export default function ReceiptModal({
                   <div className="inv-row">
                     <span className="inv-label">Status</span>
                     <span className="inv-value">
-                      <span className={`badge badge-${data.status === 'PAID' ? 'green' : data.status === 'PARTIAL' ? 'yellow' : data.status === 'CANCELLED' ? 'red' : 'gray'}`}>
+                      <span className={`badge ${statusBadgeClass(data.status)}`}>
                         {data.status}
                       </span>
                     </span>
@@ -312,7 +327,7 @@ export default function ReceiptModal({
                         {it.description ? <div className="inv-sub">{it.description}</div> : null}
                       </td>
                       <td className="inv-col-num mono">{formatMoney(it.rate)}</td>
-                      <td className="inv-col-num">{it.quantity}</td>
+                      <td className="inv-col-num">{Number(it.quantity) || 0}</td>
                       <td className="inv-col-num mono">{formatMoney(it.lineTotal)}</td>
                     </tr>
                   ))}
@@ -338,7 +353,7 @@ export default function ReceiptModal({
                   <span className="mono">{formatMoney(taxAmount)}</span>
                 </div>
               )}
-              <div className="receipt-grand total-row">
+              <div className="receipt-total-row receipt-grand">
                 <span>Total</span>
                 <span className="mono">{formatMoney(totalAmount)}</span>
               </div>
@@ -376,10 +391,42 @@ export default function ReceiptModal({
                     <span>Total paid</span>
                     <span className="mono">{formatMoney(paidAmount)}</span>
                   </div>
-                  <div className="receipt-grand total-row">
+                  <div className="receipt-total-row receipt-grand">
                     <span>Balance due</span>
                     <span className="mono">{formatMoney(dueAmount)}</span>
                   </div>
+                </div>
+              </>
+            )}
+
+            {refunds.length > 0 && (
+              <>
+                <div className="inv-section-title" style={{ marginTop: 18 }}>
+                  Refunds
+                </div>
+                <div className="invoice-table-wrap">
+                  <table className="table invoice-items">
+                    <thead>
+                      <tr>
+                        <th>Ref</th>
+                        <th>Date</th>
+                        <th>Method</th>
+                        <th>Reason</th>
+                        <th className="inv-col-num">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {refunds.map((r) => (
+                        <tr key={r.id}>
+                          <td className="mono">{r.refundNumber || r.id.slice(0, 8)}</td>
+                          <td>{r.createdAt ? formatDate(r.createdAt) : r.refundedAt ? formatDate(r.refundedAt) : '—'}</td>
+                          <td>{labelOf(PAYMENT_METHODS, r.refundMethod)}</td>
+                          <td>{r.reason || '—'}</td>
+                          <td className="inv-col-num mono">-{formatMoney(r.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </>
             )}

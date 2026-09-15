@@ -51,7 +51,10 @@ h3 {
 
 .shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar {
@@ -61,9 +64,8 @@ h3 {
   color: #e2e8f0;
   display: flex;
   flex-direction: column;
-  position: sticky;
-  top: 0;
   height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
 }
 
@@ -151,8 +153,11 @@ h3 {
 .main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .topbar {
@@ -916,13 +921,18 @@ h3 {
   .topbar,
   .btn,
   .no-print {
-    display: none !important;
+display: none !important;
   }
   .shell {
     display: block;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
   }
   .main {
     margin: 0 !important;
+    overflow: visible;
+    height: auto;
   }
   .page {
     padding: 0 !important;

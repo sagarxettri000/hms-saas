@@ -578,20 +578,20 @@ enum AuditAction {
 // ============================================================
 
 model Tenant {
-  id               String       @id @default(cuid())
-  name             String
-  code             String       @unique
-  logoUrl          String?
-  description      String?
-  status           TenantStatus @default(TRIAL)
-  requireTwoFactor Boolean      @default(false)
-  timezone         String       @default("Asia/Kathmandu")
-  currency         String       @default("NPR")
-  language         String       @default("en")
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
-  deletedAt        DateTime?
-  createdBy        String?
+  id          String       @id @default(cuid())
+  name        String
+  code        String       @unique
+  logoUrl     String?
+  description String?
+  status      TenantStatus @default(TRIAL)
+  requireTwoFactor  Boolean @default(false)
+  timezone    String       @default("Asia/Kathmandu")
+  currency    String       @default("NPR")
+  language    String       @default("en")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+  createdBy   String?
 
   addressLine1       String?
   addressLine2       String?
@@ -607,85 +607,85 @@ model Tenant {
   vatNumber          String?
   registrationNumber String?
 
-  branches                 Branch[]
-  departments              Department[]
-  users                    User[]
-  subscriptions            Subscription[]
-  featureFlags             TenantFeatureFlag[]
-  settings                 TenantSetting[]
-  wards                    Ward[]
-  rooms                    Room[]
-  beds                     Bed[]
-  bedMaintenances          BedMaintenance[]
-  patients                 Patient[]
-  appointments             Appointment[]
-  encounters               Encounter[]
-  followUps                FollowUp[]
-  admissions               Admission[]
-  invoices                 Invoice[]
-  payments                 Payment[]
-  refunds                  Refund[]
-  deposits                 Deposit[]
-  invoiceItems             InvoiceItem[]
-  labOrderItems            LabOrderItem[]
-  prescriptionItems        PrescriptionItem[]
-  journalLines             JournalLine[]
-  notifications            Notification[]
-  auditLogs                AuditLog[]
-  integrationSettings      IntegrationSetting[]
-  labOrders                LabOrder[]
-  labTestPanels            LabTestPanel[]
-  radiologyOrders          RadiologyOrder[]
+  branches                Branch[]
+  departments             Department[]
+  users                   User[]
+  subscriptions           Subscription[]
+  featureFlags            TenantFeatureFlag[]
+  settings                TenantSetting[]
+  wards                   Ward[]
+  rooms                   Room[]
+  beds                    Bed[]
+  bedMaintenances         BedMaintenance[]
+  patients                Patient[]
+  appointments            Appointment[]
+  encounters              Encounter[]
+  followUps               FollowUp[]
+  admissions              Admission[]
+  invoices                Invoice[]
+  payments                Payment[]
+  refunds                 Refund[]
+  deposits                Deposit[]
+  invoiceItems            InvoiceItem[]
+  labOrderItems           LabOrderItem[]
+  prescriptionItems       PrescriptionItem[]
+  journalLines            JournalLine[]
+  notifications           Notification[]
+  auditLogs               AuditLog[]
+  integrationSettings     IntegrationSetting[]
+  labOrders               LabOrder[]
+  labTestPanels           LabTestPanel[]
+  radiologyOrders         RadiologyOrder[]
   radiologyReportRevisions RadiologyReportRevision[]
   radiologyPeerReviews     RadiologyPeerReview[]
-  otCases                  OTCase[]
-  emergencyCases           EmergencyCase[]
-  bloodDonors              BloodDonor[]
-  medicines                Medicine[]
-  inventoryItems           InventoryItem[]
-  stores                   Store[]
-  suppliers                Supplier[]
-  purchaseRequests         PurchaseRequest[]
-  purchaseOrders           PurchaseOrder[]
-  goodsReceipts            GoodsReceipt[]
-  creditAccounts           CreditAccount[]
-  insuranceProviders       InsuranceProvider[]
-  insurancePolicies        InsurancePolicy[]
-  insuranceClaims          InsuranceClaim[]
-  doctorShareRules         DoctorShareRule[]
-  doctorShareTransactions  DoctorShareTransaction[]
-  memberships              Membership[]
-  membershipPackages       MembershipPackage[]
-  accounts                 Account[]
-  journalEntries           JournalEntry[]
-  cashSessions             CashSession[]
-  cashHandovers            CashHandover[]
-  billingServices          BillingService[]
-  billingSchemes           BillingScheme[]
-  financialTransactions    FinancialTransaction[]
-  billingSettings          BillingSetting[]
-  dailyClosings            DailyClosing[]
-  depositTransactions      DepositTransaction[]
-  shifts                   Shift[]
-  rosters                  Roster[]
-  leaves                   Leave[]
-  enquiries                Enquiry[]
-  medicalTourismCases      MedicalTourismCase[]
-  blogPosts                BlogPost[]
-  webhooks                 Webhook[]
-  apiKeys                  ApiKey[]
-  adverseEvents            AdverseEvent[]
-  documentSignatures       DocumentSignature[]
-  ambulanceVehicles        AmbulanceVehicle[]
-  ambulanceCalls           AmbulanceCall[]
-  equipmentItems           EquipmentItem[]
-  equipmentLogs            EquipmentLog[]
-  serviceCategories        ServiceCategory[]
-  chargeTransactions       ChargeTransaction[]
-  dischargeBills           DischargeBill[]
-  dischargeBillDetails     DischargeBillDetail[]
-  dicomStudies             DicomStudy[]
-  dicomNodes               DicomNode[]
+  otCases                 OTCase[]
+  emergencyCases          EmergencyCase[]
+  bloodDonors             BloodDonor[]
+  medicines               Medicine[]
+  inventoryItems          InventoryItem[]
+  stores                  Store[]
+  suppliers               Supplier[]
+  purchaseRequests        PurchaseRequest[]
+  purchaseOrders          PurchaseOrder[]
+  goodsReceipts           GoodsReceipt[]
+  creditAccounts          CreditAccount[]
+  insuranceProviders      InsuranceProvider[]
+  insurancePolicies       InsurancePolicy[]
+  insuranceClaims         InsuranceClaim[]
+  doctorShareRules        DoctorShareRule[]
+  doctorShareTransactions DoctorShareTransaction[]
+  memberships             Membership[]
+  membershipPackages      MembershipPackage[]
+  accounts                Account[]
+  journalEntries          JournalEntry[]
+  cashSessions            CashSession[]
+  cashHandovers           CashHandover[]
+  billingServices         BillingService[]
+  billingSchemes          BillingScheme[]
+  financialTransactions   FinancialTransaction[]
+  billingSettings         BillingSetting[]
+  dailyClosings           DailyClosing[]
+  depositTransactions     DepositTransaction[]
+  shifts                  Shift[]
+  rosters                 Roster[]
+  leaves                  Leave[]
+  enquiries               Enquiry[]
+  medicalTourismCases     MedicalTourismCase[]
+  blogPosts               BlogPost[]
+  webhooks                Webhook[]
+  apiKeys                 ApiKey[]
+  adverseEvents           AdverseEvent[]
+  documentSignatures      DocumentSignature[]
+  ambulanceVehicles       AmbulanceVehicle[]
+  ambulanceCalls          AmbulanceCall[]
+  equipmentItems          EquipmentItem[]
+  equipmentLogs           EquipmentLog[]
+  serviceCategories       ServiceCategory[]
+  chargeTransactions      ChargeTransaction[]
+  dischargeBills          DischargeBill[]
+  dischargeBillDetails    DischargeBillDetail[]
+  dicomStudies            DicomStudy[]
+  dicomNodes              DicomNode[]
 
   @@index([status])
   @@index([createdAt])
@@ -729,20 +729,20 @@ model Department {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  users           User[]
-  doctors         DoctorProfile[]
-  wards           Ward[]
-  appointments    Appointment[]
-  encounters      Encounter[]
-  staffProfiles   StaffProfile[]
-  invoiceItems    InvoiceItem[]
+  users         User[]
+  doctors       DoctorProfile[]
+  wards         Ward[]
+  appointments  Appointment[]
+  encounters    Encounter[]
+  staffProfiles StaffProfile[]
+  invoiceItems  InvoiceItem[]
   billingServices BillingService[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
+  @@map("departments")
   @@index([branchId])
   @@index([parentId])
-  @@map("departments")
 }
 
 model Room {
@@ -763,8 +763,8 @@ model Room {
   beds Bed[]
 
   @@index([tenantId, wardId])
-  @@index([wardId])
   @@map("rooms")
+  @@index([wardId])
 }
 
 model Ward {
@@ -787,8 +787,8 @@ model Ward {
   maintenances BedMaintenance[]
 
   @@index([tenantId, departmentId])
-  @@index([departmentId])
   @@map("wards")
+  @@index([departmentId])
 }
 
 model Bed {
@@ -813,8 +813,8 @@ model Bed {
 
   @@index([tenantId, wardId, roomId])
   @@index([status])
-  @@index([roomId])
   @@map("beds")
+  @@index([roomId])
 }
 
 model BedAllocation {
@@ -833,9 +833,9 @@ model BedAllocation {
 
   @@index([tenantId, bedId])
   @@index([tenantId, admissionId])
+  @@map("bed_allocations")
   @@index([admissionId])
   @@index([bedId])
-  @@map("bed_allocations")
 }
 
 model BedMovement {
@@ -855,9 +855,9 @@ model BedMovement {
   createdAt   DateTime  @default(now())
 
   @@index([tenantId, admissionId])
+  @@map("bed_movements")
   @@index([admissionId])
   @@index([bedId])
-  @@map("bed_movements")
 }
 
 model BedMaintenance {
@@ -880,9 +880,9 @@ model BedMaintenance {
 
   @@index([tenantId, wardId])
   @@index([tenantId, bedId])
+  @@map("bed_maintenances")
   @@index([bedId])
   @@index([wardId])
-  @@map("bed_maintenances")
 }
 
 // ============================================================
@@ -927,8 +927,8 @@ model Subscription {
   payments SubscriptionPayment[]
 
   @@index([tenantId, status])
-  @@index([planId])
   @@map("subscriptions")
+  @@index([planId])
 }
 
 model SubscriptionPayment {
@@ -975,8 +975,8 @@ model TenantFeatureFlag {
 
   @@unique([tenantId, flagId])
   @@index([tenantId])
-  @@index([flagId])
   @@map("tenant_feature_flags")
+  @@index([flagId])
 }
 
 model TenantSetting {
@@ -1057,8 +1057,8 @@ model User {
   @@index([tenantId])
   @@index([role])
   @@index([status])
-  @@index([departmentId])
   @@map("users")
+  @@index([departmentId])
 }
 
 model Role {
@@ -1095,26 +1095,26 @@ model RolePermission {
   createdAt    DateTime   @default(now())
 
   @@unique([roleId, permissionId])
-  @@index([permissionId])
   @@map("role_permissions")
+  @@index([permissionId])
 }
 
 model Session {
-  id               String    @id @default(cuid())
-  userId           String
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tenantId         String?
-  token            String    @unique
-  refreshToken     String?   @unique
-  refreshTokenHash String    @unique
-  userAgent        String?
-  ipAddress        String?
-  deviceId         String?
-  isActive         Boolean   @default(true)
-  expiresAt        DateTime
-  lastActivityAt   DateTime  @default(now())
-  createdAt        DateTime  @default(now())
-  revokedAt        DateTime?
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId       String?
+  token          String    @unique
+  refreshToken   String?   @unique
+  refreshTokenHash   String  @unique
+  userAgent      String?
+  ipAddress      String?
+  deviceId       String?
+  isActive       Boolean   @default(true)
+  expiresAt      DateTime
+  lastActivityAt DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  revokedAt      DateTime?
 
   @@index([userId])
   @@index([tenantId])
@@ -1130,8 +1130,8 @@ model PasswordResetToken {
   usedAt    DateTime?
   createdAt DateTime  @default(now())
 
-  @@index([userId])
   @@map("password_reset_tokens")
+  @@index([userId])
 }
 
 model DoctorProfile {
@@ -1155,16 +1155,16 @@ model DoctorProfile {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
-  schedules            DoctorSchedule[]
-  appointments         Appointment[]
-  consultations        Encounter[]
-  shareRules           DoctorShareRule[]
-  prescriptions        Prescription[]
-  assignedFollowUps    FollowUp[]        @relation("AssignedFollowUps")
-  followUpDoctors      FollowUpDoctor[]
-  otCasesAsSurgeon     OTCase[]          @relation("OTCSurgeon")
-  otCasesAsAssistant   OTCase[]          @relation("OTCAssistant")
-  otCasesAsAnesthetist OTCase[]          @relation("OTCAnesthetist")
+  schedules     DoctorSchedule[]
+  appointments  Appointment[]
+  consultations Encounter[]
+  shareRules    DoctorShareRule[]
+  prescriptions Prescription[]
+  assignedFollowUps FollowUp[] @relation("AssignedFollowUps")
+  followUpDoctors   FollowUpDoctor[]
+  otCasesAsSurgeon    OTCase[] @relation("OTCSurgeon")
+  otCasesAsAssistant  OTCase[] @relation("OTCAssistant")
+  otCasesAsAnesthetist OTCase[] @relation("OTCAnesthetist")
 
   @@index([tenantId])
   @@index([departmentId])
@@ -1189,8 +1189,8 @@ model DoctorSchedule {
   slots AvailabilitySlot[]
 
   @@index([tenantId, doctorId])
-  @@index([doctorId])
   @@map("doctor_schedules")
+  @@index([doctorId])
 }
 
 model AvailabilitySlot {
@@ -1209,8 +1209,8 @@ model AvailabilitySlot {
   updatedAt     DateTime       @updatedAt
 
   @@index([tenantId, doctorId, date])
-  @@index([scheduleId])
   @@map("availability_slots")
+  @@index([scheduleId])
 }
 
 model StaffProfile {
@@ -1232,8 +1232,8 @@ model StaffProfile {
   updatedAt        DateTime    @updatedAt
 
   @@index([tenantId])
-  @@index([departmentId])
   @@map("staff_profiles")
+  @@index([departmentId])
 }
 
 // ============================================================
@@ -1310,42 +1310,42 @@ model Patient {
   createdByUser User? @relation("CreatedPatients", fields: [createdBy], references: [id], onDelete: SetNull)
   updatedByUser User? @relation("UpdatedPatients", fields: [updatedBy], references: [id], onDelete: SetNull)
 
-  allergies             PatientAllergy[]
-  conditions            PatientCondition[]
-  documents             PatientDocument[]
-  appointments          Appointment[]
-  encounters            Encounter[]
-  admissions            Admission[]
-  insurancePolicies     InsurancePolicy[]
-  invoices              Invoice[]
-  payments              Payment[]
-  refunds               Refund[]
-  deposits              Deposit[]
-  prescriptions         Prescription[]
-  labOrders             LabOrder[]
-  radiologyOrders       RadiologyOrder[]
-  dicomStudies          DicomStudy[]
-  memberships           Membership[]
-  emergencyCases        EmergencyCase[]
-  vitals                Vital[]
-  otCases               OTCase[]
-  creditAccounts        CreditAccount[]
-  insuranceClaims       InsuranceClaim[]
-  medicalTourismCases   MedicalTourismCase[]
-  adverseEvents         AdverseEvent[]
-  documentSignatures    DocumentSignature[]
-  followUps             FollowUp[]
-  chargeTransactions    ChargeTransaction[]
-  dischargeBills        DischargeBill[]
+  allergies           PatientAllergy[]
+  conditions          PatientCondition[]
+  documents           PatientDocument[]
+  appointments        Appointment[]
+  encounters          Encounter[]
+  admissions          Admission[]
+  insurancePolicies   InsurancePolicy[]
+  invoices            Invoice[]
+  payments            Payment[]
+  refunds             Refund[]
+  deposits            Deposit[]
+  prescriptions       Prescription[]
+  labOrders           LabOrder[]
+  radiologyOrders     RadiologyOrder[]
+  dicomStudies        DicomStudy[]
+  memberships         Membership[]
+  emergencyCases      EmergencyCase[]
+  vitals              Vital[]
+  otCases             OTCase[]
+  creditAccounts      CreditAccount[]
+  insuranceClaims     InsuranceClaim[]
+  medicalTourismCases MedicalTourismCase[]
+  adverseEvents       AdverseEvent[]
+  documentSignatures  DocumentSignature[]
+  followUps           FollowUp[]
+  chargeTransactions  ChargeTransaction[]
+  dischargeBills      DischargeBill[]
   financialTransactions FinancialTransaction[]
 
   @@index([tenantId, mrn])
   @@index([tenantId, mobile])
   @@index([tenantId, firstName, lastName])
   @@index([status])
+  @@map("patients")
   @@index([createdBy])
   @@index([updatedBy])
-  @@map("patients")
 }
 
 model PatientAllergy {
@@ -1362,8 +1362,8 @@ model PatientAllergy {
   updatedAt DateTime @updatedAt
 
   @@index([tenantId, patientId])
-  @@index([patientId])
   @@map("patient_allergies")
+  @@index([patientId])
 }
 
 model PatientCondition {
@@ -1380,8 +1380,8 @@ model PatientCondition {
   updatedAt     DateTime  @updatedAt
 
   @@index([tenantId, patientId])
-  @@index([patientId])
   @@map("patient_conditions")
+  @@index([patientId])
 }
 
 model PatientDocument {
@@ -1402,8 +1402,8 @@ model PatientDocument {
   createdAt    DateTime @default(now())
 
   @@index([tenantId, patientId])
-  @@index([patientId])
   @@map("patient_documents")
+  @@index([patientId])
 }
 
 // ============================================================
@@ -1449,11 +1449,11 @@ model Appointment {
   @@index([tenantId, doctorId])
   @@index([tenantId, appointmentDate])
   @@index([status])
+  @@map("appointments")
   @@index([departmentId])
   @@index([doctorId])
   @@index([doctorUserId])
   @@index([patientId])
-  @@map("appointments")
 }
 
 // ============================================================
@@ -1493,44 +1493,44 @@ model Encounter {
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
-  vitals             Vital[]
-  diagnoses          Diagnosis[]
-  prescriptions      Prescription[]
-  labOrders          LabOrder[]
-  radiologyOrders    RadiologyOrder[]
-  procedures         Procedure[]
-  nursingNotes       NursingNote[]
-  admission          Admission?
-  followUps          FollowUp[]
-  dischargeBills     DischargeBill[]
+  vitals          Vital[]
+  diagnoses       Diagnosis[]
+  prescriptions   Prescription[]
+  labOrders       LabOrder[]
+  radiologyOrders RadiologyOrder[]
+  procedures      Procedure[]
+  nursingNotes    NursingNote[]
+  admission       Admission?
+  followUps       FollowUp[]
+  dischargeBills  DischargeBill[]
   chargeTransactions ChargeTransaction[]
 
   @@index([tenantId, patientId])
   @@index([tenantId, doctorId])
   @@index([status])
+  @@map("encounters")
   @@index([departmentId])
   @@index([doctorId])
   @@index([patientId])
-  @@map("encounters")
 }
 
 model FollowUp {
-  id               String         @id @default(cuid())
-  tenantId         String
-  tenant           Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  patientId        String
-  patient          Patient        @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  encounterId      String?
-  encounter        Encounter?     @relation(fields: [encounterId], references: [id], onDelete: SetNull)
-  status           FollowUpStatus @default(PENDING)
-  notes            String?
+  id              String        @id @default(cuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId       String
+  patient         Patient       @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  encounterId     String?
+  encounter       Encounter?    @relation(fields: [encounterId], references: [id], onDelete: SetNull)
+  status          FollowUpStatus @default(PENDING)
+  notes           String?
   assignedDoctorId String?
-  createdBy        String?
-  updatedBy        String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  createdBy       String?
+  updatedBy       String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  assignedDoctor DoctorProfile?   @relation("AssignedFollowUps", fields: [assignedDoctorId], references: [id], onDelete: SetNull)
+  assignedDoctor DoctorProfile? @relation("AssignedFollowUps", fields: [assignedDoctorId], references: [id], onDelete: SetNull)
   doctors        FollowUpDoctor[]
 
   @@index([tenantId, patientId])
@@ -1541,14 +1541,14 @@ model FollowUp {
 }
 
 model FollowUpDoctor {
-  id         String        @id @default(cuid())
-  tenantId   String
-  followUpId String
-  followUp   FollowUp      @relation(fields: [followUpId], references: [id], onDelete: Cascade)
-  doctorId   String
-  doctor     DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  isPrimary  Boolean       @default(false)
-  createdAt  DateTime      @default(now())
+  id           String        @id @default(cuid())
+  tenantId     String
+  followUpId   String
+  followUp     FollowUp      @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+  doctorId     String
+  doctor       DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  isPrimary    Boolean       @default(false)
+  createdAt    DateTime      @default(now())
 
   @@index([followUpId])
   @@index([doctorId])
@@ -1583,9 +1583,9 @@ model Vital {
 
   @@index([tenantId, patientId])
   @@index([tenantId, encounterId])
+  @@map("vitals")
   @@index([encounterId])
   @@index([patientId])
-  @@map("vitals")
 }
 
 model Diagnosis {
@@ -1631,10 +1631,10 @@ model Prescription {
   items PrescriptionItem[]
 
   @@index([tenantId, patientId])
+  @@map("prescriptions")
   @@index([doctorId])
   @@index([encounterId])
   @@index([patientId])
-  @@map("prescriptions")
 }
 
 model PrescriptionItem {
@@ -1664,8 +1664,8 @@ model PrescriptionItem {
 
   @@index([tenantId])
   @@index([prescriptionId])
-  @@index([medicineId])
   @@map("prescription_items")
+  @@index([medicineId])
 }
 
 model Procedure {
@@ -1686,8 +1686,8 @@ model Procedure {
   updatedAt   DateTime   @updatedAt
 
   @@index([tenantId, patientId])
-  @@index([encounterId])
   @@map("procedures")
+  @@index([encounterId])
 }
 
 // ============================================================
@@ -1739,8 +1739,8 @@ model Admission {
   @@index([tenantId, patientId])
   @@index([status])
   @@index([admissionDate])
-  @@index([patientId])
   @@map("admissions")
+  @@index([patientId])
 }
 
 model NursingNote {
@@ -1759,8 +1759,8 @@ model NursingNote {
   updatedAt   DateTime   @updatedAt
 
   @@index([tenantId, patientId])
-  @@index([encounterId])
   @@map("nursing_notes")
+  @@index([encounterId])
 }
 
 model MedicationAdministration {
@@ -1783,8 +1783,8 @@ model MedicationAdministration {
   updatedAt          DateTime   @updatedAt
 
   @@index([tenantId, patientId])
-  @@index([admissionId])
   @@map("medication_administrations")
+  @@index([admissionId])
 }
 
 // ============================================================
@@ -1792,32 +1792,31 @@ model MedicationAdministration {
 // ============================================================
 
 model LabTest {
-  id              String        @id @default(cuid())
-  tenantId        String
-  name            String
-  code            String?
-  category        String?
-  specimenType    String?
-  container       String?
-  quantity        String?
-  referenceRange  String?
-  unit            String?
-  price           Decimal       @default(0) @db.Decimal(10, 2)
-  turnaroundTime  Int?
-  discipline      String? // MICROBIOLOGY, HISTOPATHOLOGY, HEMATOLOGY, BIOCHEMISTRY, IMMUNOLOGY
-  status          LabTestStatus @default(ACTIVE)
-  isActive        Boolean       @default(true)
-  method          String? // assay methodology (e.g. "Automated hematology analyzer", "Westergren")
-  precision       Int? // decimal places used when rendering numeric results
-  resultType      String        @default("NUMERIC") // NUMERIC | TEXT
-  referenceRanges Json? // [{label?, low?, high?, sex? (MALE|FEMALE|OTHER), unit?, note?}]
-  sortOrder       Int? // display ordering within a panel/category
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  tenantId       String
+  name           String
+  code           String?
+  category       String?
+  specimenType   String?
+  container      String?
+  quantity       String?
+  referenceRange String?
+  unit           String?
+  price          Decimal       @default(0) @db.Decimal(10, 2)
+  turnaroundTime Int?
+  discipline     String? // MICROBIOLOGY, HISTOPATHOLOGY, HEMATOLOGY, BIOCHEMISTRY, IMMUNOLOGY
+  status         LabTestStatus @default(ACTIVE)
+  isActive       Boolean       @default(true)
+  method         String?       // assay methodology (e.g. "Automated hematology analyzer", "Westergren")
+  precision      Int?          // decimal places used when rendering numeric results
+  resultType     String        @default("NUMERIC") // NUMERIC | TEXT
+  referenceRanges Json?        // [{label?, low?, high?, sex? (MALE|FEMALE|OTHER), unit?, note?}]
+  sortOrder      Int?          // display ordering within a panel/category
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   labOrderItems LabOrderItem[]
   panelItems    LabTestPanelItem[]
-  panelTestFor  LabTestPanel[]
 
   @@index([tenantId])
   @@map("lab_tests")
@@ -1851,52 +1850,49 @@ model LabOrder {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
-  items       LabOrderItem[]
-  samples     LabSample[]
-  flowStudies FlowCytometryStudy[]
+  items   LabOrderItem[]
+  samples LabSample[]
 
   @@index([tenantId, patientId])
   @@index([status])
+  @@map("lab_orders")
   @@index([encounterId])
   @@index([patientId])
-  @@map("lab_orders")
 }
 
 model LabOrderItem {
-  id              String    @id @default(cuid())
-  tenantId        String
-  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  labOrderId      String
-  labOrder        LabOrder  @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
-  labTestId       String?
-  labTest         LabTest?  @relation(fields: [labTestId], references: [id], onDelete: SetNull)
-  testName        String
-  price           Decimal   @default(0) @db.Decimal(10, 2)
-  status          String    @default("ORDERED")
-  result          String?
-  resultValue     Decimal?  @db.Decimal(12, 4)
-  unit            String?
-  referenceRange  String?
-  isAbnormal      Boolean?
-  isCritical      Boolean?
-  notes           String?
-  method          String?
-  precision       Int?
-  resultType      String?
-  refLow          Decimal?  @db.Decimal(12, 4)
-  refHigh         Decimal?  @db.Decimal(12, 4)
-  rangeLabel      String?
-  resultEnteredBy String?
-  resultEnteredAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime? @updatedAt
-
-  flowStudy FlowCytometryStudy?
+  id             String    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  labOrderId     String
+  labOrder       LabOrder  @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+  labTestId      String?
+  labTest        LabTest?  @relation(fields: [labTestId], references: [id], onDelete: SetNull)
+  testName       String
+  price          Decimal   @default(0) @db.Decimal(10, 2)
+  status         String    @default("ORDERED")
+  result         String?
+  resultValue    Decimal?  @db.Decimal(12, 4)
+  unit           String?
+  referenceRange String?
+  isAbnormal     Boolean?
+  isCritical     Boolean?
+  notes          String?
+  method         String?
+  precision      Int?
+  resultType     String?
+  refLow         Decimal?  @db.Decimal(12, 4)
+  refHigh        Decimal?  @db.Decimal(12, 4)
+  rangeLabel     String?
+  resultEnteredBy  String?
+  resultEnteredAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime? @updatedAt
 
   @@index([tenantId])
   @@index([labOrderId])
-  @@index([labTestId])
   @@map("lab_order_items")
+  @@index([labTestId])
 }
 
 model LabTestPanel {
@@ -1911,14 +1907,10 @@ model LabTestPanel {
   description  String?
   price        Decimal  @default(0) @db.Decimal(10, 2)
   isActive     Boolean  @default(true)
-  labTestId    String?
-  labTest      LabTest? @relation(fields: [labTestId], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  items            LabTestPanelItem[]
-  flowPanelMarkers FlowPanelMarker[]
-  flowStudies      FlowCytometryStudy[]
+  items LabTestPanelItem[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -1926,14 +1918,14 @@ model LabTestPanel {
 }
 
 model LabTestPanelItem {
-  id            String       @id @default(cuid())
+  id            String   @id @default(cuid())
   tenantId      String
   panelId       String
   panel         LabTestPanel @relation(fields: [panelId], references: [id], onDelete: Cascade)
   labTestId     String
-  labTest       LabTest      @relation(fields: [labTestId], references: [id], onDelete: Cascade)
-  sortOrder     Int          @default(0)
-  priceOverride Decimal?     @db.Decimal(10, 2)
+  labTest       LabTest  @relation(fields: [labTestId], references: [id], onDelete: Cascade)
+  sortOrder     Int      @default(0)
+  priceOverride Decimal? @db.Decimal(10, 2)
 
   @@unique([panelId, labTestId])
   @@index([panelId])
@@ -1959,234 +1951,10 @@ model LabSample {
   container       String?
   createdAt       DateTime               @default(now())
 
-  flowStudies FlowCytometryStudy[]
-
   @@index([tenantId, labOrderId])
   @@index([barcode])
-  @@index([labOrderId])
   @@map("lab_samples")
-}
-
-// ============================================================
-// FLOW CYTOMETRY
-// ============================================================
-
-model FlowMarker {
-  id           String   @id @default(cuid())
-  tenantId     String
-  name         String // e.g. "CD3"
-  code         String // e.g. "CD3"
-  category     String? // e.g. "T_CELL", "LINEAGE", "NK"
-  clone        String? // antibody clone (e.g. "SK7")
-  fluorochrome String? // e.g. "FITC"
-  description  String?
-  isActive     Boolean  @default(true)
-  sortOrder    Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  panelLinks FlowPanelMarker[]
-  results    FlowMarkerResult[]
-  antibodies FlowAntibody[]
-
-  @@unique([tenantId, code])
-  @@index([tenantId])
-  @@map("flow_markers")
-}
-
-model FlowAntibody {
-  id           String     @id @default(cuid())
-  tenantId     String
-  markerId     String
-  marker       FlowMarker @relation(fields: [markerId], references: [id], onDelete: Cascade)
-  antibody     String // reagent name (e.g. "CD3 FITC")
-  clone        String?
-  fluorochrome String?
-  manufacturer String?
-  lotNumber    String?
-  expiryDate   DateTime?
-  isActive     Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-
-  panelLinks FlowPanelMarker[]
-
-  @@index([tenantId])
-  @@index([markerId])
-  @@map("flow_antibodies")
-}
-
-model FlowInstrument {
-  id           String    @id @default(cuid())
-  tenantId     String
-  name         String // e.g. "BD FACSCanto II - 01"
-  platform     String? // e.g. "FACSCanto II", "Cytek Aurora"
-  manufacturer String?
-  model        String?
-  serialNumber String?
-  channels     Int? // number of fluorescence channels (colors)
-  parameters   Int? // total measured parameters
-  location     String?
-  status       String    @default("ACTIVE") // ACTIVE | INACTIVE | MAINTENANCE
-  lastQcAt     DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  runs FlowRun[]
-
-  @@index([tenantId])
-  @@map("flow_instruments")
-}
-
-model FlowPanelMarker {
-  id           String        @id @default(cuid())
-  tenantId     String
-  panelId      String
-  panel        LabTestPanel  @relation(fields: [panelId], references: [id], onDelete: Cascade)
-  markerId     String
-  marker       FlowMarker    @relation(fields: [markerId], references: [id], onDelete: Cascade)
-  antibodyId   String?
-  antibody     FlowAntibody? @relation(fields: [antibodyId], references: [id], onDelete: SetNull)
-  fluorochrome String?
-  sortOrder    Int           @default(0)
-
-  @@unique([panelId, markerId])
-  @@index([panelId])
-  @@index([markerId])
-  @@index([tenantId])
-  @@map("flow_panel_markers")
-}
-
-model FlowCytometryStudy {
-  id             String       @id @default(cuid())
-  tenantId       String
-  labOrderId     String
-  labOrder       LabOrder     @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
-  labOrderItemId String       @unique
-  labOrderItem   LabOrderItem @relation(fields: [labOrderItemId], references: [id], onDelete: Cascade)
-  panelId        String
-  panel          LabTestPanel @relation(fields: [panelId], references: [id], onDelete: Restrict)
-  sampleId       String?
-  sample         LabSample?   @relation(fields: [sampleId], references: [id], onDelete: SetNull)
-  gatingStrategy String?
-  resultSummary  String? // authorized interpretation text (reportable)
-  description    String?
-  status         String       @default("PENDING") // PENDING | RESULT_ENTERED
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-
-  runs          FlowRun[]
-  analyses      FlowAnalysis[]
-  populations   FlowPopulation[]
-  markerResults FlowMarkerResult[]
-
-  @@index([tenantId])
   @@index([labOrderId])
-  @@index([panelId])
-  @@map("flow_studies")
-}
-
-model FlowRun {
-  id                   String             @id @default(cuid())
-  tenantId             String
-  studyId              String
-  study                FlowCytometryStudy @relation(fields: [studyId], references: [id], onDelete: Cascade)
-  instrumentId         String?
-  instrument           FlowInstrument?    @relation(fields: [instrumentId], references: [id], onDelete: SetNull)
-  operatorId           String? // user id performing the acquisition
-  startedAt            DateTime?
-  completedAt          DateTime?
-  acquisitionStatus    String             @default("PENDING") // PENDING | RUNNING | COMPLETED | FAILED
-  numberOfParameters   Int?
-  numberOfEvents       Int?
-  qcStatus             String             @default("NOT_RUN") // NOT_RUN | PASSED | FAILED
-  qcNote               String?
-  compensationStatus   String             @default("NOT_APPLIED") // NOT_APPLIED | APPLIED | WAIVED
-  compensationMetadata Json?
-  instrumentSettings   Json?
-  notes                String?
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
-
-  @@index([tenantId])
-  @@index([studyId])
-  @@map("flow_runs")
-}
-
-model FlowAnalysis {
-  id         String             @id @default(cuid())
-  tenantId   String
-  studyId    String
-  study      FlowCytometryStudy @relation(fields: [studyId], references: [id], onDelete: Cascade)
-  strategy   String? // textual gating strategy description
-  operatorId String? // user id performing the analysis
-  analyzedAt DateTime?
-  status     String             @default("DRAFT") // DRAFT | COMPLETE | REVIEWED
-  version    Int                @default(1)
-  notes      String?
-  createdAt  DateTime           @default(now())
-  updatedAt  DateTime           @updatedAt
-
-  @@index([tenantId])
-  @@index([studyId])
-  @@map("flow_analyses")
-}
-
-model FlowPopulation {
-  id            String             @id @default(cuid())
-  tenantId      String
-  studyId       String
-  study         FlowCytometryStudy @relation(fields: [studyId], references: [id], onDelete: Cascade)
-  parentId      String?
-  parent        FlowPopulation?    @relation("PopulationHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children      FlowPopulation[]   @relation("PopulationHierarchy")
-  name          String // e.g. "Lymphocytes", "T Cells"
-  sortOrder     Int                @default(0)
-  percentage    Decimal?           @db.Decimal(12, 4)
-  countUnit     String? // e.g. "cells/uL"
-  absoluteCount Decimal?           @db.Decimal(12, 4)
-  qualitative   String? // e.g. "Present", "Dim", "Bright"
-  status        String             @default("PENDING") // PENDING | RESULT_ENTERED
-  notes         String?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-
-  markerResults FlowMarkerResult[]
-
-  @@index([tenantId])
-  @@index([studyId])
-  @@index([parentId])
-  @@map("flow_populations")
-}
-
-model FlowMarkerResult {
-  id              String             @id @default(cuid())
-  tenantId        String
-  studyId         String
-  study           FlowCytometryStudy @relation(fields: [studyId], references: [id], onDelete: Cascade)
-  populationId    String
-  population      FlowPopulation     @relation(fields: [populationId], references: [id], onDelete: Cascade)
-  markerId        String
-  marker          FlowMarker         @relation(fields: [markerId], references: [id], onDelete: Restrict)
-  percentage      Decimal?           @db.Decimal(12, 4)
-  absoluteCount   Decimal?           @db.Decimal(12, 4)
-  mfi             Decimal?           @db.Decimal(12, 4) // median fluorescence intensity
-  unit            String?
-  valueText       String? // qualitative result (e.g. "Positive", "Negative")
-  isAbnormal      Boolean?
-  isCritical      Boolean?
-  status          String             @default("PENDING") // PENDING | RESULT_ENTERED
-  notes           String?
-  resultEnteredBy String?
-  resultEnteredAt DateTime?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-
-  @@unique([populationId, markerId])
-  @@index([tenantId])
-  @@index([studyId])
-  @@index([markerId])
-  @@map("flow_marker_results")
 }
 
 // ============================================================
@@ -2194,57 +1962,57 @@ model FlowMarkerResult {
 // ============================================================
 
 model RadiologyOrder {
-  id                    String               @id @default(cuid())
-  tenantId              String
-  tenant                Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  patientId             String
-  patient               Patient              @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  encounterId           String?
-  encounter             Encounter?           @relation(fields: [encounterId], references: [id], onDelete: SetNull)
-  admissionId           String?
-  admission             Admission?           @relation(fields: [admissionId], references: [id], onDelete: SetNull)
-  doctorId              String?
-  orderNumber           String
-  accessionNumber       String?
-  modality              RadiologyModality    @default(XRAY)
-  bodyPart              String?
-  status                RadiologyOrderStatus @default(ORDERED)
-  orderedAt             DateTime             @default(now())
-  scheduledAt           DateTime?
-  performedAt           DateTime?
-  reportedAt            DateTime?
-  reportedBy            String?
-  verifiedAt            DateTime?
-  approvedAt            DateTime?
-  verifiedBy            String?
-  approvedBy            String?
-  clinicalHistory       String?
-  findings              String?
-  impression            String?
-  report                String?
-  isEmergency           Boolean              @default(false)
+  id              String               @id @default(cuid())
+  tenantId        String
+  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId       String
+  patient         Patient              @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  encounterId     String?
+  encounter       Encounter?           @relation(fields: [encounterId], references: [id], onDelete: SetNull)
+  admissionId     String?
+  admission       Admission?           @relation(fields: [admissionId], references: [id], onDelete: SetNull)
+  doctorId        String?
+  orderNumber     String
+  accessionNumber String?
+  modality        RadiologyModality    @default(XRAY)
+  bodyPart        String?
+  status          RadiologyOrderStatus @default(ORDERED)
+  orderedAt       DateTime             @default(now())
+  scheduledAt     DateTime?
+  performedAt     DateTime?
+  reportedAt      DateTime?
+  reportedBy      String?
+  verifiedAt      DateTime?
+  approvedAt      DateTime?
+  verifiedBy      String?
+  approvedBy      String?
+  clinicalHistory String?
+  findings        String?
+  impression      String?
+  report          String?
+  isEmergency     Boolean              @default(false)
   assignedRadiologistId String?
-  reportVersion         Int                  @default(1)
-  isCritical            Boolean              @default(false)
-  criticalSuggested     Boolean              @default(false)
-  criticalFlaggedBy     String?
-  criticalFlaggedAt     DateTime?
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+  reportVersion   Int                  @default(1)
+  isCritical      Boolean              @default(false)
+  criticalSuggested Boolean            @default(false)
+  criticalFlaggedBy String?
+  criticalFlaggedAt DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
-  images       RadiologyImage[]
+  images RadiologyImage[]
   dicomStudies DicomStudy[]
-  revisions    RadiologyReportRevision[]
-  peerReviews  RadiologyPeerReview[]
+  revisions RadiologyReportRevision[]
+  peerReviews RadiologyPeerReview[]
 
   @@index([tenantId, patientId])
   @@index([status])
   @@index([accessionNumber])
   @@index([assignedRadiologistId])
   @@index([isCritical])
+  @@map("radiology_orders")
   @@index([encounterId])
   @@index([patientId])
-  @@map("radiology_orders")
 }
 
 model RadiologyImage {
@@ -2314,13 +2082,13 @@ model RadiologyPeerReview {
 }
 
 model DicomStudy {
-  id                 String          @id @default(cuid())
+  id                 String            @id @default(cuid())
   tenantId           String
-  tenant             Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   patientId          String?
-  patient            Patient?        @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  patient            Patient?          @relation(fields: [patientId], references: [id], onDelete: SetNull)
   radiologyOrderId   String?
-  radiologyOrder     RadiologyOrder? @relation(fields: [radiologyOrderId], references: [id], onDelete: SetNull)
+  radiologyOrder     RadiologyOrder?   @relation(fields: [radiologyOrderId], references: [id], onDelete: SetNull)
   studyInstanceUid   String
   studyDate          DateTime?
   studyDescription   String?
@@ -2329,11 +2097,11 @@ model DicomStudy {
   bodyPart           String?
   referringPhysician String?
   institutionName    String?
-  numberOfSeries     Int             @default(0)
-  numberOfInstances  Int             @default(0)
+  numberOfSeries     Int               @default(0)
+  numberOfInstances  Int               @default(0)
   uploadedBy         String?
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
   series DicomSeries[]
 
@@ -2345,16 +2113,16 @@ model DicomStudy {
 }
 
 model DicomSeries {
-  id                String     @id @default(cuid())
+  id                String          @id @default(cuid())
   dicomStudyId      String
-  dicomStudy        DicomStudy @relation(fields: [dicomStudyId], references: [id], onDelete: Cascade)
+  dicomStudy        DicomStudy      @relation(fields: [dicomStudyId], references: [id], onDelete: Cascade)
   seriesInstanceUid String
   seriesNumber      String?
   modality          String?
   seriesDescription String?
   bodyPart          String?
-  numberOfInstances Int        @default(0)
-  createdAt         DateTime   @default(now())
+  numberOfInstances Int             @default(0)
+  createdAt         DateTime        @default(now())
 
   instances DicomInstance[]
 
@@ -2421,11 +2189,11 @@ model OTCase {
   status                  OTStatus        @default(REQUESTED)
   anesthesiaType          AnesthesiaType?
   surgeonId               String?
-  surgeon                 DoctorProfile?  @relation("OTCSurgeon", fields: [surgeonId], references: [id], onDelete: SetNull)
+  surgeon                 DoctorProfile? @relation("OTCSurgeon", fields: [surgeonId], references: [id], onDelete: SetNull)
   assistantId             String?
-  assistant               DoctorProfile?  @relation("OTCAssistant", fields: [assistantId], references: [id], onDelete: SetNull)
+  assistant               DoctorProfile? @relation("OTCAssistant", fields: [assistantId], references: [id], onDelete: SetNull)
   anesthetistId           String?
-  anesthetist             DoctorProfile?  @relation("OTCAnesthetist", fields: [anesthetistId], references: [id], onDelete: SetNull)
+  anesthetist             DoctorProfile? @relation("OTCAnesthetist", fields: [anesthetistId], references: [id], onDelete: SetNull)
   nurses                  Json?
   otRoom                  String?
   scheduledDate           DateTime?
@@ -2443,8 +2211,8 @@ model OTCase {
 
   @@index([tenantId, patientId])
   @@index([status])
-  @@index([patientId])
   @@map("ot_cases")
+  @@index([patientId])
 }
 
 model EmergencyCase {
@@ -2475,8 +2243,8 @@ model EmergencyCase {
   createdBy        String?
 
   @@index([tenantId, patientId])
-  @@index([patientId])
   @@map("emergency_cases")
+  @@index([patientId])
 }
 
 model BloodDonor {
@@ -2528,8 +2296,8 @@ model BloodUnit {
 
   @@index([tenantId, status])
   @@index([tenantId, expiryDate])
-  @@index([donorId])
   @@map("blood_units")
+  @@index([donorId])
 }
 
 // ============================================================
@@ -2594,8 +2362,8 @@ model InventoryItem {
 
   @@index([tenantId, storeId])
   @@index([medicineId])
-  @@index([storeId])
   @@map("inventory_items")
+  @@index([storeId])
 }
 
 model Store {
@@ -2637,8 +2405,8 @@ model InventoryTransaction {
 
   @@index([tenantId, itemId])
   @@index([tenantId, createdAt])
-  @@index([itemId])
   @@map("inventory_transactions")
+  @@index([itemId])
 }
 
 model Supplier {
@@ -2662,13 +2430,13 @@ model Supplier {
 }
 
 model PurchaseRequest {
-  id            String                  @id @default(cuid())
+  id            String                @id @default(cuid())
   tenantId      String
-  tenant        Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant        Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   requestNumber String
   departmentId  String?
   requestedBy   String?
-  status        PurchaseRequestStatus   @default(PENDING)
+  status        PurchaseRequestStatus @default(PENDING)
   priority      PurchaseRequestPriority @default(NORMAL)
   neededBy      DateTime?
   justification String?
@@ -2677,10 +2445,10 @@ model PurchaseRequest {
   approvedAt    DateTime?
   rejectedBy    String?
   rejectedAt    DateTime?
-  createdAt     DateTime                @default(now())
-  updatedAt     DateTime                @updatedAt
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
 
-  items          PurchaseRequestItem[]
+  items PurchaseRequestItem[]
   purchaseOrders PurchaseOrder[]
 
   @@index([tenantId, status])
@@ -2698,42 +2466,42 @@ model PurchaseRequestItem {
   remarks           String?
   createdAt         DateTime        @default(now())
 
-  @@index([purchaseRequestId])
   @@map("purchase_request_items")
+  @@index([purchaseRequestId])
 }
 
 model PurchaseOrder {
-  id                String              @id @default(cuid())
-  tenantId          String
-  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  poNumber          String
-  supplierId        String?
-  supplier          Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  id              String              @id @default(cuid())
+  tenantId        String
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  poNumber        String
+  supplierId      String?
+  supplier        Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   purchaseRequestId String?
-  purchaseRequest   PurchaseRequest?    @relation(fields: [purchaseRequestId], references: [id], onDelete: SetNull)
-  storeId           String?
-  store             Store?              @relation(fields: [storeId], references: [id], onDelete: SetNull)
-  status            PurchaseOrderStatus @default(DRAFT)
-  orderDate         DateTime            @default(now())
-  expectedDate      DateTime?
-  deliveryAddress   String?
-  terms             String?
-  totalAmount       Decimal             @default(0) @db.Decimal(14, 2)
-  notes             String?
-  createdBy         String?
-  approvedBy        String?
-  approvedAt        DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  purchaseRequest PurchaseRequest?    @relation(fields: [purchaseRequestId], references: [id], onDelete: SetNull)
+  storeId         String?
+  store           Store?              @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  status          PurchaseOrderStatus @default(DRAFT)
+  orderDate       DateTime            @default(now())
+  expectedDate    DateTime?
+  deliveryAddress String?
+  terms           String?
+  totalAmount     Decimal             @default(0) @db.Decimal(14, 2)
+  notes           String?
+  createdBy       String?
+  approvedBy      String?
+  approvedAt      DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
 
   items         PurchaseOrderItem[]
   goodsReceipts GoodsReceipt[]
 
   @@index([tenantId, status])
+  @@map("purchase_orders")
   @@index([storeId])
   @@index([supplierId])
   @@index([purchaseRequestId])
-  @@map("purchase_orders")
 }
 
 model PurchaseOrderItem {
@@ -2749,8 +2517,8 @@ model PurchaseOrderItem {
   receivedQuantity Decimal       @default(0) @db.Decimal(12, 3)
   createdAt        DateTime      @default(now())
 
-  @@index([purchaseOrderId])
   @@map("purchase_order_items")
+  @@index([purchaseOrderId])
 }
 
 model GoodsReceipt {
@@ -2772,8 +2540,8 @@ model GoodsReceipt {
   items GoodsReceiptItem[]
 
   @@index([tenantId])
-  @@index([purchaseOrderId])
   @@map("goods_receipts")
+  @@index([purchaseOrderId])
 }
 
 model GoodsReceiptItem {
@@ -2790,8 +2558,8 @@ model GoodsReceiptItem {
   receivedStock  Decimal      @default(0) @db.Decimal(12, 3)
   createdAt      DateTime     @default(now())
 
-  @@index([goodsReceiptId])
   @@map("goods_receipt_items")
+  @@index([goodsReceiptId])
 }
 
 // ============================================================
@@ -2842,21 +2610,21 @@ model Invoice {
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
 
-  items                 InvoiceItem[]
-  payments              Payment[]
-  refunds               Refund[]
-  deposits              Deposit[]
-  dischargeBills        DischargeBill[]
+  items    InvoiceItem[]
+  payments Payment[]
+  refunds  Refund[]
+  deposits Deposit[]
+  dischargeBills DischargeBill[]
   financialTransactions FinancialTransaction[]
 
   @@index([tenantId, patientId])
   @@index([tenantId, invoiceNumber])
   @@index([status])
+  @@map("invoices")
   @@index([admissionId])
   @@index([patientId])
   @@index([schemeId])
   @@index([tenantId, issuedDate, status])
-  @@map("invoices")
 }
 
 model BillingScheme {
@@ -2881,37 +2649,36 @@ model BillingScheme {
 }
 
 model InvoiceItem {
-  id              String          @id @default(cuid())
+  id              String    @id @default(cuid())
   tenantId        String
-  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   invoiceId       String
-  invoice         Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice         Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   serviceName     String
   serviceCode     String?
   description     String?
-  quantity        Decimal         @default(1) @db.Decimal(10, 2)
-  rate            Decimal         @default(0) @db.Decimal(10, 2)
-  discountPercent Decimal?        @db.Decimal(5, 2)
-  discountAmount  Decimal         @default(0) @db.Decimal(10, 2)
-  taxPercent      Decimal?        @db.Decimal(5, 2)
-  taxAmount       Decimal         @default(0) @db.Decimal(10, 2)
-  lineTotal       Decimal         @default(0) @db.Decimal(14, 2)
+  quantity        Decimal   @default(1) @db.Decimal(10, 2)
+  rate            Decimal   @default(0) @db.Decimal(10, 2)
+  discountPercent Decimal?  @db.Decimal(5, 2)
+  discountAmount  Decimal   @default(0) @db.Decimal(10, 2)
+  taxPercent      Decimal?  @db.Decimal(5, 2)
+  taxAmount       Decimal   @default(0) @db.Decimal(10, 2)
+  lineTotal       Decimal   @default(0) @db.Decimal(14, 2)
   doctorId        String?
   departmentId    String?
-  department      Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  department      Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   serviceId       String?
   service         BillingService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   referenceType   String?
   referenceId     String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime?       @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime? @updatedAt
 
   @@index([tenantId])
   @@index([invoiceId])
-  @@index([tenantId, doctorId])
   @@map("invoice_items")
+  @@index([tenantId, doctorId])
 }
-
 model Payment {
   id              String        @id @default(cuid())
   tenantId        String
@@ -2939,11 +2706,11 @@ model Payment {
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, patientId])
   @@index([tenantId, invoiceId])
+  @@map("payments")
   @@index([invoiceId])
   @@index([patientId])
   @@index([tenantId, paidAt])
   @@index([tenantId, receivedBy, method])
-  @@map("payments")
 }
 
 model Refund {
@@ -2973,11 +2740,11 @@ model Refund {
   updatedAt       DateTime      @updatedAt
 
   @@index([tenantId, patientId])
+  @@map("refunds")
   @@index([invoiceId])
   @@index([patientId])
   @@index([paymentId])
   @@index([tenantId, refundedAt, status])
-  @@map("refunds")
 }
 
 model Deposit {
@@ -3006,11 +2773,11 @@ model Deposit {
   depositTransactions DepositTransaction[]
 
   @@index([tenantId, patientId])
+  @@map("deposits")
   @@index([admissionId])
   @@index([invoiceId])
   @@index([patientId])
   @@index([tenantId, receivedAt])
-  @@map("deposits")
 }
 
 model DepositTransaction {
@@ -3029,51 +2796,51 @@ model DepositTransaction {
   createdAt    DateTime @default(now())
 
   @@index([tenantId, depositId])
-  @@index([depositId])
   @@map("deposit_transactions")
+  @@index([depositId])
 }
 
 model BillingService {
-  id                 String           @id @default(cuid())
-  tenantId           String
-  tenant             Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  categoryId         String?
-  category           ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  code               String
-  name               String
-  shortName          String?
-  description        String?
-  departmentId       String?
-  department         Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  serviceType        ServiceType      @default(PER_UNIT)
-  unit               String?
-  price              Decimal          @default(0) @db.Decimal(14, 2)
-  taxPercent         Decimal          @default(0) @db.Decimal(5, 2)
-  insuranceRate      Decimal?         @db.Decimal(14, 2)
-  patientRate        Decimal?         @db.Decimal(14, 2)
-  corporateRate      Decimal?         @db.Decimal(14, 2)
-  emergencyRate      Decimal?         @db.Decimal(14, 2)
-  nightRate          Decimal?         @db.Decimal(14, 2)
-  weekendRate        Decimal?         @db.Decimal(14, 2)
-  isActive           Boolean          @default(true)
-  taxable            Boolean          @default(true)
-  requiresDoctor     Boolean          @default(false)
-  requiresDepartment Boolean          @default(false)
-  requiresQuantity   Boolean          @default(true)
-  requiresApproval   Boolean          @default(false)
-  isPackageService   Boolean          @default(false)
-  isRoomCharge       Boolean          @default(false)
-  isPharmacyItem     Boolean          @default(false)
-  isConsumable       Boolean          @default(false)
-  isInventoryItem    Boolean          @default(false)
-  displayOrder       Int              @default(0)
-  createdBy          String?
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  id                String      @id @default(cuid())
+  tenantId          String
+  tenant            Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId        String?
+  category          ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  code              String
+  name              String
+  shortName         String?
+  description       String?
+  departmentId      String?
+  department        Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  serviceType       ServiceType @default(PER_UNIT)
+  unit              String?
+  price             Decimal     @default(0) @db.Decimal(14, 2)
+  taxPercent        Decimal     @default(0) @db.Decimal(5, 2)
+  insuranceRate     Decimal?    @db.Decimal(14, 2)
+  patientRate       Decimal?    @db.Decimal(14, 2)
+  corporateRate     Decimal?    @db.Decimal(14, 2)
+  emergencyRate     Decimal?    @db.Decimal(14, 2)
+  nightRate         Decimal?    @db.Decimal(14, 2)
+  weekendRate       Decimal?    @db.Decimal(14, 2)
+  isActive          Boolean     @default(true)
+  taxable           Boolean     @default(true)
+  requiresDoctor    Boolean     @default(false)
+  requiresDepartment Boolean    @default(false)
+  requiresQuantity  Boolean     @default(true)
+  requiresApproval  Boolean     @default(false)
+  isPackageService  Boolean     @default(false)
+  isRoomCharge      Boolean     @default(false)
+  isPharmacyItem    Boolean     @default(false)
+  isConsumable      Boolean     @default(false)
+  isInventoryItem   Boolean     @default(false)
+  displayOrder      Int         @default(0)
+  createdBy         String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
-  chargeTransactions   ChargeTransaction[]
+  chargeTransactions ChargeTransaction[]
   dischargeBillDetails DischargeBillDetail[]
-  invoiceItems         InvoiceItem[]
+  invoiceItems InvoiceItem[]
 
   @@unique([tenantId, code])
   @@index([tenantId, categoryId])
@@ -3167,8 +2934,8 @@ model CreditAccount {
   updatedAt   DateTime     @updatedAt
 
   @@index([tenantId, patientId])
-  @@index([patientId])
   @@map("credit_accounts")
+  @@index([patientId])
 }
 
 // ============================================================
@@ -3220,9 +2987,9 @@ model InsurancePolicy {
   claims InsuranceClaim[]
 
   @@index([tenantId, patientId])
+  @@map("insurance_policies")
   @@index([patientId])
   @@index([providerId])
-  @@map("insurance_policies")
 }
 
 model InsuranceClaim {
@@ -3252,10 +3019,10 @@ model InsuranceClaim {
 
   @@index([tenantId, patientId])
   @@index([status])
+  @@map("insurance_claims")
   @@index([patientId])
   @@index([policyId])
   @@index([providerId])
-  @@map("insurance_claims")
 }
 
 model DoctorShareRule {
@@ -3276,8 +3043,8 @@ model DoctorShareRule {
   transactions DoctorShareTransaction[]
 
   @@index([tenantId, doctorId])
-  @@index([doctorId])
   @@map("doctor_share_rules")
+  @@index([doctorId])
 }
 
 model DoctorShareTransaction {
@@ -3305,8 +3072,8 @@ model DoctorShareTransaction {
   createdAt        DateTime          @default(now())
 
   @@index([tenantId, doctorId])
-  @@index([ruleId])
   @@map("doctor_share_transactions")
+  @@index([ruleId])
 }
 
 model Membership {
@@ -3329,9 +3096,9 @@ model Membership {
   familyMembers MembershipFamily[]
 
   @@index([tenantId, patientId])
+  @@map("memberships")
   @@index([packageId])
   @@index([patientId])
-  @@map("memberships")
 }
 
 model MembershipPackage {
@@ -3455,8 +3222,8 @@ model CashSession {
   handovers CashHandover[]
 
   @@index([tenantId, userId])
-  @@index([userId])
   @@map("cash_sessions")
+  @@index([userId])
 }
 
 model CashHandover {
@@ -3477,8 +3244,8 @@ model CashHandover {
   createdAt       DateTime      @default(now())
 
   @@index([tenantId])
-  @@index([cashSessionId])
   @@map("cash_handovers")
+  @@index([cashSessionId])
 }
 
 // ============================================================
@@ -3519,9 +3286,9 @@ model Roster {
 
   @@index([tenantId, userId])
   @@index([tenantId, date])
+  @@map("rosters")
   @@index([shiftId])
   @@index([userId])
-  @@map("rosters")
 }
 
 model Leave {
@@ -3543,8 +3310,8 @@ model Leave {
   updatedAt       DateTime    @updatedAt
 
   @@index([tenantId, userId])
-  @@index([userId])
   @@map("leaves")
+  @@index([userId])
 }
 
 // ============================================================
@@ -3598,8 +3365,8 @@ model MedicalTourismCase {
   updatedAt         DateTime @updatedAt
 
   @@index([tenantId])
-  @@index([patientId])
   @@map("medical_tourism_cases")
+  @@index([patientId])
 }
 
 model BlogPost {
@@ -3652,8 +3419,8 @@ model Notification {
 
   @@index([tenantId, userId])
   @@index([tenantId, status])
-  @@index([userId])
   @@map("notifications")
+  @@index([userId])
 }
 
 model AuditLog {
@@ -3771,50 +3538,50 @@ model DocumentSignature {
 
   @@index([tenantId, documentType, documentId])
   @@index([tenantId, signedBy])
+  @@map("document_signatures")
   @@index([patientId])
   @@index([signedBy])
-  @@map("document_signatures")
 }
 
 model AdverseEvent {
-  id            String    @id @default(cuid())
-  tenantId      String
-  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  patientId     String?
-  patient       Patient?  @relation(fields: [patientId], references: [id], onDelete: SetNull)
-  encounterId   String?
-  type          String // MEDICATION, FALL, INFECTION, SURGICAL, DEVICE, LAB, OTHER
-  severity      String    @default("MODERATE") // MILD, MODERATE, SEVERE, FATAL
-  category      String?
-  description   String
+  id           String    @id @default(cuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId    String?
+  patient      Patient?  @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  encounterId  String?
+  type         String // MEDICATION, FALL, INFECTION, SURGICAL, DEVICE, LAB, OTHER
+  severity     String    @default("MODERATE") // MILD, MODERATE, SEVERE, FATAL
+  category     String?
+  description  String
   affectedCount Int? // number of people involved in the incident
-  occurredAt    DateTime  @default(now())
-  reportedBy    String?
-  status        String    @default("OPEN") // OPEN, INVESTIGATING, MITIGATED, CLOSED
-  rootCause     String?
-  actionsTaken  String?
-  closedAt      DateTime?
-  closedBy      String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  occurredAt   DateTime  @default(now())
+  reportedBy   String?
+  status       String    @default("OPEN") // OPEN, INVESTIGATING, MITIGATED, CLOSED
+  rootCause    String?
+  actionsTaken String?
+  closedAt     DateTime?
+  closedBy     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([tenantId, patientId])
   @@index([tenantId, status])
-  @@index([patientId])
   @@map("adverse_events")
+  @@index([patientId])
 }
 
 model AmbulanceVehicle {
-  id              String          @id @default(cuid())
+  id              String        @id @default(cuid())
   tenantId        String
-  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   callSign        String
-  type            String          @default("BASIC") // BASIC, ADVANCED, ICU
-  status          String          @default("AVAILABLE") // AVAILABLE, IN_SERVICE, MAINTENANCE
+  type            String        @default("BASIC") // BASIC, ADVANCED, ICU
+  status          String        @default("AVAILABLE") // AVAILABLE, IN_SERVICE, MAINTENANCE
   driverName      String
   currentLocation String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
   calls           AmbulanceCall[]
 
   @@index([tenantId, status])
@@ -3845,9 +3612,9 @@ model AmbulanceCall {
 }
 
 model EquipmentItem {
-  id              String         @id @default(cuid())
+  id              String           @id @default(cuid())
   tenantId        String
-  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name            String
   department      String?
   model           String?
@@ -3855,11 +3622,11 @@ model EquipmentItem {
   manufacturer    String?
   purchaseDate    DateTime?
   warrantyExpiry  DateTime?
-  status          String         @default("OPERATIONAL") // OPERATIONAL, MAINTENANCE, OUT_OF_SERVICE
+  status          String           @default("OPERATIONAL") // OPERATIONAL, MAINTENANCE, OUT_OF_SERVICE
   location        String?
   lastServiceDate DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
   logs            EquipmentLog[]
 
   @@index([tenantId, status])
@@ -3868,16 +3635,16 @@ model EquipmentItem {
 }
 
 model EquipmentLog {
-  id          String        @id @default(cuid())
-  tenantId    String
-  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  equipmentId String
-  equipment   EquipmentItem @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
-  date        DateTime      @default(now())
-  type        String // Preventive, Corrective, Inspection, Calibration
-  notes       String?
-  performedBy String?
-  createdAt   DateTime      @default(now())
+  id           String        @id @default(cuid())
+  tenantId     String
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  equipmentId  String
+  equipment    EquipmentItem @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  date         DateTime      @default(now())
+  type         String // Preventive, Corrective, Inspection, Calibration
+  notes        String?
+  performedBy  String?
+  createdAt    DateTime      @default(now())
 
   @@index([tenantId, equipmentId])
   @@map("equipment_logs")
@@ -3918,23 +3685,23 @@ model InsurancePreauthorization {
 }
 
 model ControlledSubstanceLog {
-  id        String   @id @default(cuid())
-  tenantId  String
-  drug      String
-  quantity  Decimal  @db.Decimal(10, 2)
-  patient   String?
-  notes     String?
-  loggedAt  DateTime @default(now())
-  loggedBy  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String       @id @default(cuid())
+  tenantId   String
+  drug       String
+  quantity   Decimal      @db.Decimal(10, 2)
+  patient    String?
+  notes      String?
+  loggedAt   DateTime     @default(now())
+  loggedBy   String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
   @@index([tenantId, drug])
   @@map("controlled_substance_logs")
 }
 
 model StockTransfer {
-  id              String   @id @default(cuid())
+  id              String      @id @default(cuid())
   tenantId        String
   fromStoreId     String?
   toStoreId       String?
@@ -3942,28 +3709,28 @@ model StockTransfer {
   fromStore       String?
   toStore         String?
   itemName        String?
-  quantity        Decimal  @db.Decimal(12, 3)
-  status          String   @default("COMPLETED")
-  transferredAt   DateTime @default(now())
+  quantity        Decimal     @db.Decimal(12, 3)
+  status          String      @default("COMPLETED")
+  transferredAt   DateTime    @default(now())
   createdBy       String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   @@index([tenantId, transferredAt])
   @@map("stock_transfers")
 }
 
 model AttendanceRecord {
-  id        String    @id @default(cuid())
+  id        String      @id @default(cuid())
   tenantId  String
   staffName String?
   date      DateTime
   clockIn   DateTime
   clockOut  DateTime?
-  hours     Decimal?  @db.Decimal(5, 2)
+  hours     Decimal?    @db.Decimal(5, 2)
   createdBy String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
   @@index([tenantId, date])
   @@map("attendance_records")
@@ -3986,15 +3753,15 @@ model StaffTraining {
 }
 
 model QualityChecklist {
-  id        String    @id @default(cuid())
-  tenantId  String
-  category  String
-  item      String
-  checked   Boolean   @default(false)
-  checkedBy String?
-  checkedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id         String    @id @default(cuid())
+  tenantId   String
+  category   String
+  item       String
+  checked    Boolean   @default(false)
+  checkedBy  String?
+  checkedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@unique([tenantId, category, item])
   @@index([tenantId, category])
@@ -4002,15 +3769,15 @@ model QualityChecklist {
 }
 
 model ShiftHandover {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   tenantId  String
   wardId    String?
   wardName  String?
   shiftDate DateTime
   notes     String?
   savedBy   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@index([tenantId, shiftDate])
   @@map("shift_handovers")
@@ -4040,34 +3807,34 @@ model ServiceCategory {
 }
 
 model ChargeTransaction {
-  id                  String          @id @default(cuid())
-  tenantId            String
-  tenant              Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  patientId           String
-  patient             Patient         @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  admissionId         String?
-  admission           Admission?      @relation(fields: [admissionId], references: [id], onDelete: SetNull)
-  encounterId         String?
-  encounter           Encounter?      @relation(fields: [encounterId], references: [id], onDelete: SetNull)
-  serviceId           String?
-  service             BillingService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  sourceModule        String // IPD, OPD, EMERGENCY, LAB, RADIOLOGY, OT, PHARMACY, INVENTORY, BLOOD_BANK, DIET, NURSING, AMBULANCE, ADMIN, MANUAL
-  sourceTransactionId String?
-  serviceDate         DateTime        @default(now())
-  quantity            Decimal         @default(1) @db.Decimal(10, 2)
-  unitRate            Decimal         @default(0) @db.Decimal(14, 2)
-  grossAmount         Decimal         @default(0) @db.Decimal(14, 2)
-  discountAmount      Decimal         @default(0) @db.Decimal(14, 2)
-  taxAmount           Decimal         @default(0) @db.Decimal(14, 2)
-  netAmount           Decimal         @default(0) @db.Decimal(14, 2)
-  insuranceAmount     Decimal         @default(0) @db.Decimal(14, 2)
-  patientAmount       Decimal         @default(0) @db.Decimal(14, 2)
-  status              ChargeStatus    @default(PENDING)
-  billingStatus       String          @default("UNBILLED") // UNBILLED, BILLED, CANCELLED
-  dischargeBillId     String?
-  dischargeBill       DischargeBill?  @relation(fields: [dischargeBillId], references: [id], onDelete: SetNull)
-  createdBy           String?
-  createdAt           DateTime        @default(now())
+  id                   String        @id @default(cuid())
+  tenantId             String
+  tenant               Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId            String
+  patient              Patient       @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  admissionId          String?
+  admission            Admission?    @relation(fields: [admissionId], references: [id], onDelete: SetNull)
+  encounterId          String?
+  encounter            Encounter?    @relation(fields: [encounterId], references: [id], onDelete: SetNull)
+  serviceId            String?
+  service              BillingService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  sourceModule         String        // IPD, OPD, EMERGENCY, LAB, RADIOLOGY, OT, PHARMACY, INVENTORY, BLOOD_BANK, DIET, NURSING, AMBULANCE, ADMIN, MANUAL
+  sourceTransactionId  String?
+  serviceDate          DateTime      @default(now())
+  quantity             Decimal       @default(1) @db.Decimal(10, 2)
+  unitRate             Decimal       @default(0) @db.Decimal(14, 2)
+  grossAmount          Decimal       @default(0) @db.Decimal(14, 2)
+  discountAmount       Decimal       @default(0) @db.Decimal(14, 2)
+  taxAmount            Decimal       @default(0) @db.Decimal(14, 2)
+  netAmount            Decimal       @default(0) @db.Decimal(14, 2)
+  insuranceAmount      Decimal       @default(0) @db.Decimal(14, 2)
+  patientAmount        Decimal       @default(0) @db.Decimal(14, 2)
+  status               ChargeStatus  @default(PENDING)
+  billingStatus        String        @default("UNBILLED") // UNBILLED, BILLED, CANCELLED
+  dischargeBillId      String?
+  dischargeBill        DischargeBill? @relation(fields: [dischargeBillId], references: [id], onDelete: SetNull)
+  createdBy            String?
+  createdAt            DateTime      @default(now())
 
   dischargeBillDetails DischargeBillDetail[]
 
@@ -4080,47 +3847,47 @@ model ChargeTransaction {
 }
 
 model DischargeBill {
-  id                 String                 @id @default(cuid())
-  tenantId           String
-  tenant             Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  billNumber         String
-  patientId          String
-  patient            Patient                @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  admissionId        String
-  admission          Admission              @relation(fields: [admissionId], references: [id], onDelete: Restrict)
-  encounterId        String?
-  encounter          Encounter?             @relation(fields: [encounterId], references: [id], onDelete: SetNull)
-  invoiceId          String?
-  invoice            Invoice?               @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  billDate           DateTime               @default(now())
-  admissionDate      DateTime?
-  dischargeDate      DateTime?
-  subtotal           Decimal                @default(0) @db.Decimal(14, 2)
-  discount           Decimal                @default(0) @db.Decimal(14, 2)
-  discountReason     String?
-  discountApprovedBy String?
-  tax                Decimal                @default(0) @db.Decimal(14, 2)
-  insuranceAmount    Decimal                @default(0) @db.Decimal(14, 2)
-  corporateAmount    Decimal                @default(0) @db.Decimal(14, 2)
-  advanceAdjustment  Decimal                @default(0) @db.Decimal(14, 2)
-  previousDue        Decimal                @default(0) @db.Decimal(14, 2)
-  refundAmount       Decimal                @default(0) @db.Decimal(14, 2)
-  roundingAdjustment Decimal                @default(0) @db.Decimal(2, 2)
-  netAmount          Decimal                @default(0) @db.Decimal(14, 2)
-  paidAmount         Decimal                @default(0) @db.Decimal(14, 2)
-  dueAmount          Decimal                @default(0) @db.Decimal(14, 2)
-  status             DischargeBillStatus    @default(DRAFT)
-  paymentStatus      DischargePaymentStatus @default(UNPAID)
-  dischargeStatus    String                 @default("BILLING_PENDING") // BILLING_PENDING, CLEARED
-  remarks            String?
-  createdBy          String?
-  finalizedBy        String?
-  finalizedAt        DateTime?
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
+  id                   String                @id @default(cuid())
+  tenantId             String
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  billNumber           String
+  patientId            String
+  patient              Patient               @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  admissionId          String
+  admission            Admission             @relation(fields: [admissionId], references: [id], onDelete: Restrict)
+  encounterId          String?
+  encounter            Encounter?            @relation(fields: [encounterId], references: [id], onDelete: SetNull)
+  invoiceId            String?
+  invoice              Invoice?              @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  billDate             DateTime              @default(now())
+  admissionDate        DateTime?
+  dischargeDate        DateTime?
+  subtotal             Decimal               @default(0) @db.Decimal(14, 2)
+  discount             Decimal               @default(0) @db.Decimal(14, 2)
+  discountReason       String?
+  discountApprovedBy   String?
+  tax                  Decimal               @default(0) @db.Decimal(14, 2)
+  insuranceAmount      Decimal               @default(0) @db.Decimal(14, 2)
+  corporateAmount      Decimal               @default(0) @db.Decimal(14, 2)
+  advanceAdjustment    Decimal               @default(0) @db.Decimal(14, 2)
+  previousDue          Decimal               @default(0) @db.Decimal(14, 2)
+  refundAmount         Decimal               @default(0) @db.Decimal(14, 2)
+  roundingAdjustment   Decimal               @default(0) @db.Decimal(2, 2)
+  netAmount            Decimal               @default(0) @db.Decimal(14, 2)
+  paidAmount           Decimal               @default(0) @db.Decimal(14, 2)
+  dueAmount            Decimal               @default(0) @db.Decimal(14, 2)
+  status               DischargeBillStatus   @default(DRAFT)
+  paymentStatus        DischargePaymentStatus @default(UNPAID)
+  dischargeStatus      String                @default("BILLING_PENDING") // BILLING_PENDING, CLEARED
+  remarks              String?
+  createdBy            String?
+  finalizedBy          String?
+  finalizedAt          DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 
-  details            DischargeBillDetail[]
-  chargeTransactions ChargeTransaction[]
+  details              DischargeBillDetail[]
+  chargeTransactions   ChargeTransaction[]
 
   @@unique([tenantId, billNumber])
   @@index([tenantId, patientId])
@@ -4131,35 +3898,35 @@ model DischargeBill {
 }
 
 model DischargeBillDetail {
-  id                  String             @id @default(cuid())
-  tenantId            String
-  tenant              Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  dischargeBillId     String
-  dischargeBill       DischargeBill      @relation(fields: [dischargeBillId], references: [id], onDelete: Cascade)
-  chargeTransactionId String?
-  chargeTransaction   ChargeTransaction? @relation(fields: [chargeTransactionId], references: [id], onDelete: SetNull)
-  serviceId           String?
-  service             BillingService?    @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  serviceCode         String?
-  serviceName         String
-  categoryId          String?
-  sourceModule        String?
-  sourceTransactionId String?
-  serviceDate         DateTime?
-  description         String?
-  quantity            Decimal            @default(1) @db.Decimal(10, 2)
-  unit                String?
-  unitRate            Decimal            @default(0) @db.Decimal(14, 2)
-  grossAmount         Decimal            @default(0) @db.Decimal(14, 2)
-  discount            Decimal            @default(0) @db.Decimal(14, 2)
-  tax                 Decimal            @default(0) @db.Decimal(14, 2)
-  insuranceAmount     Decimal            @default(0) @db.Decimal(14, 2)
-  patientAmount       Decimal            @default(0) @db.Decimal(14, 2)
-  netAmount           Decimal            @default(0) @db.Decimal(14, 2)
-  manuallyAdded       Boolean            @default(false)
-  notes               String?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime?          @updatedAt
+  id                   String            @id @default(cuid())
+  tenantId             String
+  tenant               Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  dischargeBillId      String
+  dischargeBill        DischargeBill     @relation(fields: [dischargeBillId], references: [id], onDelete: Cascade)
+  chargeTransactionId  String?
+  chargeTransaction    ChargeTransaction? @relation(fields: [chargeTransactionId], references: [id], onDelete: SetNull)
+  serviceId            String?
+  service              BillingService?   @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  serviceCode          String?
+  serviceName          String
+  categoryId           String?
+  sourceModule         String?
+  sourceTransactionId  String?
+  serviceDate          DateTime?
+  description          String?
+  quantity             Decimal           @default(1) @db.Decimal(10, 2)
+  unit                 String?
+  unitRate             Decimal           @default(0) @db.Decimal(14, 2)
+  grossAmount          Decimal           @default(0) @db.Decimal(14, 2)
+  discount             Decimal           @default(0) @db.Decimal(14, 2)
+  tax                  Decimal           @default(0) @db.Decimal(14, 2)
+  insuranceAmount      Decimal           @default(0) @db.Decimal(14, 2)
+  patientAmount        Decimal           @default(0) @db.Decimal(14, 2)
+  netAmount            Decimal           @default(0) @db.Decimal(14, 2)
+  manuallyAdded       Boolean           @default(false)
+  notes                String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime?         @updatedAt
 
   @@index([tenantId, dischargeBillId])
   @@index([tenantId, serviceId])

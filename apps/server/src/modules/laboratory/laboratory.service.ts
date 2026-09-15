@@ -21,6 +21,11 @@ export interface CreateLabTestDto {
   price?: number;
   turnaroundTime?: number;
   discipline?: string;
+  method?: string;
+  precision?: number;
+  resultType?: string;
+  referenceRanges?: any;
+  sortOrder?: number;
 }
 
 export interface CreateLabOrderDto {
@@ -83,6 +88,11 @@ export class LaboratoryService {
     "price",
     "turnaroundTime",
     "discipline",
+    "method",
+    "precision",
+    "resultType",
+    "referenceRanges",
+    "sortOrder",
   ];
 
   private whitelistTest(dto: CreateLabTestDto): Record<string, any> {
@@ -420,6 +430,11 @@ export class LaboratoryService {
     if (["CANCELLED", "REJECTED"].includes(item.labOrder.status)) {
       throw new BadRequestException(
         `Cannot enter results on a ${item.labOrder.status.toLowerCase()} order`,
+      );
+    }
+    if (["VERIFIED", "APPROVED", "REPORTED"].includes(item.labOrder.status)) {
+      throw new BadRequestException(
+        "Results are finalized for this order and cannot be edited",
       );
     }
 

@@ -571,6 +571,7 @@ export default function LaboratoryPage() {
           { key: 'specimenType', label: 'Specimen', render: (r) => r.specimenType || '—' },
           { key: 'unit', label: 'Unit', render: (r) => r.unit || '—' },
           { key: 'price', label: 'Price' },
+          { key: 'method', label: 'Method', render: (r) => r.method || '—' },
           { key: 'status', label: 'Status', badge: true },
         ]}
         fields={[
@@ -584,6 +585,8 @@ export default function LaboratoryPage() {
           { name: 'price', label: 'Price', type: 'number' },
           { name: 'turnaroundTime', label: 'TAT (hours)', type: 'number' },
           { name: 'discipline', label: 'Discipline' },
+          { name: 'method', label: 'Method', hint: 'Assay methodology (e.g. Automated hematology analyzer)' },
+          { name: 'precision', label: 'Precision (decimals)', type: 'number' },
         ]}
       />
     );

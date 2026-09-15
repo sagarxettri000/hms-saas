@@ -60,6 +60,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Diagnostics',
     items: [
+      { label: 'Hematology', href: '/hematology', icon: '◒', roles: [...LAB, ...RAD, ...CLINICAL_WIDE], flag: 'laboratory' },
       { label: 'Laboratory', href: '/laboratory', icon: '◉', roles: [...LAB, ...CLINICAL_WIDE], flag: 'laboratory' },
       { label: 'Radiology', href: '/radiology', icon: '▤', roles: [...RAD, ...CLINICAL_WIDE], flag: 'radiology' },
       { label: 'DICOM', href: '/dicom', icon: '◫', roles: [...RAD, ...ADMIN, ...SUPER], flag: 'radiology' },

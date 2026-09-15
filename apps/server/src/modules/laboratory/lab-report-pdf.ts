@@ -10,9 +10,11 @@ function txt(s: string): string {
   return `(${esc(s)})`;
 }
 
-function fmtNum(v: unknown): string {
+function fmtNum(v: unknown, precision?: number): string {
   const n = Number(v);
-  return isNaN(n) ? String(v ?? "") : String(n);
+  if (isNaN(n)) return String(v ?? "");
+  if (precision != null && isFinite(n)) return n.toFixed(precision);
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 function dateStr(d: unknown): string {
@@ -138,12 +140,16 @@ interface LabOrderData {
   verifiedAt?: any;
   approvedAt?: any;
   clinicalNote?: string;
-  patient: { firstName: string; middleName?: string; lastName: string; mrn?: string; phone?: string; gender?: string; dateOfBirth?: any };
+  reportTitle?: string;
+  department?: string;
+  patient: { firstName: string; middleName?: string; lastName: string; mrn?: string; hospitalNumber?: string; phone?: string; gender?: string; dateOfBirth?: any };
   doctor?: { user?: { firstName: string; middleName?: string; lastName: string } } | null;
-  items: { testName: string; result?: string; resultValue?: any; unit?: string; referenceRange?: string; isAbnormal?: boolean; isCritical?: boolean; notes?: string; status: string }[];
+  items: { testName: string; result?: string; resultValue?: any; unit?: string; referenceRange?: string; method?: string; precision?: number; isAbnormal?: boolean; isCritical?: boolean; notes?: string; status: string }[];
   samples?: { specimenType: string; barcode?: string; collectedAt?: any; status: string }[];
   verifiedBy?: string;
   approvedBy?: string;
+  verifiedByName?: string;
+  approvedByName?: string;
 }
 
 interface TenantData {
@@ -156,6 +162,10 @@ interface TenantData {
   country?: string;
   phone?: string;
   email?: string;
+  website?: string;
+  panNumber?: string;
+  vatNumber?: string;
+  registrationNumber?: string;
 }
 
 function tenantAddr(t: TenantData): string {
@@ -179,13 +189,19 @@ export function buildLabReportPdf(
   p.gap(14);
   const addr = tenantAddr(hospital);
   if (addr) { p.text(MARGIN, p.y, addr, 9, "0.35 0.35 0.35"); p.gap(11); }
-  const contact = [hospital.phone, hospital.email].filter(Boolean).join(" | ");
+  const regLine = [hospital.panNumber ? `PAN: ${hospital.panNumber}` : "", hospital.vatNumber ? `VAT: ${hospital.vatNumber}` : "", hospital.registrationNumber ? `Reg: ${hospital.registrationNumber}` : ""].filter(Boolean).join("  |  ");
+  if (regLine) { p.text(MARGIN, p.y, regLine, 8, "0.4 0.4 0.4"); p.gap(10); }
+  const contact = [hospital.phone, hospital.email, hospital.website].filter(Boolean).join(" | ");
   if (contact) { p.text(MARGIN, p.y, contact, 8, "0.4 0.4 0.4"); p.gap(10); }
   p.line(MARGIN, p.y, right, p.y);
   p.gap(6);
 
   // Title
-  p.text(MARGIN, p.y, "LABORATORY REPORT", 14, "0.12 0.24 0.4");
+  p.text(MARGIN, p.y, order.reportTitle || "LABORATORY REPORT", 14, "0.12 0.24 0.4");
+  if (order.department) {
+    p.gap(12);
+    p.text(MARGIN, p.y, order.department, 10, "0.3 0.3 0.3");
+  }
   if (order.isStat) {
     p.text(right, p.y + 4, "STAT", 12, "0.8 0.1 0.1");
   }
@@ -203,7 +219,15 @@ export function buildLabReportPdf(
   infoRow("Ordered:", dateTimeStr(order.orderedAt), MARGIN, p.y);
   if (order.verifiedAt) infoRow("Verified:", dateTimeStr(order.verifiedAt), MARGIN + 260, p.y);
   p.gap(14);
-  if (order.approvedAt) { infoRow("Approved:", dateTimeStr(order.approvedAt), MARGIN, p.y); p.gap(14); }
+  if (order.processedAt) { infoRow("Processed:", dateTimeStr(order.processedAt), MARGIN, p.y); p.gap(14); }
+  if (order.approvedAt) {
+    const approvedStr = order.approvedByName
+      ? `${dateTimeStr(order.approvedAt)}  (${order.approvedByName})`
+      : dateTimeStr(order.approvedAt);
+    infoRow("Approved:", approvedStr, MARGIN, p.y);
+    p.gap(14);
+  }
+  if (order.reportedAt) { infoRow("Reported:", dateTimeStr(order.reportedAt), MARGIN, p.y); p.gap(14); }
 
   // Patient
   p.moveTo(infoY - 42);
@@ -212,10 +236,12 @@ export function buildLabReportPdf(
   p.text(MARGIN, p.y, "PATIENT DETAILS", 9, "0.4 0.4 0.4");
   p.gap(14);
   infoRow("Name:", patientName(order.patient), MARGIN, p.y);
-  if (order.patient.mrn) infoRow("MRN:", order.patient.mrn, MARGIN + 260, p.y);
+  if (order.patient.hospitalNumber) infoRow("Hosp. #:", order.patient.hospitalNumber, MARGIN + 260, p.y);
+  p.gap(14);
+  if (order.patient.mrn) infoRow("MRN:", order.patient.mrn, MARGIN, p.y);
+  if (order.patient.dateOfBirth) infoRow("DOB:", dateStr(order.patient.dateOfBirth), MARGIN + 260, p.y);
   p.gap(14);
   if (order.patient.gender) infoRow("Gender:", order.patient.gender, MARGIN, p.y);
-  if (order.patient.dateOfBirth) infoRow("DOB:", dateStr(order.patient.dateOfBirth), MARGIN + 260, p.y);
   p.gap(14);
   if (order.doctor?.user) {
     const docName = [order.doctor.user.firstName, order.doctor.user.middleName, order.doctor.user.lastName].filter(Boolean).join(" ");
@@ -231,9 +257,16 @@ export function buildLabReportPdf(
     p.text(MARGIN, p.y, "SPECIMENS", 9, "0.4 0.4 0.4");
     p.gap(14);
     for (const s of order.samples) {
-      const parts = [s.specimenType, s.barcode ? `Barcode: ${s.barcode}` : "", s.collectedAt ? `Collected: ${dateStr(s.collectedAt)}` : "", `Status: ${s.status}`].filter(Boolean);
+      const parts = [s.specimenType, s.collectedAt ? `Collected: ${dateStr(s.collectedAt)}` : "", `Status: ${s.status}`].filter(Boolean);
       p.text(MARGIN, p.y, parts.join("  |  "), 9);
-      p.gap(12);
+      if (s.barcode) {
+        p.gap(11);
+        p.rect(MARGIN, p.y - 4, 120, 18, "0 0 0");
+        p.rect(MARGIN + 1, p.y - 3, 118, 16, "1 1 1");
+        p.text(MARGIN + 6, p.y + 6, s.barcode.padEnd(14, " ").split("").join(" "), 8);
+        p.text(MARGIN + 6, p.y - 1, "BARCODE", 6, "0.5 0.5 0.5");
+      }
+      p.gap(14);
     }
   }
 
@@ -244,8 +277,8 @@ export function buildLabReportPdf(
   p.text(MARGIN, p.y, "TEST RESULTS", 9, "0.4 0.4 0.4");
   p.gap(14);
 
-  const colX = [MARGIN, MARGIN + 180, MARGIN + 260, MARGIN + 340, MARGIN + 430];
-  const colHeaders = ["Test", "Result", "Unit", "Ref. Range", "Flag"];
+  const colX = [MARGIN, MARGIN + 135, MARGIN + 215, MARGIN + 275, MARGIN + 370, MARGIN + 430];
+  const colHeaders = ["Test", "Result", "Unit", "Ref. Range", "Flag", "Method"];
 
   p.rect(MARGIN, p.y - 2, right - MARGIN, 16, "0.87 0.9 0.95");
   for (let i = 0; i < colHeaders.length; i++) {
@@ -255,17 +288,19 @@ export function buildLabReportPdf(
 
   for (const item of order.items) {
     if (p.y < p.bottom + 40) break;
-    const name = item.testName.length > 22 ? item.testName.slice(0, 20) + ".." : item.testName;
+    const name = item.testName.length > 20 ? item.testName.slice(0, 18) + ".." : item.testName;
     p.text(colX[0], p.y, name, 10);
 
-    const resultStr = item.resultValue != null ? fmtNum(item.resultValue) : item.result || "—";
+    const hasResult = item.resultValue != null || Boolean(item.result);
+    const resultStr = !hasResult ? "—" : item.resultValue != null ? fmtNum(item.resultValue, item.precision) : item.result || "—";
     const flagColor = item.isCritical ? "0.8 0.1 0.1" : item.isAbnormal ? "0.8 0.5 0" : "0.2 0.6 0.3";
-    const flag = item.isCritical ? "CRITICAL" : item.isAbnormal ? "ABNORMAL" : "Normal";
+    const flag = !hasResult ? "Pending" : item.isCritical ? "CRITICAL" : item.isAbnormal ? "ABNORMAL" : "Normal";
 
-    p.text(colX[1], p.y, resultStr, 10, flagColor);
+    p.text(colX[1], p.y, resultStr, 10, hasResult ? flagColor : "0.5 0.5 0.5");
     p.text(colX[2], p.y, item.unit || "", 9);
     p.text(colX[3], p.y, item.referenceRange || "", 9);
-    p.text(colX[4], p.y, flag, 9, flagColor);
+    p.text(colX[4], p.y, flag, 9, hasResult ? flagColor : "0.5 0.5 0.5");
+    p.text(colX[5], p.y, (item.method || "").slice(0, 30), 8);
 
     p.gap(14);
 
@@ -297,7 +332,9 @@ export function buildLabReportPdf(
   p.text(right, p.y, dateTimeStr(new Date()), 8, "0.5 0.5 0.5");
   p.gap(14);
   p.text(MARGIN, p.y, `Reviewed and approved for ${hospital.name}`, 9, "0.3 0.3 0.3");
-  if (generatedBy) {
+  if (order.approvedByName) {
+    p.text(right, p.y, `Electronically signed by: ${order.approvedByName}`, 8, "0.4 0.4 0.4");
+  } else if (generatedBy) {
     p.text(right, p.y, `Generated by ${generatedBy}`, 8, "0.5 0.5 0.5");
   }
 

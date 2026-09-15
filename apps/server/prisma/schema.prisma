@@ -634,6 +634,7 @@ model Tenant {
   auditLogs               AuditLog[]
   integrationSettings     IntegrationSetting[]
   labOrders               LabOrder[]
+  labTestPanels           LabTestPanel[]
   radiologyOrders         RadiologyOrder[]
   radiologyReportRevisions RadiologyReportRevision[]
   radiologyPeerReviews     RadiologyPeerReview[]
@@ -1806,10 +1807,16 @@ model LabTest {
   discipline     String? // MICROBIOLOGY, HISTOPATHOLOGY, HEMATOLOGY, BIOCHEMISTRY, IMMUNOLOGY
   status         LabTestStatus @default(ACTIVE)
   isActive       Boolean       @default(true)
+  method         String?       // assay methodology (e.g. "Automated hematology analyzer", "Westergren")
+  precision      Int?          // decimal places used when rendering numeric results
+  resultType     String        @default("NUMERIC") // NUMERIC | TEXT
+  referenceRanges Json?        // [{label?, low?, high?, sex? (MALE|FEMALE|OTHER), unit?, note?}]
+  sortOrder      Int?          // display ordering within a panel/category
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   labOrderItems LabOrderItem[]
+  panelItems    LabTestPanelItem[]
 
   @@index([tenantId])
   @@map("lab_tests")
@@ -1871,6 +1878,14 @@ model LabOrderItem {
   isAbnormal     Boolean?
   isCritical     Boolean?
   notes          String?
+  method         String?
+  precision      Int?
+  resultType     String?
+  refLow         Decimal?  @db.Decimal(12, 4)
+  refHigh        Decimal?  @db.Decimal(12, 4)
+  rangeLabel     String?
+  resultEnteredBy  String?
+  resultEnteredAt  DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime? @updatedAt
 
@@ -1878,6 +1893,44 @@ model LabOrderItem {
   @@index([labOrderId])
   @@map("lab_order_items")
   @@index([labTestId])
+}
+
+model LabTestPanel {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String
+  code         String
+  category     String?
+  specimenType String?
+  container    String?
+  description  String?
+  price        Decimal  @default(0) @db.Decimal(10, 2)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  items LabTestPanelItem[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("lab_test_panels")
+}
+
+model LabTestPanelItem {
+  id            String   @id @default(cuid())
+  tenantId      String
+  panelId       String
+  panel         LabTestPanel @relation(fields: [panelId], references: [id], onDelete: Cascade)
+  labTestId     String
+  labTest       LabTest  @relation(fields: [labTestId], references: [id], onDelete: Cascade)
+  sortOrder     Int      @default(0)
+  priceOverride Decimal? @db.Decimal(10, 2)
+
+  @@unique([panelId, labTestId])
+  @@index([panelId])
+  @@index([labTestId])
+  @@map("lab_test_panel_items")
 }
 
 model LabSample {

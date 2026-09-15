@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react';
 import ModulePage from '@/components/ModulePage';
 import IntegrationSettings from '@/components/IntegrationSettings';
+import OrgProfile from '@/components/OrgProfile';
 import TwoFactorManager from '@/components/auth/TwoFactorManager';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/hooks';
 
 function ToggleList({ path }: { path: string }) {
   const [items, setItems] = useState<any[]>([]);
@@ -72,13 +74,16 @@ function ToggleList({ path }: { path: string }) {
 }
 
 export default function SettingsPage() {
-  return (
-    <ModulePage
-      title="Settings"
-      subtitle="Hospital configuration"
-      tabs={[
-        {
-          key: 'users',
+  const role = useAuth();
+  const canEditOrg = ['HOSPITAL_ADMIN', 'HOSPITAL_OWNER', 'PLATFORM_SUPER_ADMIN'].includes(role ?? '');
+  const tabs: any[] = [
+    {
+      key: 'hospital',
+      label: 'Hospital',
+      render: () => <OrgProfile />,
+    },
+    {
+      key: 'users',
           label: 'Users',
           endpoint: '/users',
           createLabel: 'Add user',
@@ -88,9 +93,9 @@ export default function SettingsPage() {
             {
               key: 'name',
               label: 'Name',
-              render: (r) => [r.firstName, r.lastName].filter(Boolean).join(' ') || r.name,
+              render: (r: any) => [r.firstName, r.lastName].filter(Boolean).join(' ') || r.name,
             },
-            { key: 'email', label: 'Email', render: (r) => <span className="mono">{r.email}</span> },
+            { key: 'email', label: 'Email', render: (r: any) => <span className="mono">{r.email}</span> },
             { key: 'role', label: 'Role', badge: true },
             { key: 'status', label: 'Status', badge: true },
             {
@@ -173,7 +178,7 @@ export default function SettingsPage() {
           columns: [
             { key: 'name', label: 'Name' },
             { key: 'description', label: 'Description' },
-            { key: 'isSystem', label: 'System', render: (r) => (r.isSystem ? 'Yes' : 'No') },
+            { key: 'isSystem', label: 'System', render: (r: any) => (r.isSystem ? 'Yes' : 'No') },
             {
               key: 'actions',
               label: 'Actions',
@@ -253,7 +258,13 @@ export default function SettingsPage() {
           label: 'Security',
           render: () => <TwoFactorManager />,
         },
-      ]}
+      ];
+
+  return (
+    <ModulePage
+      title="Settings"
+      subtitle="Hospital configuration"
+      tabs={canEditOrg ? tabs : tabs.filter((t) => t.key !== 'hospital')}
     />
   );
 }

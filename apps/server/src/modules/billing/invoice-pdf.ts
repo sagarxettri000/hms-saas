@@ -84,9 +84,25 @@ interface InvoiceData {
   dueAmount: any;
   isCredit: boolean;
   printCount: number;
-  patient?: { firstName: string; middleName?: string; lastName: string; mrn?: string; phone?: string; email?: string; gender?: string; dateOfBirth?: any } | null;
+  patient?: {
+    firstName: string; middleName?: string; lastName: string;
+    mrn?: string; phone?: string; mobile?: string; email?: string;
+    gender?: string; dateOfBirth?: any; age?: number | null;
+    addressLine1?: string; addressLine2?: string;
+    city?: string; district?: string; province?: string; country?: string;
+    patientType?: string; isStaff?: boolean;
+  } | null;
   customerName?: string;
   customerPhone?: string;
+  scheme?: { name?: string; code?: string; discountPercent?: any } | null;
+  encounter?: {
+    department?: { name?: string };
+    doctor?: {
+      user?: { firstName?: string; lastName?: string };
+      specialization?: string;
+      doctorId?: string;
+    };
+  } | null;
   admission?: { id: string; department?: { name?: string } };
   items: { serviceName: string; description?: string; quantity: any; rate: any; discountAmount?: any; taxAmount?: any; lineTotal: any; doctorId?: string }[];
   payments: { paymentNumber: string; amount: any; method: string; paidAt: any; status: string; transactionId?: string; referenceNumber?: string }[];
@@ -103,6 +119,10 @@ interface TenantData {
   country?: string;
   phone?: string;
   email?: string;
+  website?: string;
+  panNumber?: string;
+  vatNumber?: string;
+  registrationNumber?: string;
 }
 
 function tenantAddress(t: TenantData): string {
@@ -115,13 +135,49 @@ function patientName(p?: InvoiceData["patient"] | null): string {
   return [p.firstName, p.middleName, p.lastName].filter(Boolean).join(" ") || "Walk-in Customer";
 }
 
+function titleCasePdf(v: any): string {
+  if (!v) return "";
+  const s = String(v).toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function patientAge(p?: InvoiceData["patient"] | null): string {
+  if (!p) return "";
+  if (p.age !== null && p.age !== undefined) return `${p.age} yrs`;
+  if (p.dateOfBirth) {
+    const dob = new Date(p.dateOfBirth as any);
+    if (!isNaN(dob.getTime())) return `${new Date().getFullYear() - dob.getFullYear()} yrs`;
+  }
+  return "";
+}
+
+function patientAddress(p?: InvoiceData["patient"] | null): string {
+  if (!p) return "";
+  const parts = [p.addressLine1, p.addressLine2, p.city, p.district, p.province, p.country].filter(Boolean);
+  return parts.join(", ");
+}
+
+function encounterConsultant(enc?: InvoiceData["encounter"] | null): string {
+  const user = enc?.doctor?.user;
+  if (!user) return "";
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ");
+  const spec = enc?.doctor?.specialization;
+  return name ? (spec ? `${name} (${spec})` : name) : "";
+}
+
 function headerBlock(p: PdfPage, title: string, hospital: TenantData) {
   p.text(MARGIN, p.y, hospital.name, 16, "0.12 0.24 0.4");
   p.gap(14);
   const addr = tenantAddress(hospital);
   if (addr) { p.text(MARGIN, p.y, addr, 9, "0.35 0.35 0.35"); p.gap(11); }
-  const contact = [hospital.phone, hospital.email].filter(Boolean).join(" | ");
+  const contact = [hospital.phone, hospital.email, hospital.website].filter(Boolean).join(" | ");
   if (contact) { p.text(MARGIN, p.y, contact, 8, "0.4 0.4 0.4"); p.gap(10); }
+  const regs = [
+    hospital.panNumber ? `PAN: ${hospital.panNumber}` : null,
+    hospital.vatNumber ? `VAT: ${hospital.vatNumber}` : null,
+    hospital.registrationNumber ? `Reg: ${hospital.registrationNumber}` : null,
+  ].filter(Boolean);
+  if (regs.length) { p.text(MARGIN, p.y, regs.join("  |  "), 8, "0.4 0.4 0.4"); p.gap(10); }
   p.line(MARGIN, p.y, PAGE_W - MARGIN, p.y);
   p.gap(6);
   p.text(PAGE_W - MARGIN, p.y + 6, title, 14, "0.12 0.24 0.4");
@@ -188,16 +244,36 @@ export function buildInvoicePdf(
   p.moveTo(infoY - 50);
   p.line(MARGIN, p.y + 4, right, p.y + 4);
   p.gap(4);
-  p.text(MARGIN, p.y, "PATIENT DETAILS", 9, "0.4 0.4 0.4");
+  p.text(MARGIN, p.y, "PATIENT / BILLING DETAILS", 9, "0.4 0.4 0.4");
   p.gap(14);
   infoRow(p, "Name:", inv.patient ? patientName(inv.patient) : (inv.customerName || "Walk-in Customer"), MARGIN, p.y);
   if (inv.patient?.mrn) infoRow(p, "MRN:", inv.patient.mrn, MARGIN + 260, p.y);
   p.gap(14);
-  if (inv.patient?.phone) infoRow(p, "Phone:", inv.patient.phone, MARGIN, p.y);
-  else if (inv.customerPhone) infoRow(p, "Phone:", inv.customerPhone, MARGIN, p.y);
-  if (inv.patient?.gender) infoRow(p, "Gender:", inv.patient.gender, MARGIN + 260, p.y);
+  if (inv.patient) {
+    infoRow(
+      p, "Age/Gender:",
+      [patientAge(inv.patient), inv.patient.gender ? titleCasePdf(inv.patient.gender) : null].filter(Boolean).join(" / "),
+      MARGIN, p.y,
+    );
+  }
+  const pt = inv.patient;
+  if (pt?.phone || pt?.mobile || inv.customerPhone) {
+    infoRow(p, "Phone:", inv.customerPhone || pt?.mobile || pt?.phone || "", MARGIN + 260, p.y);
+  }
   p.gap(14);
+  const patAddr = patientAddress(inv.patient);
+  if (patAddr) infoRow(p, "Address:", patAddr, MARGIN, p.y, 56);
+  const consultant = encounterConsultant(inv.encounter);
+  if (consultant) {
+    if (patAddr) p.gap(14);
+    infoRow(p, "Consultant:", consultant, MARGIN, p.y, 56);
+  }
+  if (inv.scheme?.name) {
+    p.gap(14);
+    infoRow(p, "Scheme/Cat:", inv.scheme.name, MARGIN, p.y, 56);
+  }
   if (inv.admission?.department?.name) {
+    if (consultant || inv.scheme?.name || patAddr) p.gap(14); else p.gap(0);
     infoRow(p, "Department:", inv.admission.department.name, MARGIN, p.y);
     p.gap(14);
   }

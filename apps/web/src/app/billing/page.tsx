@@ -304,13 +304,19 @@ function BillingPageInner() {
           ],
           actions: [
             {
+              label: 'Invoice',
+              tone: 'secondary',
+              onClick: (row) => setReceiptTarget(row),
+              skipReload: true,
+            },
+            {
               label: 'Record payment',
               onClick: (row) => setPayTarget(row),
               condition: (row) => Number(row.totalAmount || 0) > Number(row.paidAmount || 0),
             },
             {
               label: 'Receipt',
-              tone: 'secondary',
+              tone: 'ghost',
               onClick: (row) => setReceiptTarget(row),
               condition: (row) => Number(row.paidAmount || 0) > 0,
               skipReload: true,

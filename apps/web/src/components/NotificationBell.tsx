@@ -145,7 +145,7 @@ export default function NotificationBell() {
             borderRadius: 8,
             boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
             zIndex: 10000,
-            maxWidth: 360,
+            maxWidth: 'min(360px, calc(100vw - 32px))',
             fontSize: 13,
             cursor: 'pointer',
           }}
@@ -205,7 +205,7 @@ export default function NotificationBell() {
               top: '100%',
               right: 0,
               marginTop: 8,
-              width: 380,
+              width: 'min(380px, calc(100vw - 24px))',
               maxHeight: 480,
               overflow: 'auto',
               background: '#fff',

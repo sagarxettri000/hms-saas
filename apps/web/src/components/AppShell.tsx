@@ -255,17 +255,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="topbar">
           <button
             className="mobile-toggle"
-            style={{
-              display: 'none',
-              background: 'none',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              padding: '4px 8px',
-              fontSize: 16,
-              cursor: 'pointer',
-              lineHeight: 1,
-            }}
             aria-label="Toggle navigation"
+            aria-expanded={menuOpen}
             onClick={() => setMenuOpen((v) => !v)}
           >
             ☰
@@ -273,7 +264,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <GlobalSearch />
           <div className="topbar-right">
             <NotificationBell />
-            <span style={{ fontSize: 13, color: '#64748b' }}>{tenantName}</span>
+            <span className="topbar-tenant" style={{ fontSize: 13, color: '#64748b' }}>{tenantName}</span>
             <button className="btn btn-secondary btn-sm" onClick={handleLogout}>
               Sign out
             </button>

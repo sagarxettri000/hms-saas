@@ -192,7 +192,8 @@ function LineItemsEditor({
         <table className="table">
           <thead>
             <tr>
-              <th>Service</th>
+              <th style={{ width: 44 }}>SN</th>
+              <th>Particulars</th>
               <th style={{ width: 90 }}>Qty</th>
               <th style={{ width: 110 }}>Rate (NPR)</th>
               <th style={{ width: 110 }}>Amount</th>
@@ -202,6 +203,7 @@ function LineItemsEditor({
           <tbody>
             {rows.map((r, i) => (
               <tr key={i}>
+                <td className="muted">{i + 1}</td>
                 <td>
                   <input
                     className="input"

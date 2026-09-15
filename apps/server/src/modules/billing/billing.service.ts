@@ -542,6 +542,30 @@ export class BillingService {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id, tenantId },
       include: {
+        tenant: {
+          select: {
+            id: true,
+            name: true,
+            logoUrl: true,
+            panNumber: true,
+            vatNumber: true,
+            registrationNumber: true,
+            currency: true,
+            phone: true,
+            email: true,
+            website: true,
+            addressLine1: true,
+            addressLine2: true,
+            city: true,
+            district: true,
+            province: true,
+            country: true,
+            postalCode: true,
+          },
+        },
+        scheme: {
+          select: { id: true, name: true, code: true, discountPercent: true },
+        },
         patient: {
           select: {
             id: true,
@@ -550,9 +574,20 @@ export class BillingService {
             lastName: true,
             mrn: true,
             phone: true,
+            mobile: true,
             email: true,
             gender: true,
             dateOfBirth: true,
+            age: true,
+            patientType: true,
+            isStaff: true,
+            guardianName: true,
+            addressLine1: true,
+            addressLine2: true,
+            city: true,
+            district: true,
+            province: true,
+            country: true,
           },
         },
         admission: true,
@@ -563,7 +598,32 @@ export class BillingService {
       },
     });
     if (!invoice) throw new NotFoundException("Invoice not found");
-    return invoice;
+
+    const createdByUser = invoice.createdBy
+      ? await this.prisma.user.findUnique({
+          where: { id: invoice.createdBy },
+          select: { id: true, firstName: true, lastName: true },
+        })
+      : null;
+
+    const encounter = invoice.encounterId
+      ? await this.prisma.encounter.findFirst({
+          where: { id: invoice.encounterId, tenantId },
+          select: {
+            id: true,
+            department: { select: { name: true } },
+            doctor: {
+              select: {
+                id: true,
+                specialization: true,
+                user: { select: { id: true, firstName: true, lastName: true } },
+              },
+            },
+          },
+        })
+      : null;
+
+    return { ...invoice as any, createdByUser, encounter } as any;
   }
 
   async refreshOverdueStatus(tenantId: string, invoiceId?: string) {
@@ -2052,7 +2112,8 @@ amount: Number(refund.amount),
       select: {
         name: true, addressLine1: true, addressLine2: true,
         city: true, district: true, province: true, country: true,
-        phone: true, email: true,
+        phone: true, email: true, website: true,
+        panNumber: true, vatNumber: true, registrationNumber: true,
       },
     });
     const user = userId
@@ -2096,7 +2157,8 @@ amount: Number(refund.amount),
       select: {
         name: true, addressLine1: true, addressLine2: true,
         city: true, district: true, province: true, country: true,
-        phone: true, email: true,
+        phone: true, email: true, website: true,
+        panNumber: true, vatNumber: true, registrationNumber: true,
       },
     });
     const user = userId

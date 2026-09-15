@@ -942,7 +942,7 @@ h3 {
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   .sidebar {
     position: fixed;
     z-index: 40;
@@ -975,15 +975,12 @@ h3 {
   .mobile-toggle {
     display: inline-flex;
   }
-  .table {
-    min-width: 640px;
-  }
   .table-responsive {
     overflow-x: auto;
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   .dash-stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1612,4 +1609,599 @@ h3 {
 
 .rx-card-notes .label {
   margin-right: 6px;
+}
+
+/* =====================================================================
+   Responsive layer — whole app
+   Breakpoint targets:
+     phones        320–480px
+     large phones  481–767px
+     tablets       768–1023px  (sidebar becomes a drawer)
+     laptops       1024–1365px (full sidebar retained)
+     desktops      1366–1919px
+     large screens 1920px+
+   ===================================================================== */
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+/* Hamburger is hidden on desktop, shown once the sidebar turns into a drawer */
+.mobile-toggle {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+  color: var(--text);
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+}
+
+@media (min-width: 1024px) {
+  .mobile-toggle {
+    display: none;
+  }
+}
+
+/* Larger screens: use the horizontal space efficiently */
+@media (min-width: 1920px) {
+  .page {
+    max-width: 1440px;
+  }
+  .dash-stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* ---------- Phones, large phones & tablets (sidebar drawer active) ---------- */
+@media (max-width: 1023px) {
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ---------- Phones & larger phones (<=767px) ---------- */
+@media (max-width: 767px) {
+  /* Topbar becomes two rows: hamburger + actions on row 1, full-width search below */
+  .topbar {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    row-gap: 8px;
+  }
+  .mobile-toggle {
+    order: -1;
+  }
+  .topbar-right {
+    order: 0;
+    margin-left: auto;
+  }
+  .global-search {
+    order: 1;
+    flex: 1 1 100%;
+    max-width: none;
+  }
+  .topbar-tenant {
+    display: none;
+  }
+
+  /* Comfortable touch targets */
+  .btn {
+    min-height: 38px;
+  }
+  .btn-sm {
+    min-height: 32px;
+    padding: 5px 10px;
+  }
+  .input,
+  .select,
+  .textarea {
+    min-height: 40px;
+  }
+  .sidebar-link {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+  .tab {
+    padding: 11px 12px;
+    white-space: nowrap;
+  }
+  .tabs {
+    flex-wrap: nowrap;
+  }
+  .modal-close {
+    font-size: 24px;
+    padding: 4px;
+  }
+  .search-result {
+    padding: 10px 8px;
+  }
+
+  /* Modals fit within the viewport (vertical + horizontal scroll handled here) */
+  .modal-backdrop {
+    padding: 24px 12px;
+  }
+  .modal {
+    padding: 18px 16px;
+    max-height: calc(100dvh - 48px);
+    overflow-y: auto;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .modal-lg {
+    max-width: 100%;
+  }
+
+  /* Tables inside modals keep scrollable on narrow screens instead of squishing */
+  .modal table.table:not(.receipt-items) {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Forms */
+  .form-grid {
+    row-gap: 12px;
+  }
+  .form-actions {
+    flex-wrap: wrap;
+  }
+  .form-actions .btn {
+    flex: 1 1 auto;
+  }
+  .toolbar .input.search-input,
+  .global-search .search-input {
+    width: 100%;
+    max-width: none;
+  }
+  .pagination {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  /* Typography & spacing */
+  .page {
+    padding: 18px 16px;
+  }
+  .page-header {
+    margin-bottom: 16px;
+  }
+  .page-title {
+    font-size: 18px;
+  }
+  .stat-card .stat-value {
+    font-size: clamp(20px, 6vw, 26px);
+  }
+
+  /* Key-value + schedule lists stack on narrow screens */
+  .kv {
+    grid-template-columns: 1fr;
+    gap: 4px 0;
+  }
+  .schedule-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .schedule-hour {
+    padding-top: 0;
+  }
+
+  /* Dashboard widgets */
+  .dash-bar-row {
+    grid-template-columns: minmax(46px, 64px) 1fr 64px;
+  }
+  .global-search-results {
+    max-height: 60vh;
+  }
+}
+
+/* ---------- Phones (<=480px) ---------- */
+@media (max-width: 480px) {
+  .page {
+    padding: 14px 10px;
+  }
+  .topbar {
+    padding: 8px 10px;
+  }
+
+  .dash-stat-grid {
+    grid-template-columns: 1fr;
+  }
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .link-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .modal-backdrop {
+    padding: 16px 8px;
+  }
+  .modal {
+    padding: 16px 14px;
+    max-height: calc(100dvh - 32px);
+    border-radius: 8px;
+  }
+
+  .page-title {
+    font-size: 17px;
+  }
+  .dash-hero-title {
+    font-size: clamp(20px, 7vw, 30px);
+  }
+  .dash-hero-sub {
+    font-size: 13px;
+  }
+  .dash-bar-row {
+    grid-template-columns: minmax(38px, 52px) 1fr 56px;
+    column-gap: 6px;
+  }
+
+  .receipt-totals {
+    max-width: 100%;
+  }
+  .receipt-print {
+    padding: 8px 10px;
+  }
+
+  .search-result .badge {
+    display: none;
+  }
+}
+
+/* =====================================================================
+   Professional hospital invoice (ReceiptModal)
+   ===================================================================== */
+
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+.invoice-sheet {
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 4px 2px;
+}
+
+.invoice-masthead {
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--text);
+}
+
+.invoice-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.invoice-logo {
+  max-width: 64px;
+  max-height: 64px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.invoice-brand-text {
+  min-width: 0;
+}
+
+.invoice-hospital {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.invoice-muted {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* Two-column invoice header */
+.invoice-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 24px 28px;
+  padding: 14px 0;
+  border-bottom: 2px solid var(--text);
+}
+
+.invoice-head-left,
+.invoice-head-right {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.inv-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-strong);
+  padding-bottom: 4px;
+  margin-bottom: 10px;
+}
+
+.invoice-head-right {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.invoice-head-right .inv-section-title {
+  align-self: stretch;
+  text-align: right;
+}
+
+.invoice-title {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  line-height: 1.1;
+  margin: 12px 0 14px;
+  color: var(--text);
+}
+
+.inv-pan-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.inv-rows {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.invoice-head-left .inv-rows {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.inv-row {
+  display: grid;
+  grid-template-columns: minmax(0, 148px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+}
+
+.invoice-head-right .inv-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  text-align: left;
+}
+
+.inv-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.inv-value {
+  font-size: 13px;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.inv-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* Billing items table */
+.invoice-table-wrap {
+  margin-top: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.invoice-items {
+  border-collapse: collapse;
+  min-width: 520px;
+}
+
+.invoice-items th,
+.invoice-items td {
+  border: 1px solid #cbd5e1;
+  padding: 8px 10px;
+  font-size: 12.5px;
+}
+
+.invoice-items thead th {
+  background: #f1f5f9;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.invoice-items tbody tr:last-child td {
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.invoice-items tbody tr:hover {
+  background: transparent;
+}
+
+.inv-col-sn {
+  width: 42px;
+  text-align: center;
+}
+
+.inv-col-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Totals */
+.invoice-totals {
+  max-width: 360px;
+  margin-left: auto;
+  margin-top: 12px;
+  display: grid;
+  gap: 6px;
+  padding: 4px 0 8px 14px;
+  border-bottom: 2px solid var(--text);
+}
+
+.invoice-totals .receipt-total-row,
+.invoice-totals .receipt-grand {
+  font-size: 13px;
+}
+
+.invoice-totals .receipt-grand.total-row {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.invoice-notes {
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  display: grid;
+  gap: 4px;
+}
+
+.invoice-footer {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Keep modal tables inside the invoice sheet in native table layout; the
+   .invoice-table-wrap owns horizontal scrolling. */
+@media (max-width: 767px) {
+  .invoice-sheet {
+    font-size: 12.5px;
+  }
+  .invoice-head {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .invoice-head-right {
+    align-items: flex-start;
+    text-align: left;
+    border-top: 1px dashed var(--border);
+    padding-top: 14px;
+  }
+  .invoice-head-right .inv-section-title {
+    text-align: left;
+    align-self: flex-start;
+  }
+  .invoice-title {
+    font-size: 28px;
+    margin: 10px 0 12px;
+    text-align: left;
+  }
+  .inv-pan-row {
+    align-items: flex-start;
+  }
+  .invoice-head-right .inv-row {
+    grid-template-columns: minmax(0, 148px) minmax(0, 1fr);
+    text-align: left;
+  }
+  .invoice-items {
+    min-width: 460px;
+  }
+  .modal table.table.invoice-items {
+    display: table;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 480px) {
+  .inv-row,
+  .invoice-head-right .inv-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .inv-label {
+    letter-spacing: 0.02em;
+  }
+  .invoice-masthead {
+    padding-bottom: 10px;
+  }
+  .invoice-hospital {
+    font-size: 17px;
+  }
+  .invoice-title {
+    font-size: 24px;
+  }
+  .invoice-totals {
+    max-width: 100%;
+  }
+}
+
+/* Print: the invoice is the only visible element */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .receipt-print,
+  .receipt-print * {
+    visibility: visible;
+  }
+  .receipt-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+  }
+  .invoice-sheet {
+    max-width: 100%;
+    padding: 0;
+    font-size: 12px;
+  }
+  .invoice-head {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  }
+  .invoice-head-right {
+    align-items: flex-end;
+    text-align: right;
+    border-top: none;
+    padding-top: 0;
+  }
+  .invoice-head-right .inv-section-title {
+    text-align: right;
+  }
+  .invoice-title {
+    text-align: right;
+    font-size: 32px;
+  }
+  .inv-pan-row {
+    align-items: flex-end;
+  }
+  .invoice-head-right .inv-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    text-align: left;
+  }
+  .invoice-items {
+    min-width: 0;
+  }
+  .modal table.table.invoice-items {
+    display: table;
+    overflow: visible;
+  }
+  .invoice-totals {
+    border-bottom: 2px solid #0f172a;
+  }
 }

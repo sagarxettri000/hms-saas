@@ -184,7 +184,7 @@ export default function ProcurementPage() {
   const inventoryFields: FormField[] = [
     { name: 'name', label: 'Name', required: true },
     { name: 'storeId', label: 'Store', required: true, type: 'select', optionsFrom: { endpoint: '/pharmacy/stores', valueKey: 'id', labelKeys: ['name'] } },
-    { name: 'itemType', label: 'Type', type: 'select', options: [{ value: 'MEDICINE', label: 'MEDICINE' }, { value: 'SUPPLIES', label: 'SUPPLIES' }, { value: 'EQUIPMENT', label: 'EQUIPMENT' }, { value: 'CONSUMABLE', label: 'CONSUMABLE' }, { value: 'OTHER', label: 'OTHER' }] },
+    { name: 'itemType', label: 'Type', type: 'select', options: [{ value: 'SUPPLIES', label: 'SUPPLIES' }, { value: 'EQUIPMENT', label: 'EQUIPMENT' }, { value: 'CONSUMABLE', label: 'CONSUMABLE' }, { value: 'OTHER', label: 'OTHER' }], defaultValue: 'SUPPLIES' },
     { name: 'sku', label: 'SKU / Code' },
     { name: 'unit', label: 'Unit' },
     { name: 'currentStock', label: 'Quantity', type: 'number' },
@@ -340,10 +340,11 @@ export default function ProcurementPage() {
         <EntityPage
           key={`items-${refreshKey}`}
           title="Inventory Items"
-          subtitle="Manage the procurement catalog and store-level stock"
+          subtitle="Store-room supplies and equipment across stores (medicines are managed in Pharmacy)"
           endpoint="/pharmacy/inventory"
           createLabel="Add Item"
           editable
+          params={{ excludeItemType: 'MEDICINE' }}
           actions={itemActions}
           columns={[
             { key: 'name', label: 'Name' },

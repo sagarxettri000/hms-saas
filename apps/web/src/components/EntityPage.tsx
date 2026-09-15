@@ -40,6 +40,7 @@ interface EntityPageProps {
   initialTab?: string;
   initialCreateValues?: Record<string, any>;
   autoOpenCreate?: boolean;
+  params?: Record<string, string>;
 }
 
 interface LoadedTab {
@@ -1107,6 +1108,7 @@ export default function EntityPage(props: EntityPageProps) {
     initialTab,
     initialCreateValues,
     autoOpenCreate,
+    params,
   } = props;
 
   const [activeTab, setActiveTab] = useState((initialTab || tabs?.[0]?.key) ?? '');
@@ -1155,6 +1157,11 @@ export default function EntityPage(props: EntityPageProps) {
       query.set('page', String(page));
       query.set('limit', '15');
       if (search.trim()) query.set('search', search.trim());
+      if (params) {
+        for (const [k, v] of Object.entries(params)) {
+          if (v) query.set(k, v);
+        }
+      }
       const res: ApiResponse<ListPayload> = await api(
         `${effectiveEndpoint}?${query.toString()}`,
       );
@@ -1176,7 +1183,7 @@ export default function EntityPage(props: EntityPageProps) {
       });
       setFlash(err instanceof Error ? err.message : 'Failed to load');
     }
-  }, [effectiveEndpoint, page, search, customRender]);
+  }, [effectiveEndpoint, page, search, customRender, params]);
 
   useEffect(() => {
     load();

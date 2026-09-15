@@ -346,6 +346,8 @@ export class PharmacyService {
       query?: string;
       search?: string;
       lowStock?: string;
+      itemType?: string;
+      excludeItemType?: string;
       page?: number;
       limit?: number;
     },
@@ -355,6 +357,20 @@ export class PharmacyService {
 
     const where: any = { tenantId };
     if (params.storeId) where.storeId = params.storeId;
+    if (params.itemType) {
+      const types = params.itemType
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      if (types.length) where.itemType = { in: types };
+    }
+    if (params.excludeItemType) {
+      const types = params.excludeItemType
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      if (types.length) where.itemType = { not: { in: types } };
+    }
     const q = params.query || params.search;
     if (q) {
       where.OR = [

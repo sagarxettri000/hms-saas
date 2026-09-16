@@ -115,7 +115,8 @@ export default function AttendancePage() {
     setHistoryLoading(true);
     try {
       const r = await api(`/hr/attendance/admin/${row.userId}`);
-      setHistory(r?.data ?? []);
+      const hist = r?.data ?? r?.history ?? r?.records ?? [];
+      setHistory(Array.isArray(hist) ? hist : Array.isArray(hist?.data) ? hist.data : Array.isArray(hist?.results) ? hist.results : []);
     } catch {
       setHistory([]);
     }

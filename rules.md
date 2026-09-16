@@ -145,4 +145,13 @@ This role group includes `SUPER` permissions to see all clinical modules (Patien
 
 ---
 
-**Last updated:** 2026-08-15
+## Access & Permissions (granted by user, 2026-09-16)
+
+- **Laptop/shell**: Full local access — install deps, start dev servers & Docker, run tests/migrations/seed, delete temp files inside this project folder.
+- **Git/GitHub**: Commit and push freely to the current branch, no prompts.
+- **Database**: Full access — local dev DB (Docker Postgres) AND any prod/staging database URLs the user shares (read/modify/migrate/reset).
+- **Secrets/.env**: Full access — read and edit `.env` files, generate JWT secrets, RSA keys, etc. Production secrets still need user sign-off before use.
+- **Deploys & CI**: Full deploy + CI control — `vercel deploy` / `railway up` allowed, and `.github/workflows` may be edited as part of normal work.
+- Still off-limits by default: destructive shell commands outside this project, and anything that would leak secrets (never paste `.env` values into logs/commits).
+
+**Last updated:** 2026-09-16

@@ -526,6 +526,11 @@ enum LeaveStatus {
   CANCELLED
 }
 
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+}
+
 enum LeaveType {
   CASUAL
   SICK
@@ -686,6 +691,7 @@ model Tenant {
   dischargeBillDetails    DischargeBillDetail[]
   dicomStudies            DicomStudy[]
   dicomNodes              DicomNode[]
+  attendanceRecords       AttendanceRecord[]
 
   @@index([status])
   @@index([createdAt])
@@ -1052,6 +1058,7 @@ model User {
   cashSessions        CashSession[]
   rosters             Roster[]
   leaves              Leave[]
+  attendanceRecords   AttendanceRecord[]
   documentSignatures  DocumentSignature[]
 
   @@index([tenantId])
@@ -3284,6 +3291,8 @@ model Roster {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  attendanceRecords AttendanceRecord[]
+
   @@index([tenantId, userId])
   @@index([tenantId, date])
   @@map("rosters")
@@ -3721,18 +3730,26 @@ model StockTransfer {
 }
 
 model AttendanceRecord {
-  id        String      @id @default(cuid())
+  id        String           @id @default(cuid())
   tenantId  String
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
   staffName String?
   date      DateTime
+  status    AttendanceStatus @default(PRESENT)
   clockIn   DateTime
   clockOut  DateTime?
-  hours     Decimal?    @db.Decimal(5, 2)
+  hours     Decimal?         @db.Decimal(5, 2)
+  rosterId  String?
+  roster    Roster?          @relation(fields: [rosterId], references: [id], onDelete: SetNull)
   createdBy String?
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
+  @@unique([tenantId, userId, date])
   @@index([tenantId, date])
+  @@index([userId, date])
   @@map("attendance_records")
 }
 

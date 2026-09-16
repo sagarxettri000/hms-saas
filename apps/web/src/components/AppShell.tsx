@@ -101,6 +101,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     title: 'People',
     items: [
       { label: 'Departments', href: '/departments', icon: '❏', roles: [...ADMIN, ...SUPER] },
+      { label: 'Attendance', href: '/attendance', icon: '◷', roles: [...ADMIN, 'HR_MANAGER', ...SUPER] },
       { label: 'HR & Staff', href: '/hr', icon: '☷', roles: [...ADMIN, ...SUPER], flag: 'hrms' },
     ],
   },

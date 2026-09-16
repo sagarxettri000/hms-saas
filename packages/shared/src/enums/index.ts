@@ -207,6 +207,11 @@ export enum LeaveStatus {
   CANCELLED = 'CANCELLED',
 }
 
+export enum AttendanceStatus {
+  PRESENT = 'PRESENT',
+  ABSENT = 'ABSENT',
+}
+
 export enum EnquiryStatus {
   NEW = 'NEW',
   CONTACTED = 'CONTACTED',

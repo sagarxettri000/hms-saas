@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
+import { AuditService } from "../audit/audit.service";
 
 export interface CreateDepartmentDto {
   name: string;
@@ -13,11 +15,28 @@ export interface CreateDepartmentDto {
   branchId?: string;
 }
 
+export interface UpdateDepartmentDto {
+  name?: string;
+  code?: string;
+  description?: string;
+  parentId?: string | null;
+  branchId?: string | null;
+  isActive?: boolean;
+}
+
 export interface CreateWardDto {
   name: string;
   code?: string;
   location?: string;
   departmentId?: string;
+}
+
+export interface UpdateWardDto {
+  name?: string;
+  code?: string | null;
+  location?: string | null;
+  departmentId?: string | null;
+  isActive?: boolean;
 }
 
 export interface CreateRoomDto {
@@ -38,7 +57,10 @@ export interface CreateBedDto {
 
 @Injectable()
 export class DepartmentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async findAll(tenantId: string, includeInactive = false) {
     return this.prisma.department.findMany({
@@ -78,21 +100,136 @@ export class DepartmentsService {
     });
   }
 
+  async findOne(tenantId: string, id: string) {
+    const department = await this.prisma.department.findFirst({
+      where: { id, tenantId },
+      include: {
+        _count: { select: { users: true, doctors: true, wards: true } },
+        children: true,
+      },
+    });
+    if (!department) throw new NotFoundException("Department not found");
+    return department;
+  }
+
   async update(
     tenantId: string,
     id: string,
-    dto: Partial<CreateDepartmentDto>,
+    dto: UpdateDepartmentDto,
+    actorUserId?: string,
   ) {
     const department = await this.prisma.department.findFirst({
       where: { id, tenantId },
     });
     if (!department) throw new NotFoundException("Department not found");
 
-    const { tenantId: _t, ...fields } = dto as any;
-    return this.prisma.department.update({
+    const data: UpdateDepartmentDto = {};
+
+    if (dto.name !== undefined) {
+      const name = String(dto.name).trim();
+      if (!name) throw new BadRequestException("Name cannot be empty");
+      data.name = name;
+    }
+
+    if (dto.code !== undefined) {
+      const code = String(dto.code).trim().toUpperCase();
+      if (!code) throw new BadRequestException("Code cannot be empty");
+      if (code !== department.code) {
+        const clash = await this.prisma.department.findUnique({
+          where: { tenantId_code: { tenantId, code } },
+        });
+        if (clash) throw new ConflictException("Department code already exists");
+      }
+      data.code = code;
+    }
+
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.branchId !== undefined) data.branchId = dto.branchId || null;
+
+    if (dto.parentId !== undefined) {
+      const parentId = dto.parentId || null;
+      if (parentId === id) {
+        throw new BadRequestException("A department cannot be its own parent");
+      }
+      if (parentId) {
+        const parent = await this.prisma.department.findFirst({
+          where: { id: parentId, tenantId },
+        });
+        if (!parent) throw new NotFoundException("Parent department not found");
+        // Walk up the ancestor chain (starting at the parent itself) — a
+        // department may never sit under its own subtree.
+        let cursor = parent;
+        const guard = new Set<string>();
+        while (cursor) {
+          if (cursor.id === id) {
+            throw new BadRequestException("Cannot move a department under its own descendant");
+          }
+          if (!cursor.parentId || guard.has(cursor.id)) break;
+          guard.add(cursor.id);
+          const next = await this.prisma.department.findUnique({
+            where: { id: cursor.parentId },
+          });
+          if (!next) break;
+          cursor = next;
+        }
+      }
+      data.parentId = parentId;
+    }
+
+    if (dto.isActive !== undefined && dto.isActive !== department.isActive) {
+      if (!dto.isActive) {
+        // Deactivation must not strand active clinical workflows.
+        const [users, wards, appointments, services] = await Promise.all([
+          this.prisma.user.count({ where: { departmentId: id, isActive: true } }),
+          this.prisma.ward.count({ where: { departmentId: id, isActive: true } }),
+          this.prisma.appointment.count({
+            where: {
+              departmentId: id,
+              status: {
+                in: [
+                  "REQUESTED",
+                  "CONFIRMED",
+                  "CHECKED_IN",
+                  "WAITING",
+                  "IN_CONSULTATION",
+                  "RESCHEDULED",
+                ] as any,
+              },
+            },
+          }),
+          this.prisma.billingService.count({ where: { departmentId: id, isActive: true } }),
+        ]);
+        if (users > 0 || wards > 0 || appointments > 0 || services > 0) {
+          throw new ConflictException(
+            `Cannot deactivate: ${users} active user(s), ${wards} active ward(s), ${appointments} upcoming appointment(s), ${services} active billing service(s) depend on this department`,
+          );
+        }
+      }
+      data.isActive = dto.isActive;
+    }
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException("No changes to apply");
+    }
+
+    const updated = await this.prisma.department.update({
       where: { id },
-      data: fields,
+      data: data as any,
     });
+
+    await this.audit.log(tenantId, actorUserId, "Department", id, "UPDATE", {
+      previous: {
+        name: department.name,
+        code: department.code,
+        description: department.description,
+        parentId: department.parentId,
+        branchId: department.branchId,
+        isActive: department.isActive,
+      },
+      changes: data,
+    });
+
+    return updated;
   }
 
   async remove(tenantId: string, id: string) {
@@ -144,6 +281,81 @@ export class DepartmentsService {
         department: true,
       },
     });
+  }
+
+  async updateWard(
+    tenantId: string,
+    id: string,
+    dto: UpdateWardDto,
+    actorUserId?: string,
+  ) {
+    const ward = await this.prisma.ward.findFirst({
+      where: { id, tenantId },
+    });
+    if (!ward) throw new NotFoundException("Ward not found");
+
+    const data: UpdateWardDto = {};
+
+    if (dto.name !== undefined) {
+      const name = String(dto.name).trim();
+      if (!name) throw new BadRequestException("Name cannot be empty");
+      data.name = name;
+    }
+
+    if (dto.code !== undefined) {
+      const code = String(dto.code).trim();
+      data.code = code || null;
+    }
+
+    if (dto.location !== undefined) data.location = dto.location;
+
+    if (dto.departmentId !== undefined) {
+      const departmentId = dto.departmentId || null;
+      if (departmentId) {
+        const department = await this.prisma.department.findFirst({
+          where: { id: departmentId, tenantId },
+        });
+        if (!department) throw new NotFoundException("Department not found");
+      }
+      (data as any).departmentId = departmentId;
+    }
+
+    if (dto.isActive !== undefined && dto.isActive !== ward.isActive) {
+      if (!dto.isActive) {
+        const activeBeds = await this.prisma.bed.count({
+          where: { wardId: id, status: "OCCUPIED" },
+        });
+        if (activeBeds > 0) {
+          throw new ConflictException(
+            `Cannot deactivate: ${activeBeds} occupied bed(s) in this ward`,
+          );
+        }
+      }
+      data.isActive = dto.isActive;
+    }
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException("No changes to apply");
+    }
+
+    const updated = await this.prisma.ward.update({
+      where: { id },
+      data: data as any,
+      include: { department: { select: { id: true, name: true } } },
+    });
+
+    await this.audit.log(tenantId, actorUserId, "Ward", id, "UPDATE", {
+      previous: {
+        name: ward.name,
+        code: ward.code,
+        location: ward.location,
+        departmentId: ward.departmentId,
+        isActive: ward.isActive,
+      },
+      changes: data,
+    });
+
+    return updated;
   }
 
   // Rooms

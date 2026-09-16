@@ -13,6 +13,7 @@ export default function DepartmentsPage() {
           label: 'Departments',
           endpoint: '/departments',
           createLabel: 'Add department',
+          editable: true,
           columns: [
             { key: 'name', label: 'Name' },
             { key: 'code', label: 'Code', render: (r) => <span className="mono">{r.code}</span> },
@@ -23,6 +24,7 @@ export default function DepartmentsPage() {
             { name: 'name', label: 'Name', required: true },
             { name: 'code', label: 'Code', required: true },
             { name: 'description', label: 'Description', type: 'textarea', full: true },
+            { name: 'isActive', label: 'Active', type: 'checkbox' },
           ],
         },
         {
@@ -30,6 +32,7 @@ export default function DepartmentsPage() {
           label: 'Wards',
           endpoint: '/departments/wards',
           createLabel: 'Add ward',
+          editable: true,
           columns: [
             { key: 'name', label: 'Name' },
             { key: 'code', label: 'Code' },
@@ -51,6 +54,7 @@ export default function DepartmentsPage() {
               type: 'select',
               optionsFrom: { valueKey: 'id', labelKeys: ['name'], endpoint: '/departments' },
             },
+            { name: 'isActive', label: 'Active', type: 'checkbox' },
           ],
         },
         {

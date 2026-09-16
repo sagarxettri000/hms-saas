@@ -14,7 +14,9 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   DepartmentsService,
   CreateDepartmentDto,
+  UpdateDepartmentDto,
   CreateWardDto,
+  UpdateWardDto,
   CreateRoomDto,
   CreateBedDto,
 } from "./departments.service";
@@ -57,10 +59,10 @@ export class DepartmentsController {
   @ApiOperation({ summary: "Update a department" })
   update(
     @Param("id") id: string,
-    @Body() dto: Partial<CreateDepartmentDto>,
+    @Body() dto: UpdateDepartmentDto,
     @Req() req: any,
   ) {
-    return this.departmentsService.update(req.user.tenantId, id, dto);
+    return this.departmentsService.update(req.user.tenantId, id, dto, req.user.id);
   }
 
   @Delete(":id")
@@ -90,6 +92,17 @@ export class DepartmentsController {
   @ApiOperation({ summary: "Get ward details with rooms and beds" })
   getWardById(@Param("id") id: string, @Req() req: any) {
     return this.departmentsService.getWardById(req.user.tenantId, id);
+  }
+
+  @Patch("wards/:id")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Update a ward" })
+  updateWard(
+    @Param("id") id: string,
+    @Body() dto: UpdateWardDto,
+    @Req() req: any,
+  ) {
+    return this.departmentsService.updateWard(req.user.tenantId, id, dto, req.user.id);
   }
 
   // Rooms
@@ -142,5 +155,14 @@ export class DepartmentsController {
       id,
       body.status,
     );
+  }
+
+  // Keep parameterised :id routes LAST so literal paths like /wards, /rooms,
+  // /beds, /bed-board are never captured by :id.
+  @Get(":id")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Get a department by id" })
+  findOne(@Param("id") id: string, @Req() req: any) {
+    return this.departmentsService.findOne(req.user.tenantId, id);
   }
 }

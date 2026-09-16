@@ -91,7 +91,8 @@ export default function AttendancePage() {
       if (departmentId) params.set('departmentId', departmentId);
       if (search) params.set('search', search);
       const r = await api(`/hr/attendance/admin/roster?${params.toString()}`);
-      setRows(r?.data ?? []);
+      const rosterList = r?.data ?? r?.roster ?? [];
+      setRows(Array.isArray(rosterList) ? rosterList : Array.isArray(rosterList?.rows) ? rosterList.rows : Array.isArray(rosterList?.roster) ? rosterList.roster : []);
       setSummary(r?.summary ?? { present: 0, absent: 0, notClockedIn: 0 });
     } catch (e: any) {
       setError(e?.message || 'Could not load attendance');
@@ -105,7 +106,7 @@ export default function AttendancePage() {
 
   useEffect(() => {
     api('/departments?limit=200')
-      .then((r) => setDepartments((r?.data?.data ?? r?.data ?? []).map((d: any) => ({ id: d.id, name: d.name }))))
+      .then((r) => setDepartments((Array.isArray(r?.data?.data) ? r.data.data : Array.isArray(r?.data) ? r.data : []).map((d: any) => ({ id: d.id, name: d.name }))))
       .catch(() => {});
   }, []);
 

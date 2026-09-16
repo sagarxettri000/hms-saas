@@ -34,24 +34,42 @@ export class BloodBankController {
 
   @Get("donors")
   @Permissions(PermissionAction.VIEW)
-  findDonors(@Query("bloodGroup") bloodGroup: string, @Req() req: any) {
-    return this.bloodBankService.findDonors(req.user.tenantId, bloodGroup);
+  findDonors(@Query() query: any, @Req() req: any) {
+    return this.bloodBankService.findDonors(req.user.tenantId, {
+      bloodGroup: query.bloodGroup,
+      search: query.search,
+    });
   }
 
   @Post("donors")
   @Permissions(PermissionAction.CREATE)
   createDonor(@Body() dto: CreateDonorDto, @Req() req: any) {
-    return this.bloodBankService.createDonor(req.user.tenantId, dto);
+    return this.bloodBankService.createDonor(
+      req.user.tenantId,
+      dto,
+      req.user.id,
+    );
+  }
+
+  @Get("donors/:id")
+  @Permissions(PermissionAction.VIEW)
+  getDonor(@Param("id") id: string, @Req() req: any) {
+    return this.bloodBankService.getDonor(req.user.tenantId, id);
   }
 
   @Patch("donors/:id")
   @Permissions(PermissionAction.EDIT)
   updateDonor(
     @Param("id") id: string,
-    @Body() dto: Partial<CreateDonorDto>,
+    @Body() dto: Partial<CreateDonorDto> & { isActive?: boolean },
     @Req() req: any,
   ) {
-    return this.bloodBankService.updateDonor(req.user.tenantId, id, dto);
+    return this.bloodBankService.updateDonor(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user.id,
+    );
   }
 
   @Get("units")
@@ -102,6 +120,7 @@ export class BloodBankController {
       req.user.tenantId,
       id,
       body.reason,
+      req.user.id,
     );
   }
 }

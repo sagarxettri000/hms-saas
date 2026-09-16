@@ -2313,6 +2313,7 @@ model BloodUnit {
   @@index([tenantId, expiryDate])
   @@map("blood_units")
   @@index([donorId])
+  @@unique([tenantId, unitNumber])
 }
 
 // ============================================================

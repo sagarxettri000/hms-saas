@@ -11,28 +11,90 @@ import { buildPurchaseOrderPdf } from "./purchase-order-pdf";
 
 export interface CreateSupplierDto {
   name: string;
+  code?: string;
   contactPerson?: string;
   phone?: string;
   email?: string;
   address?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
   panNumber?: string;
+  vatNumber?: string;
+  registrationNumber?: string;
+  category?: string;
+  paymentTerms?: string;
+  bankName?: string;
+  bankAccount?: string;
+  bankBranch?: string;
+}
+
+export interface PurchaseOrderItemInput {
+  itemName: string;
+  itemCode?: string;
+  medicineId?: string;
+  category?: string;
+  brand?: string;
+  model?: string;
+  specification?: string;
+  hsCode?: string;
+  quantity: number;
+  unit?: string;
+  unitPrice: number;
+  discountPercent?: number;
+  taxPercent?: number;
+  otherCharges?: number;
+  expectedDelivery?: Date | string;
+  criticality?: string;
+  batchRequired?: boolean;
+  expiryRequired?: boolean;
+  sterilityRequired?: boolean;
+  coldChainRequired?: boolean;
+  temperatureRequirement?: string;
+  warrantyRequired?: boolean;
+  calibrationRequired?: boolean;
+  installationRequired?: boolean;
+  trainingRequired?: boolean;
 }
 
 export interface CreatePurchaseOrderDto {
   supplierId?: string;
   storeId?: string;
   purchaseRequestId?: string;
+  poType?: "STANDARD" | "EMERGENCY" | "CONTRACT" | "BLANKET" | "SERVICE";
   expectedDate?: Date | string;
   deliveryAddress?: string;
+  currency?: string;
+  validityDays?: number;
+  paymentTerms?: string;
+  paymentMethod?: string;
+  discountPercent?: number;
+  taxPercent?: number;
+  tdsPercent?: number;
+  freight?: number;
+  insurance?: number;
+  otherCharges?: number;
+  roundingAdjustment?: number;
   terms?: string;
   notes?: string;
-  items: Array<{
-    itemName: string;
-    medicineId?: string;
-    quantity: number;
-    unit?: string;
-    unitPrice: number;
-  }>;
+  items: PurchaseOrderItemInput[];
+}
+
+export interface UpdatePurchaseOrderDto {
+  supplierId?: string;
+  expectedDate?: Date | string;
+  deliveryAddress?: string;
+  currency?: string;
+  paymentTerms?: string;
+  paymentMethod?: string;
+  discountPercent?: number;
+  taxPercent?: number;
+  tdsPercent?: number;
+  freight?: number;
+  insurance?: number;
+  otherCharges?: number;
+  terms?: string;
+  notes?: string;
+  items?: PurchaseOrderItemInput[];
 }
 
 export interface CreatePurchaseRequestDto {
@@ -92,6 +154,7 @@ export class ProcurementService {
     if (params.query) {
       where.OR = [
         { name: { contains: params.query, mode: "insensitive" } },
+        { code: { contains: params.query, mode: "insensitive" } },
         { contactPerson: { contains: params.query, mode: "insensitive" } },
       ];
     }
@@ -135,7 +198,7 @@ export class ProcurementService {
       "requestNumber",
     );
 
-    return this.prisma.purchaseRequest.create({
+    const created = await this.prisma.purchaseRequest.create({
       data: {
         tenantId,
         requestNumber,
@@ -160,6 +223,14 @@ export class ProcurementService {
       },
       include: { items: true },
     });
+
+    await this.audit
+      .log(tenantId, userId, "PurchaseRequest", created.id, "CREATE", {
+        requestNumber,
+      })
+      .catch((err) => this.logger.warn("audit log failed", err));
+
+    return created;
   }
 
   async findPurchaseRequests(
@@ -225,7 +296,7 @@ export class ProcurementService {
     if (!pr) throw new NotFoundException("Purchase request not found");
     if (pr.status === "APPROVED" || pr.status === "CONVERTED")
       throw new BadRequestException("Purchase request is already approved/converted");
-    return this.prisma.purchaseRequest.update({
+    const updated = await this.prisma.purchaseRequest.update({
       where: { id },
       data: {
         status: "APPROVED",
@@ -235,6 +306,10 @@ export class ProcurementService {
         rejectedAt: null,
       },
     });
+    await this.audit.log(tenantId, userId, "PurchaseRequest", id, "APPROVE", {
+      requestNumber: pr.requestNumber,
+    });
+    return updated;
   }
 
   async rejectPurchaseRequest(
@@ -249,7 +324,7 @@ export class ProcurementService {
     if (!pr) throw new NotFoundException("Purchase request not found");
     if (pr.status === "APPROVED" || pr.status === "CONVERTED")
       throw new BadRequestException("Approved/converted requests cannot be rejected");
-    return this.prisma.purchaseRequest.update({
+    const updated = await this.prisma.purchaseRequest.update({
       where: { id },
       data: {
         status: "REJECTED",
@@ -260,12 +335,33 @@ export class ProcurementService {
           : pr.notes,
       },
     });
+    await this.audit.log(tenantId, userId, "PurchaseRequest", id, "REJECT", {
+      requestNumber: pr.requestNumber,
+      reason,
+    });
+    return updated;
   }
 
   async convertPurchaseRequestToPO(
     tenantId: string,
     id: string,
-    dto: { supplierId?: string; storeId?: string; expectedDate?: Date | string; deliveryAddress?: string; terms?: string; notes?: string },
+    dto: {
+      supplierId?: string;
+      storeId?: string;
+      expectedDate?: Date | string;
+      deliveryAddress?: string;
+      paymentTerms?: string;
+      paymentMethod?: string;
+      validityDays?: number;
+      discountPercent?: number;
+      taxPercent?: number;
+      tdsPercent?: number;
+      freight?: number;
+      insurance?: number;
+      otherCharges?: number;
+      terms?: string;
+      notes?: string;
+    },
     userId?: string,
   ) {
     const pr = await this.prisma.purchaseRequest.findFirst({
@@ -285,48 +381,88 @@ export class ProcurementService {
       "poNumber",
     );
 
-    const totalAmount = pr.items.reduce(
-      (sum, item) =>
-        sum +
-        Number(item.quantity) *
-          (Number((item as any).estimatedPrice) || 0),
-      0,
-    );
+    const itemInputs: PurchaseOrderItemInput[] = pr.items.map((item: any) => ({
+      itemName: item.itemName,
+      medicineId: item.medicineId,
+      quantity: item.quantity,
+      unit: item.unit,
+      unitPrice: Number(item.estimatedPrice) || 0,
+    }));
 
-    const po = await this.prisma.purchaseOrder.create({
-      data: {
-        tenantId,
-        poNumber,
-        purchaseRequestId: pr.id,
-        supplierId: dto.supplierId,
-        storeId: dto.storeId,
-        expectedDate: dto.expectedDate
-          ? this.normalizeDate(dto.expectedDate)
-          : undefined,
-        deliveryAddress: dto.deliveryAddress,
-        terms: dto.terms,
-        notes: dto.notes,
-        totalAmount,
-        createdBy: userId,
-        items: {
-          create: pr.items.map((item: any) => ({
-            itemName: item.itemName,
-            medicineId: item.medicineId,
-            quantity: item.quantity,
-            unit: item.unit,
-            unitPrice: Number(item.estimatedPrice) || 0,
-            totalPrice:
-              Number(item.quantity) * (Number(item.estimatedPrice) || 0),
-          })),
+    const header = this.computePurchaseOrderTotals({
+      ...dto,
+      items: itemInputs,
+    });
+
+    const po = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.purchaseOrder.create({
+        data: {
+          tenantId,
+          poNumber,
+          purchaseRequestId: pr.id,
+          supplierId: dto.supplierId,
+          storeId: dto.storeId,
+          expectedDate: dto.expectedDate
+            ? this.normalizeDate(dto.expectedDate)
+            : undefined,
+          deliveryAddress: dto.deliveryAddress,
+          paymentTerms: dto.paymentTerms,
+          paymentMethod: dto.paymentMethod as any,
+          validityDays: dto.validityDays,
+          discountPercent:
+            dto.discountPercent != null ? dto.discountPercent : undefined,
+          taxPercent: dto.taxPercent != null ? dto.taxPercent : undefined,
+          tdsPercent: dto.tdsPercent != null ? dto.tdsPercent : undefined,
+          subtotal: header.subtotal,
+          discountAmount: header.discountAmount,
+          taxableAmount: header.taxableAmount,
+          taxAmount: header.taxAmount,
+          tdsAmount: header.tdsAmount,
+          freightAmount: header.freightAmount,
+          insuranceAmount: header.insuranceAmount,
+          otherCharges: header.otherCharges,
+          grandTotal: header.grandTotal,
+          totalAmount: header.grandTotal,
+          terms: dto.terms,
+          notes: dto.notes,
+          createdBy: userId,
+          items: {
+            create: itemInputs.map((item) => {
+              const line = this.computeLineTotals(item, dto);
+              return {
+                itemName: item.itemName,
+                medicineId: item.medicineId,
+                quantity: item.quantity,
+                unit: item.unit,
+                unitPrice: item.unitPrice,
+                discountAmount: line.discountAmount,
+                taxableAmount: line.taxableAmount,
+                taxAmount: line.taxAmount,
+                lineTotal: line.lineTotal,
+                totalPrice: line.lineTotal,
+              };
+            }),
+          },
         },
-      },
-      include: { items: true, supplier: true, store: true, purchaseRequest: true },
+        include: { items: true, supplier: true, store: true, purchaseRequest: true },
+      });
+
+      await tx.purchaseRequest.update({
+        where: { id },
+        data: { status: "CONVERTED" },
+      });
+
+      return created;
     });
 
-    await this.prisma.purchaseRequest.update({
-      where: { id },
-      data: { status: "CONVERTED" },
-    });
+    await this.audit.log(
+      tenantId,
+      userId,
+      "PurchaseOrder",
+      po.id,
+      "CONVERT",
+      { poNumber, sourceRequest: pr.requestNumber },
+    );
 
     return po;
   }
@@ -341,10 +477,7 @@ export class ProcurementService {
     if (!dto.items || dto.items.length === 0)
       throw new BadRequestException("At least one item required");
 
-    const totalAmount = dto.items.reduce(
-      (sum, item) => sum + item.quantity * item.unitPrice,
-      0,
-    );
+    const header = this.computePurchaseOrderTotals(dto);
     const poNumber = await this.generateNumber(
       tenantId,
       "PO",
@@ -352,34 +485,225 @@ export class ProcurementService {
       "poNumber",
     );
 
-    return this.prisma.purchaseOrder.create({
+    const po = await this.prisma.purchaseOrder.create({
       data: {
         tenantId,
         poNumber,
         supplierId: dto.supplierId,
         purchaseRequestId: dto.purchaseRequestId,
         storeId: dto.storeId,
+        poType: dto.poType || "STANDARD",
         expectedDate: dto.expectedDate
           ? this.normalizeDate(dto.expectedDate)
           : undefined,
         deliveryAddress: dto.deliveryAddress,
+        currency: dto.currency || "NPR",
+        validityDays: dto.validityDays,
+        paymentTerms: dto.paymentTerms,
+        paymentMethod: dto.paymentMethod as any,
+        discountPercent: dto.discountPercent != null ? dto.discountPercent : undefined,
+        taxPercent: dto.taxPercent != null ? dto.taxPercent : undefined,
+        tdsPercent: dto.tdsPercent != null ? dto.tdsPercent : undefined,
+        subtotal: header.subtotal,
+        discountAmount: header.discountAmount,
+        taxableAmount: header.taxableAmount,
+        taxAmount: header.taxAmount,
+        tdsAmount: header.tdsAmount,
+        freightAmount: header.freightAmount,
+        insuranceAmount: header.insuranceAmount,
+        otherCharges: header.otherCharges,
+        roundingAdjustment: dto.roundingAdjustment,
+        grandTotal: header.grandTotal,
+        totalAmount: header.grandTotal,
         terms: dto.terms,
         notes: dto.notes,
-        totalAmount,
         createdBy: userId,
         items: {
-          create: dto.items.map((item) => ({
-            itemName: item.itemName,
-            medicineId: item.medicineId,
-            quantity: item.quantity,
-            unit: item.unit,
-            unitPrice: item.unitPrice,
-            totalPrice: item.quantity * item.unitPrice,
-          })),
+          create: dto.items.map((item) => {
+            const line = this.computeLineTotals(item, dto);
+            return {
+              itemName: item.itemName,
+              itemCode: item.itemCode,
+              medicineId: item.medicineId,
+              category: item.category,
+              brand: item.brand,
+              model: item.model,
+              specification: item.specification,
+              hsCode: item.hsCode,
+              quantity: item.quantity,
+              unit: item.unit,
+              unitPrice: item.unitPrice,
+              discountPercent:
+                line.discountPercent != null ? line.discountPercent : undefined,
+              discountAmount: line.discountAmount,
+              taxableAmount: line.taxableAmount,
+              taxPercent: line.taxPercent != null ? line.taxPercent : undefined,
+              taxAmount: line.taxAmount,
+              otherCharges: line.otherCharges,
+              lineTotal: line.lineTotal,
+              totalPrice: line.lineTotal,
+              expectedDelivery: item.expectedDelivery
+                ? this.normalizeDate(item.expectedDelivery)
+                : undefined,
+              criticality: item.criticality,
+              batchRequired: item.batchRequired,
+              expiryRequired: item.expiryRequired,
+              sterilityRequired: item.sterilityRequired,
+              coldChainRequired: item.coldChainRequired,
+              temperatureRequirement: item.temperatureRequirement,
+              warrantyRequired: item.warrantyRequired,
+              calibrationRequired: item.calibrationRequired,
+              installationRequired: item.installationRequired,
+              trainingRequired: item.trainingRequired,
+            };
+          }),
         },
       },
       include: { items: true, supplier: true, store: true },
     });
+
+    await this.audit.log(
+      tenantId,
+      userId,
+      "PurchaseOrder",
+      po.id,
+      "CREATE",
+      { poNumber, grandTotal: header.grandTotal },
+    );
+
+    return po;
+  }
+
+  async updatePurchaseOrder(
+    tenantId: string,
+    id: string,
+    dto: {
+      supplierId?: string;
+      expectedDate?: Date | string;
+      deliveryAddress?: string;
+      currency?: string;
+      paymentTerms?: string;
+      paymentMethod?: string;
+      discountPercent?: number;
+      taxPercent?: number;
+      tdsPercent?: number;
+      freight?: number;
+      insurance?: number;
+      otherCharges?: number;
+      terms?: string;
+      notes?: string;
+      items?: PurchaseOrderItemInput[];
+    },
+    userId: string,
+  ) {
+    const po = await this.prisma.purchaseOrder.findFirst({
+      where: { id, tenantId },
+      include: { items: true },
+    });
+    if (!po) throw new NotFoundException("Purchase order not found");
+
+    if (["CANCELLED", "RECEIVED"].includes(po.status))
+      throw new BadRequestException(
+        `A ${po.status.toLowerCase()} purchase order cannot be edited`,
+      );
+
+    const items = Array.isArray(dto.items) ? dto.items : po.items;
+    const nextTotals = this.computePurchaseOrderTotals({
+      ...(dto as any),
+      items: items.map((raw: any) => {
+        const item = raw as any;
+        return {
+          ...item,
+          expectedDelivery: item.expectedDelivery
+            ? this.normalizeDate(item.expectedDelivery)
+            : undefined,
+          quantity: Number(item.quantity) || 0,
+          unitPrice: Number(item.unitPrice) || 0,
+          discountPercent: item.discountPercent != null ? Number(item.discountPercent) : 0,
+          taxPercent: item.taxPercent != null ? Number(item.taxPercent) : 0,
+        };
+      }),
+    });
+
+    // revision bump for edit/audit trail
+    const revision = (po.revision ?? 1) + 1;
+    const header: any = { updatedBy: userId, revision };
+    if (dto.supplierId !== undefined) header.supplierId = dto.supplierId;
+    if (dto.expectedDate !== undefined) header.expectedDate = this.normalizeDate(dto.expectedDate);
+    if (dto.deliveryAddress !== undefined) header.deliveryAddress = dto.deliveryAddress;
+    if (dto.currency !== undefined) header.currency = dto.currency;
+    if (dto.paymentTerms !== undefined) header.paymentTerms = dto.paymentTerms;
+    if (dto.paymentMethod !== undefined) header.paymentMethod = dto.paymentMethod;
+    if (dto.discountPercent !== undefined) header.discountPercent = dto.discountPercent;
+    if (dto.taxPercent !== undefined) header.taxPercent = dto.taxPercent;
+    if (dto.tdsPercent !== undefined) header.tdsPercent = dto.tdsPercent;
+    if (dto.freight !== undefined) header.freight = dto.freight;
+    if (dto.insurance !== undefined) header.insurance = dto.insurance;
+    if (dto.otherCharges !== undefined) header.otherCharges = dto.otherCharges;
+    if (dto.terms !== undefined) header.terms = dto.terms;
+    if (dto.notes !== undefined) header.notes = dto.notes;
+
+    header.purchaseOrderItems = {
+      deleteMany: {},
+      create: items.map((raw: any, idx: number) => {
+        const item = raw as any;
+        return {
+          sn: idx + 1,
+          itemName: item.itemName,
+          itemCode: item.itemCode,
+          medicineId: item.medicineId,
+          category: item.category,
+          brand: item.brand,
+          model: item.model,
+          specification: item.specification,
+          hsCode: item.hsCode,
+          quantity: Number(item.quantity) || 0,
+          unit: item.unit,
+          unitPrice: Number(item.unitPrice) || 0,
+          discountPercent: item.discountPercent != null ? Number(item.discountPercent) : 0,
+          discountAmount: 0,
+          taxPercent: item.taxPercent != null ? Number(item.taxPercent) : 0,
+          taxAmount: 0,
+          otherCharges: Number(item.otherCharges) || 0,
+          lineTotal: this.round2(Math.max(0, (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0))),
+          expectedDelivery: item.expectedDelivery
+            ? this.normalizeDate(item.expectedDelivery)
+            : undefined,
+          criticality: item.criticality,
+          batchRequired: item.batchRequired,
+          expiryRequired: item.expiryRequired,
+          sterilityRequired: item.sterilityRequired,
+          coldChainRequired: item.coldChainRequired,
+          temperatureRequirement: item.temperatureRequirement,
+          warrantyRequired: item.warrantyRequired,
+          calibrationRequired: item.calibrationRequired,
+          installationRequired: item.installationRequired,
+          trainingRequired: item.trainingRequired,
+        };
+      }),
+    };
+    header.poItems = header.purchaseOrderItems;
+    delete header.poItems;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const fresh = await tx.purchaseOrder.update({
+        where: { id },
+        data: header,
+        include: { items: true, supplier: true, store: true },
+      });
+      return fresh;
+    });
+
+    await this.audit.log(
+      tenantId,
+      userId,
+      "PurchaseOrder",
+      id,
+      "UPDATE",
+      { revision, poNumber: po.poNumber, itemCount: items.length },
+    );
+
+    return this.findPurchaseOrderById(tenantId, id);
   }
 
   async findPurchaseOrders(
@@ -423,11 +747,74 @@ export class ProcurementService {
         supplier: true,
         store: true,
         goodsReceipts: { include: { items: true } },
-        purchaseRequest: { select: { id: true, requestNumber: true } },
+        purchaseRequest: {
+          select: {
+            id: true,
+            requestNumber: true,
+            justification: true,
+            priority: true,
+            neededBy: true,
+            departmentId: true,
+            requestedBy: true,
+            approvedBy: true,
+            approvedAt: true,
+          },
+        },
       },
     });
     if (!po) throw new NotFoundException("Purchase order not found");
-    return po;
+
+    const userIds = Array.from(
+      new Set(
+        [po.createdBy, po.updatedBy, po.approvedBy, po.vendorAcceptedBy]
+          .concat(po.purchaseRequest ? [po.purchaseRequest.requestedBy, po.purchaseRequest.approvedBy] : [])
+          .filter(Boolean),
+      ),
+    ) as string[];
+
+    const deptIds = po.purchaseRequest?.departmentId ? [po.purchaseRequest.departmentId] : [];
+
+    const [users, departments] = await Promise.all([
+      userIds.length
+        ? this.prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, firstName: true, middleName: true, lastName: true, role: true },
+          })
+        : Promise.resolve([]),
+      deptIds.length
+        ? this.prisma.department.findMany({
+            where: { tenantId, id: { in: deptIds } },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const userMap = new Map(users.map((u) => [u.id, u as any]));
+    const deptMap = new Map(departments.map((d) => [d.id, d.name]));
+
+    const purchaseRequest = po.purchaseRequest
+      ? {
+          ...po.purchaseRequest,
+          department: deptMap.get(po.purchaseRequest.departmentId as string) || null,
+          requestedBy: po.purchaseRequest.requestedBy
+            ? userMap.get(po.purchaseRequest.requestedBy) || null
+            : null,
+          approvedBy: po.purchaseRequest.approvedBy
+            ? userMap.get(po.purchaseRequest.approvedBy) || null
+            : null,
+        }
+      : null;
+
+    return {
+      ...po,
+      purchaseRequest,
+      createdBy: po.createdBy ? userMap.get(po.createdBy) || null : null,
+      updatedBy: po.updatedBy ? userMap.get(po.updatedBy) || null : null,
+      approvedBy: po.approvedBy ? userMap.get(po.approvedBy) || null : null,
+      vendorAcceptedBy: po.vendorAcceptedBy
+        ? userMap.get(po.vendorAcceptedBy) || null
+        : null,
+    };
   }
 
   async updatePurchaseOrderStatus(
@@ -440,11 +827,77 @@ export class ProcurementService {
       where: { id, tenantId },
     });
     if (!po) throw new NotFoundException("Purchase order not found");
-    const data: any = { status: status as any };
-    if (status === "CONFIRMED") data.approvedAt = new Date();
-    if (status === "APPROVED" || status === "CONFIRMED")
+
+    const allowed = new Set([
+      "DRAFT",
+      "SENT",
+      "CONFIRMED",
+      "PARTIAL_RECEIVED",
+      "RECEIVED",
+      "INVOICED",
+      "CANCELLED",
+    ]);
+    if (!allowed.has(status))
+      throw new BadRequestException(`Invalid PO status: ${status}`);
+
+    if (status === "CANCELLED" && ["RECEIVED", "PARTIAL_RECEIVED"].includes(po.status))
+      throw new BadRequestException(
+        "An order that has been (partially) received cannot be cancelled",
+      );
+
+    const data: any = { status: status as any, updatedBy: userId };
+    if (status === "CONFIRMED") {
+      data.approvedAt = new Date();
       data.approvedBy = userId;
-    return this.prisma.purchaseOrder.update({ where: { id }, data });
+    }
+
+    const updated = await this.prisma.purchaseOrder.update({
+      where: { id },
+      data,
+    });
+
+    await this.audit.log(
+      tenantId,
+      userId,
+      "PurchaseOrder",
+      po.id,
+      "STATUS",
+      { from: po.status, to: status },
+    );
+
+    return updated;
+  }
+
+  async acceptVendorOrder(tenantId: string, id: string, userId?: string) {
+    const po = await this.prisma.purchaseOrder.findFirst({
+      where: { id, tenantId },
+    });
+    if (!po) throw new NotFoundException("Purchase order not found");
+    if (po.vendorAcceptedAt)
+      throw new BadRequestException("Vendor acceptance already recorded");
+    if (po.status === "CANCELLED")
+      throw new BadRequestException("A cancelled order cannot be accepted");
+
+    const updated = await this.prisma.purchaseOrder.update({
+      where: { id },
+      data: {
+        vendorAcceptedBy: userId,
+        vendorAcceptedAt: new Date(),
+        status: po.status === "DRAFT" ? "SENT" : po.status,
+        updatedBy: userId,
+      },
+    });
+
+    await this.audit.log(
+      tenantId,
+      userId,
+      "PurchaseOrder",
+      po.id,
+      "APPROVE",
+      { event: "vendor-acceptance" },
+    );
+
+    return updated;
   }
 
   // ---------- Purchase Order PDF ----------
@@ -453,17 +906,6 @@ export class ProcurementService {
     const order = await this.findPurchaseOrderById(tenantId, id);
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: {
-        name: true,
-        addressLine1: true,
-        addressLine2: true,
-        city: true,
-        district: true,
-        province: true,
-        country: true,
-        phone: true,
-        email: true,
-      },
     });
     const user = userId
       ? await this.prisma.user.findUnique({
@@ -486,7 +928,11 @@ export class ProcurementService {
       { action: "PDF", format: "purchase-order" },
     );
 
-    const buffer = buildPurchaseOrderPdf(order as any, tenant as any, generatedBy);
+    const buffer = buildPurchaseOrderPdf(
+      order as any,
+      (tenant as any) ? { ...(tenant as any), logoUrl: (tenant as any).logoUrl || undefined } : null,
+      generatedBy,
+    );
     return { buffer, filename: `${order.poNumber}.pdf` };
   }
 
@@ -652,6 +1098,14 @@ export class ProcurementService {
       }
 
       return receipt;
+    }).then((receipt: any) => {
+      this.audit
+        .log(tenantId, userId, "GoodsReceipt", receipt.id, "CREATE", {
+          grnNumber: receipt.grnNumber,
+          purchaseOrderId: dto.purchaseOrderId || undefined,
+        })
+        .catch((err) => this.logger.warn("audit log failed", err));
+      return receipt;
     });
   }
 
@@ -707,6 +1161,86 @@ export class ProcurementService {
     }));
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  private round2(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
+  private computeLineTotals(
+    item: PurchaseOrderItemInput,
+    header: { discountPercent?: number; taxPercent?: number },
+  ) {
+    const quantity = Number(item.quantity) || 0;
+    const unitPrice = Number(item.unitPrice) || 0;
+    const discountPercent =
+      item.discountPercent != null
+        ? Number(item.discountPercent)
+        : header.discountPercent != null
+          ? Number(header.discountPercent)
+          : 0;
+    const taxPercent =
+      item.taxPercent != null
+        ? Number(item.taxPercent)
+        : header.taxPercent != null
+          ? Number(header.taxPercent)
+          : 0;
+
+    const gross = this.round2(quantity * unitPrice);
+    const discountAmount = this.round2((gross * discountPercent) / 100);
+    const taxableAmount = this.round2(gross - discountAmount);
+    const taxAmount = this.round2((taxableAmount * taxPercent) / 100);
+    const otherCharges = item.otherCharges ? this.round2(Number(item.otherCharges)) : 0;
+    const lineTotal = this.round2(taxableAmount + taxAmount + otherCharges);
+
+    return {
+      gross,
+      discountPercent,
+      discountAmount,
+      taxableAmount,
+      taxPercent,
+      taxAmount,
+      otherCharges,
+      lineTotal,
+    };
+  }
+
+  private computePurchaseOrderTotals(dto: CreatePurchaseOrderDto) {
+    let subtotal = 0;
+    let discountAmount = 0;
+    let taxableAmount = 0;
+    let taxAmount = 0;
+
+    for (const item of dto.items) {
+      const line = this.computeLineTotals(item, dto);
+      subtotal = this.round2(subtotal + line.gross);
+      discountAmount = this.round2(discountAmount + line.discountAmount);
+      taxableAmount = this.round2(taxableAmount + line.taxableAmount);
+      taxAmount = this.round2(taxAmount + line.taxAmount);
+    }
+
+    const tdsAmount = this.round2(
+      (taxableAmount * (dto.tdsPercent ? Number(dto.tdsPercent) : 0)) / 100,
+    );
+    const freightAmount = dto.freight ? this.round2(Number(dto.freight)) : 0;
+    const insuranceAmount = dto.insurance ? this.round2(Number(dto.insurance)) : 0;
+    const otherCharges = dto.otherCharges ? this.round2(Number(dto.otherCharges)) : 0;
+
+    const grandTotal = this.round2(
+      taxableAmount + taxAmount - tdsAmount + freightAmount + insuranceAmount + otherCharges,
+    );
+
+    return {
+      subtotal,
+      discountAmount,
+      taxableAmount,
+      taxAmount,
+      tdsAmount,
+      freightAmount,
+      insuranceAmount,
+      otherCharges,
+      grandTotal,
+    };
   }
 
   private async generateNumber(

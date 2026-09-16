@@ -1,13 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import EntityPage from '@/components/EntityPage';
 import { api, unwrap } from '@/lib/api';
 import { formatDate, formatMoney } from '@/lib/hooks';
 import PurchaseOrderReceiptModal from '@/components/PurchaseOrderReceiptModal';
 import type { Action, FormField } from '@/lib/types';
 
-type Tab = 'orders' | 'requests' | 'items' | 'transfers' | 'receipts';
+type Tab = 'orders' | 'requests' | 'suppliers' | 'items' | 'transfers' | 'receipts';
 
 interface StockTransfer {
   id: string;
@@ -22,6 +23,7 @@ interface StockTransfer {
 export default function ProcurementPage() {
   const [tab, setTab] = useState<Tab>('orders');
   const [refreshKey, setRefreshKey] = useState(0);
+  const router = useRouter();
 
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [stores, setStores] = useState<any[]>([]);
@@ -103,6 +105,22 @@ export default function ProcurementPage() {
   // ---------- Actions ----------
 
   const orderActions: Action[] = [
+    {
+      label: 'View Document',
+      tone: 'ghost',
+      skipReload: true,
+      onClick: (row) => router.push(`/procurement/po/${row.id}`),
+    },
+    {
+      label: 'Mark Accepted',
+      tone: 'primary',
+      condition: (r) => ['SENT', 'CONFIRMED'].includes(r.status) && !r.vendorAcceptedBy,
+      skipReload: true,
+      onClick: async (row) => {
+        if (!window.confirm(`Mark PO ${row.poNumber} as accepted by vendor?`)) return;
+        await api(`/procurement/purchase-orders/${row.id}/accept`, { method: 'PATCH' });
+      },
+    },
     {
       label: 'Receipt',
       tone: 'secondary',
@@ -273,6 +291,7 @@ export default function ProcurementPage() {
       <div className="tabs" role="tablist">
         <button className={`tab ${tab === 'orders' ? 'active' : ''}`} onClick={() => setTab('orders')}>Purchase Orders</button>
         <button className={`tab ${tab === 'requests' ? 'active' : ''}`} onClick={() => setTab('requests')}>Purchase Requests</button>
+        <button className={`tab ${tab === 'suppliers' ? 'active' : ''}`} onClick={() => setTab('suppliers')}>Suppliers</button>
         <button className={`tab ${tab === 'items' ? 'active' : ''}`} onClick={() => setTab('items')}>Inventory Items</button>
         <button className={`tab ${tab === 'transfers' ? 'active' : ''}`} onClick={() => setTab('transfers')}>Stock Transfers</button>
         <button className={`tab ${tab === 'receipts' ? 'active' : ''}`} onClick={() => setTab('receipts')}>Goods Receipts</button>
@@ -297,12 +316,23 @@ export default function ProcurementPage() {
           ]}
           fields={[
             { name: 'supplierId', label: 'Supplier', type: 'select', optionsFrom: { endpoint: '/procurement/suppliers', valueKey: 'id', labelKeys: ['name'] } },
+            { name: 'poType', label: 'PO Type', type: 'select', options: [{ value: 'STANDARD', label: 'Standard' }, { value: 'EMERGENCY', label: 'Emergency' }, { value: 'CONTRACT', label: 'Contract' }, { value: 'BLANKET', label: 'Blanket' }, { value: 'SERVICE', label: 'Service' }], defaultValue: 'STANDARD' },
             { name: 'storeId', label: 'Receive To Store', type: 'select', optionsFrom: { endpoint: '/pharmacy/stores', valueKey: 'id', labelKeys: ['name'] } },
             { name: 'expectedDate', label: 'Expected Date', type: 'date' },
             { name: 'deliveryAddress', label: 'Delivery Address', full: true },
+            { name: 'currency', label: 'Currency', defaultValue: 'NPR' },
+            { name: 'validityDays', label: 'Validity (days)', type: 'number' },
+            { name: 'paymentTerms', label: 'Payment Terms', full: true },
+            { name: 'paymentMethod', label: 'Payment Method', type: 'select', options: [{ value: 'BANK_TRANSFER', label: 'Bank Transfer' }, { value: 'CASH', label: 'Cash' }, { value: 'CHEQUE', label: 'Cheque' }, { value: 'CREDIT', label: 'Credit' }, { value: 'LC', label: 'Letter of Credit' }] },
+            { name: 'discountPercent', label: 'Discount %', type: 'number' },
+            { name: 'taxPercent', label: 'VAT %', type: 'number' },
+            { name: 'tdsPercent', label: 'TDS %', type: 'number' },
+            { name: 'freightAmount', label: 'Freight Amount', type: 'number' },
+            { name: 'insuranceAmount', label: 'Insurance Amount', type: 'number' },
+            { name: 'otherCharges', label: 'Other Charges', type: 'number' },
             { name: 'terms', label: 'Terms', full: true },
             { name: 'notes', label: 'Notes', full: true },
-            { name: 'items', label: 'Items', type: 'procItems', priceKey: 'unitPrice', required: true, full: true, hint: 'Add at least one line item with quantity and unit price.' },
+            { name: 'items', label: 'Items', type: 'procItems', priceKey: 'unitPrice', procItemsExtended: true, required: true, full: true, hint: 'Add at least one line item with quantity and unit price. Discount and VAT percentage can be set per line or at the header level.' },
           ]}
         />
       )}
@@ -332,6 +362,47 @@ export default function ProcurementPage() {
             { name: 'justification', label: 'Justification', type: 'textarea', full: true },
             { name: 'notes', label: 'Notes', type: 'textarea', full: true },
             { name: 'items', label: 'Items', type: 'procItems', priceKey: 'estimatedPrice', required: true, full: true, hint: 'Add at least one line item with an estimated price.' },
+          ]}
+        />
+      )}
+
+      {tab === 'suppliers' && (
+        <EntityPage
+          key={`suppliers-${refreshKey}`}
+          title="Suppliers"
+          subtitle="Manage vendor and supplier information"
+          endpoint="/procurement/suppliers"
+          createLabel="Add Supplier"
+          editable
+          searchable={false}
+          columns={[
+            { key: 'code', label: 'Code', render: (r) => <span className="mono">{r.code || '—'}</span> },
+            { key: 'name', label: 'Name' },
+            { key: 'category', label: 'Category', render: (r) => r.category || '—' },
+            { key: 'contactPerson', label: 'Contact', render: (r) => r.contactPerson || '—' },
+            { key: 'phone', label: 'Phone', render: (r) => r.phone || '—' },
+            { key: 'email', label: 'Email', render: (r) => r.email || '—' },
+            { key: 'panNumber', label: 'PAN', render: (r) => <span className="mono">{r.panNumber || '—'}</span> },
+            { key: 'vatNumber', label: 'VAT', render: (r) => <span className="mono">{r.vatNumber || '—'}</span> },
+            { key: 'isActive', label: 'Status', badge: true },
+          ]}
+          fields={[
+            { name: 'name', label: 'Name', required: true },
+            { name: 'code', label: 'Code' },
+            { name: 'contactPerson', label: 'Contact Person' },
+            { name: 'phone', label: 'Phone' },
+            { name: 'email', label: 'Email', type: 'email' },
+            { name: 'address', label: 'Address', full: true },
+            { name: 'billingAddress', label: 'Billing Address', full: true },
+            { name: 'shippingAddress', label: 'Shipping Address', full: true },
+            { name: 'category', label: 'Category' },
+            { name: 'panNumber', label: 'PAN Number' },
+            { name: 'vatNumber', label: 'VAT Number' },
+            { name: 'registrationNumber', label: 'Registration Number' },
+            { name: 'paymentTerms', label: 'Payment Terms' },
+            { name: 'bankName', label: 'Bank Name' },
+            { name: 'bankAccount', label: 'Bank Account' },
+            { name: 'bankBranch', label: 'Bank Branch' },
           ]}
         />
       )}

@@ -15,6 +15,7 @@ import {
   ProcurementService,
   CreateSupplierDto,
   CreatePurchaseOrderDto,
+  UpdatePurchaseOrderDto,
   CreatePurchaseRequestDto,
   CreateGoodsReceiptDto,
 } from "./procurement.service";
@@ -179,6 +180,22 @@ export class ProcurementController {
     res.send(buffer);
   }
 
+  @Patch("purchase-orders/:id")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Update purchase order (header, items, revision)" })
+  async updatePurchaseOrder(
+    @Param("id") id: string,
+    @Body() dto: UpdatePurchaseOrderDto,
+    @Req() req: any,
+  ) {
+    return this.procurementService.updatePurchaseOrder(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user.id,
+    );
+  }
+
   @Patch("purchase-orders/:id/status")
   @Permissions(PermissionAction.EDIT)
   @ApiOperation({ summary: "Update purchase order status" })
@@ -191,6 +208,17 @@ export class ProcurementController {
       req.user.tenantId,
       id,
       body.status,
+      req.user.id,
+    );
+  }
+
+  @Patch("purchase-orders/:id/accept")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Record vendor acceptance of the purchase order" })
+  acceptPurchaseOrder(@Param("id") id: string, @Req() req: any) {
+    return this.procurementService.acceptVendorOrder(
+      req.user.tenantId,
+      id,
       req.user.id,
     );
   }

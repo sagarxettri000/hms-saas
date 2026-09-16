@@ -263,15 +263,17 @@ function ProcurementLineItemsEditor({
   value,
   onChange,
   priceKey = 'unitPrice',
+  extended = false,
 }: {
   value: any[];
   onChange: (v: any[]) => void;
   priceKey?: string;
+  extended?: boolean;
 }) {
   const [rows, setRows] = useState<any[]>(() =>
     value.length
       ? value.map((r) => ({ ...r, _price: r[priceKey] ?? r.unitPrice ?? 0 }))
-      : [{ itemName: '', quantity: 1, unit: '', _price: 0 }],
+      : [{ itemName: '', quantity: 1, unit: '', _price: 0, ...(extended ? { discountPercent: '', taxPercent: '', brand: '', model: '', specification: '', category: '', expectedDelivery: '' } : {}) }],
   );
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Row[]>([]);
@@ -281,13 +283,26 @@ function ProcurementLineItemsEditor({
   function normalize(next: any[]) {
     return next
       .filter((r) => r.itemName && String(r.itemName).trim())
-      .map((r) => ({
-        itemName: String(r.itemName).trim(),
-        medicineId: r.medicineId,
-        quantity: Number(r.quantity) > 0 ? Number(r.quantity) : 1,
-        unit: r.unit || undefined,
-        [priceKey]: Number(r._price) > 0 ? Number(r._price) : 0,
-      }));
+      .map((r) => {
+        const base: any = {
+          itemName: String(r.itemName).trim(),
+          medicineId: r.medicineId,
+          quantity: Number(r.quantity) > 0 ? Number(r.quantity) : 1,
+          unit: r.unit || undefined,
+          [priceKey]: Number(r._price) > 0 ? Number(r._price) : 0,
+        };
+        if (extended) {
+          if (r.itemCode) base.itemCode = String(r.itemCode).trim();
+          if (r.brand) base.brand = String(r.brand).trim();
+          if (r.model) base.model = String(r.model).trim();
+          if (r.specification) base.specification = String(r.specification).trim();
+          if (r.category) base.category = String(r.category).trim();
+          if (r.discountPercent) base.discountPercent = Number(r.discountPercent) || 0;
+          if (r.taxPercent) base.taxPercent = Number(r.taxPercent) || 0;
+          if (r.expectedDelivery) base.expectedDelivery = r.expectedDelivery;
+        }
+        return base;
+      });
   }
 
   const runSearch = useCallback(async (term: string) => {
@@ -329,26 +344,32 @@ function ProcurementLineItemsEditor({
   }
 
   function addRow() {
-    setRows([...rows, { itemName: '', quantity: 1, unit: '', _price: 0 }]);
+    setRows([...rows, { itemName: '', quantity: 1, unit: '', _price: 0, ...(extended ? { discountPercent: '', taxPercent: '', brand: '', model: '', specification: '', category: '', expectedDelivery: '' } : {}) }]);
   }
 
   function removeRow(index: number) {
     const next = rows.filter((_, i) => i !== index);
-    const kept = next.length ? next : [{ itemName: '', quantity: 1, unit: '', _price: 0 }];
+    const kept = next.length ? next : [{ itemName: '', quantity: 1, unit: '', _price: 0, ...(extended ? { discountPercent: '', taxPercent: '', brand: '', model: '', specification: '', category: '', expectedDelivery: '' } : {}) }];
     setRows(kept);
     onChange(normalize(next));
   }
 
   function pickItem(item: Row) {
+    const picked: any = {
+      itemName: item.name,
+      medicineId: item.medicineId || undefined,
+      quantity: 1,
+      unit: item.unit || '',
+      _price: Number(item.purchaseRate) || 0,
+    };
+    if (extended) {
+      if (item.itemCode || item.sku || item.code) picked.itemCode = item.itemCode || item.sku || item.code;
+      if (item.category) picked.category = item.category;
+      if (item.brand) picked.brand = item.brand;
+    }
     const next = [
       ...rows.filter((r) => r.itemName && String(r.itemName).trim()),
-      {
-        itemName: item.name,
-        medicineId: item.medicineId || undefined,
-        quantity: 1,
-        unit: item.unit || '',
-        _price: Number(item.purchaseRate) || 0,
-      },
+      picked,
     ];
     setRows(next);
     onChange(normalize(next));
@@ -429,65 +450,127 @@ function ProcurementLineItemsEditor({
           <thead>
             <tr>
               <th>Item</th>
-              <th style={{ width: 110 }}>Unit</th>
-              <th style={{ width: 90 }}>Qty</th>
-              <th style={{ width: 110 }}>Rate (NPR)</th>
-              <th style={{ width: 110 }}>Amount</th>
+              <th style={{ width: 90 }}>Unit</th>
+              <th style={{ width: 80 }}>Qty</th>
+              <th style={{ width: 100 }}>Rate</th>
+              {extended && <th style={{ width: 60 }}>Disc %</th>}
+              {extended && <th style={{ width: 60 }}>VAT %</th>}
+              {extended && <th style={{ width: 120 }}>Expected Delivery</th>}
+              <th style={{ width: 100 }}>Amount</th>
               <th style={{ width: 44 }}></th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => (
-              <tr key={i}>
-                <td>
-                  <input
-                    className="input"
-                    value={r.itemName}
-                    placeholder="e.g. Paracetamol 500mg"
-                    onChange={(e) => update(i, { itemName: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="input"
-                    value={r.unit}
-                    placeholder="e.g. strip"
-                    onChange={(e) => update(i, { unit: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="input"
-                    type="number"
-                    min={1}
-                    value={r.quantity}
-                    onChange={(e) => update(i, { quantity: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="input"
-                    type="number"
-                    min={0}
-                    value={r._price}
-                    onChange={(e) => update(i, { _price: e.target.value })}
-                  />
-                </td>
-                <td className="mono">
-                  {formatMoney((Number(r.quantity) || 0) * (Number(r._price) || 0))}
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-danger"
-                    onClick={() => removeRow(i)}
-                    aria-label="Remove line"
-                  >
-                    ×
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {rows.map((r, i) => {
+              const gross = (Number(r.quantity) || 0) * (Number(r._price) || 0);
+              const disc = Math.round(gross * (Number(r.discountPercent) || 0) / 100 * 100) / 100;
+              const taxable = gross - disc;
+              const tax = Math.round(taxable * (Number(r.taxPercent) || 0) / 100 * 100) / 100;
+              const amount = taxable + tax;
+              return (
+                <tr key={i}>
+                  <td>
+                    <input
+                      className="input"
+                      value={r.itemName}
+                      placeholder="e.g. Paracetamol 500mg"
+                      onChange={(e) => update(i, { itemName: e.target.value })}
+                    />
+                    {extended && (
+                      <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                        <input
+                          className="input"
+                          style={{ width: 80 }}
+                          value={r.itemCode || ''}
+                          placeholder="Code"
+                          onChange={(e) => update(i, { itemCode: e.target.value })}
+                        />
+                        <input
+                          className="input"
+                          style={{ flex: 1 }}
+                          value={r.brand || ''}
+                          placeholder="Brand / Model / Spec"
+                          onChange={(e) => update(i, { brand: e.target.value, model: e.target.value })}
+                        />
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    <input
+                      className="input"
+                      value={r.unit}
+                      placeholder="e.g. strip"
+                      onChange={(e) => update(i, { unit: e.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="input"
+                      type="number"
+                      min={1}
+                      value={r.quantity}
+                      onChange={(e) => update(i, { quantity: e.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="input"
+                      type="number"
+                      min={0}
+                      value={r._price}
+                      onChange={(e) => update(i, { _price: e.target.value })}
+                    />
+                  </td>
+                  {extended && (
+                    <td>
+                      <input
+                        className="input"
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={r.discountPercent || ''}
+                        onChange={(e) => update(i, { discountPercent: e.target.value })}
+                      />
+                    </td>
+                  )}
+                  {extended && (
+                    <td>
+                      <input
+                        className="input"
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={r.taxPercent || ''}
+                        onChange={(e) => update(i, { taxPercent: e.target.value })}
+                      />
+                    </td>
+                  )}
+                  {extended && (
+                    <td>
+                      <input
+                        className="input"
+                        type="date"
+                        value={r.expectedDelivery || ''}
+                        onChange={(e) => update(i, { expectedDelivery: e.target.value })}
+                      />
+                    </td>
+                  )}
+                  <td className="mono">
+                    {formatMoney(amount)}
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-danger"
+                      onClick={() => removeRow(i)}
+                      aria-label="Remove line"
+                    >
+                      ×
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -534,6 +617,7 @@ function FieldInput({
     return (
       <ProcurementLineItemsEditor
         priceKey={field.priceKey || 'unitPrice'}
+        extended={field.procItemsExtended}
         value={Array.isArray(value) ? value : []}
         onChange={onChange}
       />

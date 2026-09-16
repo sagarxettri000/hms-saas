@@ -36,6 +36,7 @@ export interface FormField {
   full?: boolean;
   hint?: string;
   priceKey?: string;
+  procItemsExtended?: boolean;
   optionsFrom?: {
     endpoint: string;
     valueKey?: string;

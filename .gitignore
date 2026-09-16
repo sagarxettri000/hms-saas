@@ -28,6 +28,7 @@ npm-debug.log*
 # Ad-hoc command/output artifacts
 build.txt
 build_output.txt
+.freebuff/
 test_output.txt
 
 # Prisma (migrations are version-controlled and MUST be committed)

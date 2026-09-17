@@ -296,7 +296,7 @@ export default function PatientsPage() {
           { name: 'firstName', label: 'First name', required: true },
           { name: 'middleName', label: 'Middle name' },
           { name: 'lastName', label: 'Last name', required: true },
-          { name: 'dateOfBirth', label: 'Date of birth', type: 'date' },
+          { name: 'age', label: 'Age (years)', type: 'number' },
           { name: 'gender', label: 'Gender', type: 'select', options: GENDERS },
           { name: 'bloodGroup', label: 'Blood group', type: 'select', options: BLOOD_GROUPS },
           { name: 'maritalStatus', label: 'Marital status', type: 'select', options: MARITAL_STATUS },

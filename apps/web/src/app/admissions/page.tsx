@@ -36,7 +36,7 @@ interface QuickPatient {
   lastName: string;
   mobile: string;
   gender: string;
-  dateOfBirth: string;
+  age: string;
 }
 
 export default function AdmissionsPage() {
@@ -60,7 +60,7 @@ export default function AdmissionsPage() {
   const [flash, setFlash] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [quickPatient, setQuickPatient] = useState<QuickPatient>({
-    firstName: '', lastName: '', mobile: '', gender: 'MALE', dateOfBirth: '',
+                  firstName: '', lastName: '', mobile: '', gender: 'MALE', age: '',
   });
   const [savingPatient, setSavingPatient] = useState(false);
   const [patientError, setPatientError] = useState('');
@@ -166,7 +166,7 @@ export default function AdmissionsPage() {
       if (quickPatient.lastName.trim()) payload.lastName = quickPatient.lastName.trim();
       if (quickPatient.mobile.trim()) payload.mobile = quickPatient.mobile.trim();
       if (quickPatient.gender) payload.gender = quickPatient.gender;
-      if (quickPatient.dateOfBirth) payload.dateOfBirth = new Date(quickPatient.dateOfBirth).toISOString();
+                if (quickPatient.age) payload.age = Number(quickPatient.age);
       const res: ApiResponse<any> = await api('/patients', { method: 'POST', body: JSON.stringify(payload) });
       const patientData = (res.data as any)?.data ?? res.data ?? res;
       const newPatient: Patient = {
@@ -325,16 +325,8 @@ export default function AdmissionsPage() {
                 </div>
                 <div className="field field-full">
                   <label className="label">Date of birth</label>
-                  <input className="input" type="text" placeholder="YYYY-MM-DD or DD/MM/YYYY" value={quickPatient.dateOfBirth} onChange={(e) => {
-                    const raw = e.target.value.trim();
-                    let norm = raw;
-                    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw)) {
-                      const [dd, mm, yyyy] = raw.split('/');
-                      norm = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
-                    } else if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-                      norm = raw;
-                    }
-                    setQuickPatient((p) => ({ ...p, dateOfBirth: norm }));
+                  <input className="input" type="number" placeholder="Age in years" min={0} max={200} value={quickPatient.age} onChange={(e) => {
+                    setQuickPatient((p) => ({ ...p, age: e.target.value }));
                   }} />
                 </div>
               </div>

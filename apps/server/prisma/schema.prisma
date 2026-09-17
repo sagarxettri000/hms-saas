@@ -2672,6 +2672,7 @@ model Invoice {
   customerPhone        String?
   schemeId             String?
   scheme               BillingScheme?  @relation(fields: [schemeId], references: [id], onDelete: SetNull)
+  barcode              String?         @unique
   printCount           Int             @default(0)
   issuedDate           DateTime        @default(now())
   dueDate              DateTime?

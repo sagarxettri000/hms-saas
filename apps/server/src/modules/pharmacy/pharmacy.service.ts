@@ -6,8 +6,21 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
+import { SettingsService } from "../settings/settings.service";
+import { AuditService } from "../audit/audit.service";
 
 const MAX_LIMIT = 100;
+
+/** TenantSetting key holding the Pharmacy-scoped tax registration numbers. */
+export const PHARMACY_BILLING_SETTING_KEY = "pharmacyBilling";
+
+export interface PharmacyBillingSettings {
+  vatNumber?: string;
+  panNumber?: string;
+}
+
+/** Code 128-B encodes printable ASCII; anything else cannot be a barcode. */
+const CODE128_PATTERN = /^[ -~]+$/;
 
 export interface CreateMedicineDto {
   name: string;
@@ -120,7 +133,59 @@ export interface CreatePharmacySaleDto {
 
 @Injectable()
 export class PharmacyService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly settings: SettingsService,
+    private readonly audit: AuditService,
+  ) {}
+
+  /**
+   * Pharmacy-scoped tax registration numbers (TenantSetting key
+   * `pharmacyBilling`). Read at billing time — never copied into other
+   * departments' documents.
+   */
+  async getBillingSettings(tenantId: string): Promise<PharmacyBillingSettings> {
+    try {
+      const setting = await this.prisma.tenantSetting.findUnique({
+        where: {
+          tenantId_key: { tenantId, key: PHARMACY_BILLING_SETTING_KEY },
+        },
+      });
+      const value = (setting?.value ?? {}) as PharmacyBillingSettings;
+      return {
+        vatNumber:
+          typeof value.vatNumber === "string" && value.vatNumber.trim()
+            ? value.vatNumber.trim()
+            : undefined,
+        panNumber:
+          typeof value.panNumber === "string" && value.panNumber.trim()
+            ? value.panNumber.trim()
+            : undefined,
+      };
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * Persist Pharmacy billing VAT/PAN settings. Uses the shared TenantSetting
+   * store (no parallel settings system) under the Pharmacy-only key, so the
+   * value is invisible to every other department's document renderer.
+   */
+  async setBillingSettings(
+    tenantId: string,
+    value: PharmacyBillingSettings,
+    userId?: string,
+  ): Promise<PharmacyBillingSettings> {
+    await this.settings.set(tenantId, PHARMACY_BILLING_SETTING_KEY, value, userId);
+    await this.audit.log(tenantId, userId, "TenantSetting", PHARMACY_BILLING_SETTING_KEY, "UPDATE", {
+      key: PHARMACY_BILLING_SETTING_KEY,
+      scope: "PHARMACY_BILLING",
+      vatNumber: value.vatNumber ?? null,
+      panNumber: value.panNumber ?? null,
+    });
+    return value;
+  }
 
   // ---------- Medicines ----------
 
@@ -581,6 +646,66 @@ export class PharmacyService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
+  /**
+   * Pharmacy bill barcode. Reuses the existing invoice numbering scheme as
+   * the barcode value (no second numbering system): the invoice's unique
+   * `barcode` column is DB-enforced globally-unique, so two bills can never
+   * collide even across tenants. Stable for the life of the bill.
+   */
+  private pharmacyBarcodeValue(invoiceNumber: string): string | undefined {
+    return CODE128_PATTERN.test(invoiceNumber) ? invoiceNumber : undefined;
+  }
+
+  /**
+   * Run a billing transaction, retrying with a fresh sequence on the rare
+   * P2002 race (two concurrent sales drawing the same next number). The whole
+   * transaction is retried — Postgres aborts a tx after a constraint
+   * violation, so in-transaction retries are impossible (same pattern as
+   * blood-bank unit numbering).
+   */
+  private async withInvoiceRetry<T>(
+    fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await this.prisma.$transaction(fn);
+      } catch (err: any) {
+        if (err?.code === "P2002") {
+          lastError = err;
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new ConflictException(
+      "Could not allocate a unique invoice/barcode number — please retry",
+    );
+  }
+
+  /** Create the pharmacy invoice inside `tx` with its barcode value. */
+  private async createPharmacyInvoice(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    base: Omit<Prisma.InvoiceUncheckedCreateInput, "invoiceNumber" | "barcode">,
+  ): Promise<Prisma.InvoiceGetPayload<{ include: { items: true } }>> {
+    const invoiceNumber = await this.nextNumber(
+      tx,
+      tenantId,
+      "INV",
+      "invoice",
+      "invoiceNumber",
+    );
+    return tx.invoice.create({
+      data: {
+        ...base,
+        invoiceNumber,
+        barcode: this.pharmacyBarcodeValue(invoiceNumber),
+      },
+      include: { items: true },
+    });
+  }
+
   async dispense(tenantId: string, dto: DispenseDto, userId: string) {
     if (!dto.items || dto.items.length === 0)
       throw new BadRequestException("At least one item is required");
@@ -601,7 +726,7 @@ export class PharmacyService {
     // prescription status) in a single transaction so a failure mid-way rolls
     // back every change, and use atomic conditional updates to prevent two
     // concurrent dispatches from overselling the same batch.
-    return this.prisma.$transaction(async (tx) => {
+    return this.withInvoiceRetry(async (tx) => {
       const results: any[] = [];
       const invoiceItems: any[] = [];
       let subtotal = 0;
@@ -708,34 +833,23 @@ export class PharmacyService {
       const status =
         dueAmount <= 0 ? "PAID" : dto.isCredit ? "PENDING" : "PARTIAL";
 
-      const invoiceNumber = await this.nextNumber(
-        tx,
+      const invoice = await this.createPharmacyInvoice(tx, tenantId, {
         tenantId,
-        "INV",
-        "invoice",
-        "invoiceNumber",
-      );
-      const invoice = await tx.invoice.create({
-        data: {
-          tenantId,
-          invoiceNumber,
-          patientId: dto.patientId,
-          type: "PHARMACY",
-          status: status as any,
-          subtotal,
-          discountAmount: invoiceDiscount,
-          discountReason: dto.discountReason || undefined,
-          taxAmount: invoiceItems.reduce((s, i) => s + i.taxAmount, 0),
-          taxPercent: taxPercent || undefined,
-          totalAmount,
-          paidAmount,
-          dueAmount,
-          isCredit: dto.isCredit || false,
-          notes: dto.notes || "Pharmacy dispensing",
-          createdBy: userId,
-          items: { create: invoiceItems },
-        },
-        include: { items: true },
+        patientId: dto.patientId,
+        type: "PHARMACY",
+        status: status as any,
+        subtotal,
+        discountAmount: invoiceDiscount,
+        discountReason: dto.discountReason || undefined,
+        taxAmount: invoiceItems.reduce((s, i) => s + i.taxAmount, 0),
+        taxPercent: taxPercent || undefined,
+        totalAmount,
+        paidAmount,
+        dueAmount,
+        isCredit: dto.isCredit || false,
+        notes: dto.notes || "Pharmacy dispensing",
+        createdBy: userId,
+        items: { create: invoiceItems },
       });
 
       let paymentId: string | undefined;
@@ -805,7 +919,7 @@ export class PharmacyService {
           invoiceId: invoice.id,
           referenceType: "invoice",
           referenceId: invoice.id,
-          notes: `Invoice ${invoiceNumber} issued`,
+          notes: `Invoice ${invoice.invoiceNumber} issued`,
           createdBy: userId,
         },
       });
@@ -876,7 +990,7 @@ export class PharmacyService {
       ? `${patient.firstName} ${patient.lastName}`
       : dto.customerName?.trim() || "Walk-in customer";
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.withInvoiceRetry(async (tx) => {
       const invoiceItems: any[] = [];
       let subtotal = 0;
 
@@ -990,36 +1104,25 @@ export class PharmacyService {
       const status =
         dueAmount <= 0 ? "PAID" : dto.isCredit ? "PENDING" : "PARTIAL";
 
-      const invoiceNumber = await this.nextNumber(
-        tx,
+      const invoice = await this.createPharmacyInvoice(tx, tenantId, {
         tenantId,
-        "INV",
-        "invoice",
-        "invoiceNumber",
-      );
-      const invoice = await tx.invoice.create({
-        data: {
-          tenantId,
-          invoiceNumber,
-          patientId: patient ? dto.patientId : undefined,
-          customerName: !patient ? (dto.customerName || undefined) : undefined,
-          customerPhone: !patient ? (dto.customerPhone || undefined) : undefined,
-          type: "PHARMACY",
-          status: status as any,
-          subtotal,
-          discountAmount: invoiceDiscount,
-          discountReason: dto.discountReason || undefined,
-          taxAmount: invoiceItems.reduce((s, i) => s + i.taxAmount, 0),
-          taxPercent: dto.taxPercent || undefined,
-          totalAmount,
-          paidAmount,
-          dueAmount,
-          isCredit: dto.isCredit || false,
-          notes: dto.notes || "Pharmacy sale",
-          createdBy: userId,
-          items: { create: invoiceItems },
-        },
-        include: { items: true },
+        patientId: patient ? dto.patientId : undefined,
+        customerName: !patient ? (dto.customerName || undefined) : undefined,
+        customerPhone: !patient ? (dto.customerPhone || undefined) : undefined,
+        type: "PHARMACY",
+        status: status as any,
+        subtotal,
+        discountAmount: invoiceDiscount,
+        discountReason: dto.discountReason || undefined,
+        taxAmount: invoiceItems.reduce((s, i) => s + i.taxAmount, 0),
+        taxPercent: dto.taxPercent || undefined,
+        totalAmount,
+        paidAmount,
+        dueAmount,
+        isCredit: dto.isCredit || false,
+        notes: dto.notes || "Pharmacy sale",
+        createdBy: userId,
+        items: { create: invoiceItems },
       });
 
       let paymentId: string | undefined;
@@ -1089,7 +1192,7 @@ export class PharmacyService {
           invoiceId: invoice.id,
           referenceType: "invoice",
           referenceId: invoice.id,
-          notes: `Invoice ${invoiceNumber} issued`,
+          notes: `Invoice ${invoice.invoiceNumber} issued`,
           createdBy: userId,
         },
       });

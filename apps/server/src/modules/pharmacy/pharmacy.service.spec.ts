@@ -128,7 +128,12 @@ describe("PharmacyService.sale", () => {
       firstName: "John",
       lastName: "Doe",
     });
-    return new PharmacyService(prisma as any);
+    prisma.tenantSetting = {
+      findUnique: jest.fn(async () => null),
+    };
+    const settings = { set: jest.fn(async (_t: string, _k: string, v: unknown) => v) };
+    const audit = { log: jest.fn(async () => undefined) };
+    return new PharmacyService(prisma as any, settings as any, audit as any);
   }
 
   it("creates a paid PHARMACY invoice and deducts stock", async () => {
@@ -208,7 +213,12 @@ describe("PharmacyService.sale", () => {
   it("throws NotFoundException for unknown store", async () => {
     const prisma = makePrisma({});
     prisma.store.findFirst.mockResolvedValue(null);
-    const service = new PharmacyService(prisma as any);
+    prisma.tenantSetting = { findUnique: jest.fn(async () => null) };
+    const service = new PharmacyService(
+      prisma as any,
+      { set: jest.fn() } as any,
+      { log: jest.fn() } as any,
+    );
     await expect(service.sale("t1", BASE_DTO as any, "u1")).rejects.toThrow(
       NotFoundException,
     );
@@ -233,5 +243,76 @@ describe("PharmacyService.sale", () => {
         data: { status: "DISPENSED" },
       }),
     );
+  });
+
+  it("assigns a unique barcode derived from the invoice number on every sale", async () => {
+    const tx = buildTx(10);
+    const service = makeService(tx);
+    const res: any = await service.sale("t1", { ...BASE_DTO, paymentMethod: "CASH" } as any, "u1");
+    expect(res.invoice.barcode).toBe(res.invoice.invoiceNumber);
+    expect(res.invoice.barcode).toMatch(/^INV-\d{8}-\d{5}$/);
+  });
+
+  it("retries with a new number on P2002 barcode collision and still succeeds", async () => {
+    const tx = buildTx(10);
+    let attempts = 0;
+    const realCreate = tx.invoice.create;
+    tx.invoice.create = jest.fn(async (args: any) => {
+      attempts++;
+      if (attempts === 1) {
+        const err: any = new Error("unique constraint");
+        err.code = "P2002";
+        throw err;
+      }
+      return realCreate(args);
+    });
+    const service = makeService(tx);
+    const res: any = await service.sale("t1", { ...BASE_DTO, paymentMethod: "CASH" } as any, "u1");
+    expect(attempts).toBe(2);
+    expect(res.invoice.barcode).toBe(res.invoice.invoiceNumber);
+  });
+
+  it("gives up with ConflictException after repeated P2002 collisions", async () => {
+    const tx = buildTx(10);
+    (tx.invoice.create as any) = jest.fn(async (): Promise<any> => {
+      const err: any = new Error("unique constraint");
+      err.code = "P2002";
+      throw err;
+    });
+    const service = makeService(tx);
+    await expect(
+      service.sale("t1", { ...BASE_DTO, paymentMethod: "CASH" } as any, "u1"),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it("saves and audits Pharmacy VAT/PAN settings via the shared settings store", async () => {
+    const tx = buildTx(10);
+    const prisma = makePrisma({ tx, $transaction: jest.fn(async (fn: any) => fn(tx)) });
+    prisma.store.findFirst.mockResolvedValue({ id: "st1", name: "Main Store" });
+    prisma.patient.findFirst.mockResolvedValue({ id: "pat1", firstName: "John", lastName: "Doe" });
+    prisma.tenantSetting = { findUnique: jest.fn(async () => null) };
+    const settings = { set: jest.fn(async (_t: string, _k: string, v: unknown) => v) };
+    const audit = { log: jest.fn(async () => undefined) };
+    const service = new PharmacyService(prisma as any, settings as any, audit as any);
+
+    const saved = await service.setBillingSettings("t1", { vatNumber: "601234567", panNumber: "123456789" }, "u1");
+    expect(saved).toEqual({ vatNumber: "601234567", panNumber: "123456789" });
+    expect(settings.set).toHaveBeenCalledWith("t1", "pharmacyBilling", { vatNumber: "601234567", panNumber: "123456789" }, "u1");
+    expect(audit.log).toHaveBeenCalledWith(
+      "t1",
+      "u1",
+      "TenantSetting",
+      "pharmacyBilling",
+      "UPDATE",
+      expect.objectContaining({ scope: "PHARMACY_BILLING" }),
+    );
+
+    prisma.tenantSetting.findUnique.mockResolvedValue({
+      value: { vatNumber: "601234567", panNumber: "123456789" },
+    });
+    await expect(service.getBillingSettings("t1")).resolves.toEqual({
+      vatNumber: "601234567",
+      panNumber: "123456789",
+    });
   });
 });

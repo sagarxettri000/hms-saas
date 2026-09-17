@@ -52,7 +52,6 @@ import { EquipmentModule } from "./modules/equipment/equipment.module";
 import { PreauthorizationsModule } from "./modules/preauthorizations/preauthorizations.module";
 import { ControlledSubstancesModule } from "./modules/controlled-substances/controlled-substances.module";
 import { StockTransfersModule } from "./modules/stock-transfers/stock-transfers.module";
-import { AttendanceModule } from "./modules/attendance/attendance.module";
 import { QualityChecklistsModule } from "./modules/quality-checklists/quality-checklists.module";
 import { NursingHandoversModule } from "./modules/nursing-handovers/nursing-handovers.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
@@ -130,7 +129,6 @@ import { AppController } from "./app.controller";
     PreauthorizationsModule,
     ControlledSubstancesModule,
     StockTransfersModule,
-    AttendanceModule,
     QualityChecklistsModule,
     NursingHandoversModule,
   ],

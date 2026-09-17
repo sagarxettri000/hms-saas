@@ -5,6 +5,7 @@ import { api, API_URL } from '@/lib/api';
 import { formatDate, formatDateTime, formatMoney } from '@/lib/hooks';
 import { INVOICE_TYPES, PAYMENT_METHODS } from '@/lib/options';
 import type { Row } from '@/lib/types';
+import Barcode from '@/components/Barcode';
 
 const PATIENT_CATEGORY_LABELS: Record<string, string> = {
   GENERAL: 'Normal / General Patient',
@@ -80,6 +81,7 @@ export default function ReceiptModal({
   const [data, setData] = useState<Row | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tenantName, setTenantName] = useState('Hospital');
+  const [pharmacyBilling, setPharmacyBilling] = useState<{ vatNumber?: string; panNumber?: string }>({});
   const [printedAt] = useState(() => new Date());
 
   useEffect(() => {
@@ -88,6 +90,15 @@ export default function ReceiptModal({
     api(`/billing/invoices/${invoice.id}`)
       .then((res: any) => { if (!cancelled) setData(res.data ?? res); })
       .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load invoice'); });
+    // Pharmacy-scoped tax registration numbers: fetched only for pharmacy
+    // invoices and rendered only on this document.
+    if (String((invoice as Row).type) === 'PHARMACY') {
+      api('/pharmacy/billing-settings')
+        .then((res: any) => {
+          if (!cancelled) setPharmacyBilling((res?.data ?? res) ?? {});
+        })
+        .catch(() => {});
+    }
     return () => { cancelled = true; };
   }, [invoice.id]);
 
@@ -262,10 +273,19 @@ export default function ReceiptModal({
               </div>
 
               <div className="invoice-head-right">
-                <div className="inv-pan-row">
-                  <span className="inv-label">Hospital PAN Number</span>
-                  <span className="inv-value mono">{tenant.panNumber || '—'}</span>
-                </div>
+                {String(data.type) === 'PHARMACY' && (pharmacyBilling.panNumber || pharmacyBilling.vatNumber) ? (
+                  <div className="inv-pan-row">
+                    <span className="inv-label">Pharmacy PAN / VAT No.</span>
+                    <span className="inv-value mono">
+                      {[pharmacyBilling.panNumber, pharmacyBilling.vatNumber].filter(Boolean).join(' / ')}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="inv-pan-row">
+                    <span className="inv-label">Hospital PAN Number</span>
+                    <span className="inv-value mono">{tenant.panNumber || '—'}</span>
+                  </div>
+                )}
                 <div className="invoice-title">INVOICE</div>
                 <div className="inv-rows">
                   <div className="inv-row">
@@ -289,7 +309,7 @@ export default function ReceiptModal({
                     </span>
                   </div>
                 </div>
-                {tenant.vatNumber ? (
+                {String(data.type) !== 'PHARMACY' && tenant.vatNumber ? (
                   <div className="inv-pan-row" style={{ marginTop: 10 }}>
                     <span className="inv-label">VAT Number</span>
                     <span className="inv-value mono">{tenant.vatNumber}</span>
@@ -437,6 +457,12 @@ export default function ReceiptModal({
                 <div>{data.notes}</div>
               </div>
             )}
+
+            {String(data.type) === 'PHARMACY' && data.barcode ? (
+              <div style={{ margin: '18px 0 4px', textAlign: 'center' }}>
+                <Barcode value={String(data.barcode)} />
+              </div>
+            ) : null}
 
             <div className="invoice-footer">
               Thank you for choosing {hospitalName}. Please retain this invoice for your records.

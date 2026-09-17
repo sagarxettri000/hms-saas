@@ -73,6 +73,89 @@ function ToggleList({ path }: { path: string }) {
   );
 }
 
+function PharmacyBillingSettings({ canEdit }: { canEdit: boolean }) {
+  const [vatNumber, setVatNumber] = useState('');
+  const [panNumber, setPanNumber] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    api('/pharmacy/billing-settings')
+      .then((res: any) => {
+        const v = res?.data ?? res ?? {};
+        setVatNumber(v.vatNumber ?? '');
+        setPanNumber(v.panNumber ?? '');
+      })
+      .catch((e: any) => setError(e?.message || 'Failed to load Pharmacy billing settings'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function save() {
+    setSaving(true);
+    setError('');
+    setSaved(false);
+    try {
+      await api('/pharmacy/billing-settings', {
+        method: 'PUT',
+        body: JSON.stringify({ vatNumber: vatNumber.trim() || undefined, panNumber: panNumber.trim() || undefined }),
+      });
+      setSaved(true);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <div className="loading">Loading…</div>;
+
+  return (
+    <div className="card" style={{ maxWidth: 560 }}>
+      <div className="card-title">Pharmacy Billing</div>
+      <p style={{ color: 'var(--muted)', fontSize: 13, margin: '0 0 12px' }}>
+        Tax registration numbers printed on <strong>Pharmacy receipts only</strong>. Other
+        departments keep using the hospital profile PAN/VAT.
+      </p>
+      <div className="field">
+        <label className="label">Pharmacy PAN Number</label>
+        <input
+          className="input"
+          value={panNumber}
+          onChange={(e) => setPanNumber(e.target.value)}
+          placeholder="e.g. 123456789"
+          disabled={!canEdit}
+        />
+      </div>
+      <div className="field">
+        <label className="label">Pharmacy VAT Number</label>
+        <input
+          className="input"
+          value={vatNumber}
+          onChange={(e) => setVatNumber(e.target.value)}
+          placeholder="e.g. 601234567"
+          disabled={!canEdit}
+        />
+      </div>
+      {error && <div className="alert alert-error">{error}</div>}
+      {saved && <div className="alert alert-success">Pharmacy billing settings saved.</div>}
+      {canEdit ? (
+        <div className="form-actions">
+          <button className="btn btn-primary" onClick={save} disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      ) : (
+        <p style={{ color: 'var(--muted)', fontSize: 12 }}>
+          Only hospital administrators can change these values.
+        </p>
+      )
+      }
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const role = useAuth();
   const canEditOrg = ['HOSPITAL_ADMIN', 'HOSPITAL_OWNER', 'PLATFORM_SUPER_ADMIN'].includes(role ?? '');
@@ -81,6 +164,11 @@ export default function SettingsPage() {
       key: 'hospital',
       label: 'Hospital',
       render: () => <OrgProfile />,
+    },
+    {
+      key: 'pharmacy-billing',
+      label: 'Pharmacy Billing',
+      render: () => <PharmacyBillingSettings canEdit={canEditOrg} />,
     },
     {
       key: 'users',

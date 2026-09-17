@@ -1,0 +1,10 @@
+import { PrismaClient } from '@prisma/client';
+const p = new PrismaClient();
+const d = await p.invoice.findFirst({ where: { type: 'PHARMACY' }, select: { invoiceNumber: true } });
+console.log('sample pharmacy invoice:', d?.invoiceNumber ?? 'NONE');
+console.log('pharmacy count:', await p.invoice.count({ where: { type: 'PHARMACY' } }));
+const setting = await p.tenantSetting.findFirst({ where: { key: { contains: 'pharmacy' } } });
+console.log('existing pharmacy setting:', setting?.key ?? 'NONE');
+const t = await p.tenant.findFirst({ select: { id: true, panNumber: true, vatNumber: true } });
+console.log('tenant pan:', t?.panNumber, 'vat:', t?.vatNumber);
+await p.$disconnect();

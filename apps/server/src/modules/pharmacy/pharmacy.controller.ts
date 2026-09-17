@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -26,7 +27,8 @@ import {
   Permissions,
   TenantScoped,
 } from "../../common/decorators/permissions.decorator";
-import { PermissionAction } from "@hms/shared";
+import { PermissionAction, UserRole } from "@hms/shared";
+import { Roles } from "../../common/decorators/permissions.decorator";
 
 @ApiTags("Pharmacy")
 @Controller("pharmacy")
@@ -215,5 +217,53 @@ export class PharmacyController {
   @ApiOperation({ summary: "Pharmacy summary statistics" })
   getPharmacySummary(@Req() req: any) {
     return this.pharmacyService.getPharmacySummary(req.user.tenantId);
+  }
+
+  // ---------- Pharmacy billing settings (Pharmacy-scoped VAT / PAN) ----------
+
+  /**
+   * GET /pharmacy/billing-settings — Pharmacy-scoped VAT/PAN numbers used
+   * only on Pharmacy bills/receipts. Never merged into other departments'
+   * documents.
+   */
+  @Get("billing-settings")
+  @Roles(
+    UserRole.HOSPITAL_ADMIN,
+    UserRole.HOSPITAL_OWNER,
+    UserRole.PLATFORM_SUPER_ADMIN,
+    UserRole.PHARMACIST,
+  )
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Get Pharmacy billing VAT/PAN settings" })
+  getBillingSettings(@Req() req: any) {
+    return this.pharmacyService.getBillingSettings(req.user.tenantId);
+  }
+
+  /**
+   * PUT /pharmacy/billing-settings — configuration changes are admin-only
+   * (pharmacists can view but not change financial configuration). Audited
+   * through the shared AuditService.
+   */
+  @Put("billing-settings")
+  @Roles(
+    UserRole.HOSPITAL_ADMIN,
+    UserRole.HOSPITAL_OWNER,
+    UserRole.PLATFORM_SUPER_ADMIN,
+  )
+  @Permissions(PermissionAction.CONFIGURE)
+  @ApiOperation({ summary: "Set Pharmacy billing VAT/PAN settings" })
+  async updateBillingSettings(
+    @Body() body: { vatNumber?: string; panNumber?: string },
+    @Req() req: any,
+  ) {
+    const value = {
+      vatNumber: typeof body?.vatNumber === "string" ? body.vatNumber.trim() : undefined,
+      panNumber: typeof body?.panNumber === "string" ? body.panNumber.trim() : undefined,
+    };
+    return this.pharmacyService.setBillingSettings(
+      req.user.tenantId,
+      value,
+      req.user.id,
+    );
   }
 }

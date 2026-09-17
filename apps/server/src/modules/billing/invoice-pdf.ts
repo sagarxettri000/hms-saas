@@ -2,6 +2,8 @@ const PAGE_W = 595.28;
 const PAGE_H = 841.89;
 const MARGIN = 40;
 
+import { code128Segments } from "./code128";
+
 function esc(s: string): string {
   return String(s).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
@@ -61,6 +63,13 @@ class PdfPage {
     this.lines.push(`${x1} ${y1} m ${x2} ${y2} l 0.6 w S`);
   }
 
+  /** Draw a Code128 barcode from pre-computed module segments. */
+  barcode(x: number, y: number, height: number, moduleW: number, segments: { x: number; w: number }[]) {
+    for (const s of segments) {
+      this.rect(x + s.x * moduleW, y, s.w * moduleW, height, "0 0 0");
+    }
+  }
+
   gap(n: number) { this.py -= n; }
   moveDown(n: number) { this.py -= n; }
   moveTo(y: number) { this.py = y; }
@@ -69,6 +78,7 @@ class PdfPage {
 interface InvoiceData {
   id: string;
   invoiceNumber: string;
+  barcode?: string | null;
   type: string;
   status: string;
   issuedDate: any;
@@ -186,6 +196,28 @@ function headerBlock(p: PdfPage, title: string, hospital: TenantData) {
 function infoRow(p: PdfPage, label: string, value: string, x: number, y: number, labelW = 80) {
   p.text(x, y, label, 9, "0.4 0.4 0.4");
   p.text(x + labelW, y, value, 10, "0 0 0");
+}
+
+/**
+ * Stamp a scannable Code128 barcode + human-readable value just above the
+ * invoice footer. Centered horizontally; only used for Pharmacy bills.
+ */
+function barcodeBlock(p: PdfPage, value: string) {
+  const segments = code128Segments(value);
+  // Bars occupy y 70–110; skip rather than overlap content that ends too low
+  // (dense single-page invoices).
+  if (!segments || p.y < 125) return;
+  const moduleW = 1.3;
+  const height = 40;
+  const totalModules = segments.reduce((s, seg) => s + seg.w, 0);
+  const x = (PAGE_W - totalModules * moduleW) / 2;
+  const y = 70; // above the footer block (footer text sits at y <= 50)
+  let cx = x;
+  for (const seg of segments) {
+    if (seg.bar) p.rect(cx, y, seg.w * moduleW, height, "0 0 0");
+    cx += seg.w * moduleW;
+  }
+  p.text(PAGE_W / 2 - 45, y + height + 5, value, 8, "0.3 0.3 0.3");
 }
 
 function buildInvoicePdfBuffer(pages: PdfPage[]): Buffer {
@@ -361,6 +393,9 @@ export function buildInvoicePdf(
       p.gap(14);
     }
   }
+
+  // Pharmacy bills carry a unique scannable barcode (their invoice number).
+  if (inv.type === "PHARMACY" && inv.barcode) barcodeBlock(p, inv.barcode);
 
   // Footer
   p.moveTo(50);

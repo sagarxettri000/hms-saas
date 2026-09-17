@@ -925,6 +925,10 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [patientList, setPatientList] = useState<any[]>([]);
+  const [patientQuery, setPatientQuery] = useState('');
+  const [patientSearching, setPatientSearching] = useState(false);
+  const [patientSearchErr, setPatientSearchErr] = useState('');
+  const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [isWalkIn, setIsWalkIn] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -937,17 +941,57 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
   const [invList, setInvList] = useState<any[]>([]);
 
   useEffect(() => {
-    Promise.all([api('/pharmacy/stores'), api('/patients?limit=500'), api('/pharmacy/inventory?limit=500')])
-      .then(([storeRes, patientRes, invRes]: any[]) => {
+    Promise.all([api('/pharmacy/stores'), api('/pharmacy/inventory?limit=500')])
+      .then(([storeRes, invRes]: any[]) => {
         const allStores = toList(storeRes);
         const filtered = allStores.filter((s: any) => s.location?.toLowerCase().includes('ground floor'));
         const available = filtered.length > 0 ? filtered : allStores;
         if (available.length > 0) setStoreId(available[0].id);
-        setPatientList(toList(patientRes));
         setInvList(toList(invRes));
       })
       .catch(() => {});
   }, []);
+
+  // Debounced server-side patient lookup (name / MRN / phone / email).
+  // Never loads the full patient table; the backend is tenant-scoped.
+  useEffect(() => {
+    if (isWalkIn) return; // not needed for anonymous walk-in customers
+    const q = patientQuery.trim();
+    if (q.length < 2) {
+      setPatientList([]);
+      setPatientSearching(false);
+      setPatientSearchErr('');
+      return;
+    }
+    setPatientSearching(true);
+    setPatientSearchErr('');
+    const t = setTimeout(() => {
+      api(`/patients/search?search=${encodeURIComponent(q)}&limit=8`)
+        .then((res: any) => {
+          const list = Array.isArray(res) ? res : (res?.data?.data ?? res?.data ?? []);
+          setPatientList(Array.isArray(list) ? list : []);
+        })
+        .catch((e: any) => {
+          setPatientList([]);
+          setPatientSearchErr(e?.message || 'Patient search failed');
+        })
+        .finally(() => setPatientSearching(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [patientQuery, isWalkIn]);
+
+  function selectPatient(p: any) {
+    setSelectedPatient(p);
+    setPatientId(p.id);
+    setPatientQuery('');
+    setPatientList([]);
+    setPatientSearchErr('');
+  }
+
+  function clearPatient() {
+    setSelectedPatient(null);
+    setPatientId('');
+  }
 
   const stockOf = useMemo(() => {
     const map: Record<string, number> = {};
@@ -1084,27 +1128,97 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
                   <button
                     type="button"
                     className={`btn btn-sm ${!isWalkIn ? 'btn-primary' : ''}`}
-                    onClick={() => { setIsWalkIn(false); setCustomerName(''); setCustomerPhone(''); }}
+                    onClick={() => { setIsWalkIn(false); setCustomerName(''); setCustomerPhone(''); clearPatient(); }}
                   >
                     Hospital Patient
                   </button>
                   <button
                     type="button"
                     className={`btn btn-sm ${isWalkIn ? 'btn-primary' : ''}`}
-                    onClick={() => { setIsWalkIn(true); setPatientId(''); }}
+                    onClick={() => { setIsWalkIn(true); setPatientId(''); clearPatient(); }}
                   >
                     + New Walk-in Customer
                   </button>
                 </div>
                 {!isWalkIn ? (
-                  <select className="input" value={patientId} onChange={(e) => setPatientId(e.target.value)}>
-                    <option value="">Select patient</option>
-                    {patientList.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.firstName} {p.lastName}{p.mrn ? ` (${p.mrn})` : ''}{p.mobile ? ` - ${p.mobile}` : ''}
-                      </option>
-                    ))}
-                  </select>
+                  selectedPatient ? (
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+                      padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8,
+                      background: 'var(--surface-muted, transparent)',
+                    }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>
+                          {[selectedPatient.firstName, selectedPatient.lastName].filter(Boolean).join(' ')}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          {selectedPatient.mrn ? `MRN: ${selectedPatient.mrn}` : ''}
+                          {selectedPatient.mobile ? ` · ${selectedPatient.mobile}` : ''}
+                        </div>
+                      </div>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={clearPatient}>
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        className="input search-input"
+                        value={patientQuery}
+                        onChange={(e) => setPatientQuery(e.target.value)}
+                        placeholder="Search patient by name, MRN or phone..."
+                        autoComplete="off"
+                      />
+                      {patientSearching && (
+                        <div style={{ position: 'absolute', right: 10, top: 9, fontSize: 11, color: 'var(--text-muted)' }}>
+                          Searching…
+                        </div>
+                      )}
+                      {patientSearchErr && (
+                        <div style={{ color: '#dc2626', fontSize: 12, marginTop: 4 }}>{patientSearchErr}</div>
+                      )}
+                      {patientList.length > 0 && (
+                        <div style={{
+                          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 60,
+                          border: '1px solid var(--border)', borderRadius: 8, maxHeight: 240, overflowY: 'auto',
+                          background: 'var(--surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                        }}>
+                          {patientList.map((p) => (
+                            <div
+                              key={p.id}
+                              onMouseDown={() => selectPatient(p)}
+                              style={{
+                                padding: '9px 14px', cursor: 'pointer', fontSize: 13,
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+                                borderBottom: '1px solid var(--border)',
+                              }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 600 }}>
+                                  {[p.firstName, p.lastName].filter(Boolean).join(' ')}
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                  {p.mrn ? `MRN: ${p.mrn}` : 'No MRN'}
+                                </div>
+                              </div>
+                              <div style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>
+                                {p.mobile || p.phone || '—'}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {patientQuery.trim().length >= 2 && !patientSearching && patientList.length === 0 && !patientSearchErr && (
+                        <div style={{
+                          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 60,
+                          border: '1px solid var(--border)', borderRadius: 8,
+                          background: 'var(--surface)', padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)',
+                        }}>
+                          No patients match "{patientQuery.trim()}"
+                        </div>
+                      )}
+                    </div>
+                  )
                 ) : (
                   <div style={{ display: 'flex', gap: 8 }}>
                     <input

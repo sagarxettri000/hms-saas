@@ -6,7 +6,9 @@ import {
 import { BillingService } from "./billing.service";
 
 function makeService(prisma: any): BillingService {
-  return new BillingService(prisma, { create: jest.fn().mockResolvedValue({}) } as any);
+  return new BillingService(prisma, { create: jest.fn().mockResolvedValue({}) } as any, {
+    getBillingSettings: jest.fn().mockResolvedValue({}),
+  } as any);
 }
 
 describe("BillingService", () => {
@@ -809,6 +811,39 @@ describe("BillingService", () => {
       await expect(
         service.closeDay("t1", { reconcile: true }, "u1"),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe("taxRegistrationBlock (Pharmacy VAT/PAN isolation)", () => {
+    const hospital = { panNumber: "HOSP-PAN", vatNumber: "HOSP-VAT" };
+
+    it("gives non-pharmacy documents only hospital values, never Pharmacy ones", async () => {
+      const prisma = {} as any;
+      const pharmacy = {
+        getBillingSettings: jest.fn().mockResolvedValue({ panNumber: "PH-PAN", vatNumber: "PH-VAT" }),
+      };
+      const service = new BillingService(prisma, { create: jest.fn() } as any, pharmacy as any);
+      const block = await (service as any).taxRegistrationBlock("t1", "OPD", hospital);
+      expect(block).toEqual({ panNumber: "HOSP-PAN", vatNumber: "HOSP-VAT" });
+      expect(pharmacy.getBillingSettings).not.toHaveBeenCalled();
+    });
+
+    it("uses Pharmacy-scoped values for pharmacy documents", async () => {
+      const prisma = {} as any;
+      const pharmacy = {
+        getBillingSettings: jest.fn().mockResolvedValue({ panNumber: "PH-PAN", vatNumber: "PH-VAT" }),
+      };
+      const service = new BillingService(prisma, { create: jest.fn() } as any, pharmacy as any);
+      const block = await (service as any).taxRegistrationBlock("t1", "PHARMACY", hospital);
+      expect(block).toEqual({ panNumber: "PH-PAN", vatNumber: "PH-VAT" });
+    });
+
+    it("falls back to hospital values when Pharmacy numbers are unset", async () => {
+      const prisma = {} as any;
+      const pharmacy = { getBillingSettings: jest.fn().mockResolvedValue({}) };
+      const service = new BillingService(prisma, { create: jest.fn() } as any, pharmacy as any);
+      const block = await (service as any).taxRegistrationBlock("t1", "PHARMACY", hospital);
+      expect(block).toEqual({ panNumber: "HOSP-PAN", vatNumber: "HOSP-VAT" });
     });
   });
 });

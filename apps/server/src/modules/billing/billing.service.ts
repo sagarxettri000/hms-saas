@@ -7,6 +7,7 @@ import {
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { PharmacyService } from "../pharmacy/pharmacy.service";
 import { buildInvoicePdf, buildReceiptPdf } from "./invoice-pdf";
 
 const MAX_LIMIT = 100;
@@ -204,6 +205,7 @@ export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly pharmacyService: PharmacyService,
   ) {}
 
   // ---------- Invoices ----------
@@ -2105,6 +2107,32 @@ amount: Number(refund.amount),
     };
   }
 
+  /**
+   * Tax registration block for PDFs. Pharmacy bills use the Pharmacy-scoped
+   * PAN/VAT (TenantSetting `pharmacyBilling`); if unset they fall back to the
+   * hospital profile values. Non-pharmacy documents only ever see hospital
+   * values — the Pharmacy numbers cannot leak into them.
+   */
+  private async taxRegistrationBlock(
+    tenantId: string,
+    type: string,
+    tenant: { panNumber?: string | null; vatNumber?: string | null },
+  ) {
+    if (type !== "PHARMACY") {
+      return { panNumber: tenant.panNumber ?? undefined, vatNumber: tenant.vatNumber ?? undefined };
+    }
+    let pharmacy: { panNumber?: string; vatNumber?: string } = {};
+    try {
+      pharmacy = await this.pharmacyService.getBillingSettings(tenantId);
+    } catch {
+      pharmacy = {};
+    }
+    return {
+      panNumber: pharmacy.panNumber ?? tenant.panNumber ?? undefined,
+      vatNumber: pharmacy.vatNumber ?? tenant.vatNumber ?? undefined,
+    };
+  }
+
   async generateInvoicePdf(tenantId: string, id: string, userId?: string) {
     const invoice = await this.findInvoiceById(tenantId, id);
     const tenant = await this.prisma.tenant.findUnique({
@@ -2135,7 +2163,12 @@ amount: Number(refund.amount),
       format: "invoice",
     });
 
-    const buffer = buildInvoicePdf(invoice as any, tenant as any, generatedBy);
+    const taxBlock = await this.taxRegistrationBlock(tenantId, invoice.type, tenant as any);
+    const buffer = buildInvoicePdf(
+      invoice as any,
+      { ...(tenant as any), panNumber: taxBlock.panNumber, vatNumber: taxBlock.vatNumber },
+      generatedBy,
+    );
     const filename = `${invoice.invoiceNumber}.pdf`;
     return { buffer, filename };
   }
@@ -2176,7 +2209,13 @@ amount: Number(refund.amount),
       format: "receipt",
     });
 
-    const buffer = buildReceiptPdf(invoice as any, payment as any, tenant as any, generatedBy);
+    const taxBlock = await this.taxRegistrationBlock(tenantId, invoice.type, tenant as any);
+    const buffer = buildReceiptPdf(
+      invoice as any,
+      payment as any,
+      { ...(tenant as any), panNumber: taxBlock.panNumber, vatNumber: taxBlock.vatNumber },
+      generatedBy,
+    );
     const filename = `${payment.paymentNumber}.pdf`;
     return { buffer, filename };
   }

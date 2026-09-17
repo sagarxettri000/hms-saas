@@ -117,11 +117,15 @@ export class TenantsService {
         },
       });
 
-      // Create hospital admin user if provided
       let adminUser: any = null;
-      let temporaryPassword: string | undefined;
+      // A temporary password is generated server-side when the onboarding
+      // caller did not supply one, but it is NEVER returned to the response —
+      // the endpoint is public, and echoing a credential to an anonymous
+      // caller would leak it. The PENDING admin activates via a platform
+      // admin instead (see status/mustChangePassword below).
       if (dto.adminEmail && dto.adminFirstName && dto.adminLastName) {
-        const password = dto.adminPassword || this.generateTemporaryPassword();
+        const password =
+          dto.adminPassword || this.generateTemporaryPassword();
         const passwordHash = await this.hashPassword(password);
         adminUser = await tx.user.create({
           data: {
@@ -152,7 +156,6 @@ export class TenantsService {
             mustChangePassword: true,
           },
         });
-        if (!dto.adminPassword) temporaryPassword = password;
       }
 
       // Create default departments
@@ -186,7 +189,7 @@ export class TenantsService {
         });
       }
 
-      return { tenant, adminUser, temporaryPassword };
+      return { tenant, adminUser };
     });
 
     return result;

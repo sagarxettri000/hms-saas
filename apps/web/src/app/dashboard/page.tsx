@@ -1317,10 +1317,6 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          {group !== 'ADMIN' && group !== 'SUPER' && (
-            
-          )}
-
           {group === 'RAD' && radMeta && (
             <>
               <div className="dash-hero dash-hero-blue">

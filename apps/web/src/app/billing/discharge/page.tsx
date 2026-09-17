@@ -3,17 +3,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { formatMoney } from '@/lib/hooks';
 import type { ApiResponse, Row } from '@/lib/types';
 
 const DISCHARGE_STATUS_OPTIONS = [
-  { value: '', label: 'All' },
-  { value: 'CLINICALLY_READY', label: 'Clinically Ready' },
-  { value: 'BILLING_PENDING', label: 'Billing Pending' },
-  { value: 'BILL_READY', label: 'Bill Ready' },
-  { value: 'PAYMENT_PENDING', label: 'Payment Pending' },
-  { value: 'FINANCIALLY_CLEARED', label: 'Financially Cleared' },
+  { value: '', label: 'All admitted' },
+  { value: 'ADMITTED', label: 'Admitted (billing pending)' },
+  { value: 'DISCHARGED', label: 'Discharged' },
 ];
+
+function mapAdmissionStatus(status: string) {
+  switch (status) {
+    case 'ADMITTED':
+      return 'ADMITTED';
+    case 'DISCHARGED':
+      return 'DISCHARGED';
+    default:
+      return '';
+  }
+}
 
 export default function DischargePage() {
   const router = useRouter();
@@ -37,8 +44,9 @@ export default function DischargePage() {
       q.set('page', '1');
       q.set('limit', '50');
       if (search.trim()) q.set('search', search.trim());
-      if (status) q.set('status', status);
-      const res: ApiResponse<any> = await api(`/ipd/admissions?${q.toString()}`);
+      const mapped = mapAdmissionStatus(status);
+      if (mapped) q.set('status', mapped);
+      const res: ApiResponse<any> = await api(`/admissions?${q.toString()}`);
       const payload = res.data as any;
       setAdmissions(Array.isArray(payload) ? payload : payload.data ?? []);
     } catch {
@@ -66,8 +74,14 @@ export default function DischargePage() {
     return [a.patient?.firstName, a.patient?.lastName].filter(Boolean).join(' ') || a.patientId || '—';
   }
 
-  function formatCurrency(amount: any) {
-    return formatMoney(amount);
+  function admissionWard(a: Row) {
+    const allocations = (a.bedAllocations as Row[] | undefined) || [];
+    const bed = allocations[0]?.bed as Row | undefined;
+    return (bed?.ward as Row | undefined)?.name || bed?.name || '—';
+  }
+
+  function admissionStatus(a: Row) {
+    return a.isDischarged || a.status === 'DISCHARGED' ? 'DISCHARGED' : 'ADMITTED';
   }
 
   return (
@@ -127,9 +141,9 @@ export default function DischargePage() {
                     <td><span className="mono">{a.admissionNumber}</span></td>
                     <td>{admissionName(a)}</td>
                     <td>{a.admissionDate ? new Date(a.admissionDate).toLocaleDateString() : '—'}</td>
-                    <td>{a.bed?.ward?.name || '—'}</td>
+                    <td>{admissionWard(a)}</td>
                     <td>
-                      <span className={`badge badge-${a.dischargeStatus === 'FINANCIALLY_CLEARED' ? 'green' : a.dischargeStatus === 'BILLING_PENDING' ? 'blue' : a.dischargeStatus === 'PAYMENT_PENDING' ? 'yellow' : 'gray'}`}>{a.dischargeStatus}</span>
+                      <span className={`badge ${admissionStatus(a) === 'DISCHARGED' ? 'badge-gray' : 'badge-blue'}`}>{admissionStatus(a)}</span>
                     </td>
                     <td>
                       <button

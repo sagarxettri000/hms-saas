@@ -347,13 +347,29 @@ export class AttendanceService {
     return this.history(tenantId, targetUserId, query.from, query.to, page, limit);
   }
 
-  async adminTodayRoster(tenantId: string, query: { role?: string; departmentId?: string }) {
+  async adminTodayRoster(
+    tenantId: string,
+    query: { role?: string; departmentId?: string; status?: string; search?: string },
+  ) {
     const now = new Date();
     const { start, end } = dayBounds(now);
 
     const userWhere: Prisma.UserWhereInput = { isActive: true, deletedAt: null };
     if (query.role) userWhere.role = query.role as any;
     if (query.departmentId) userWhere.departmentId = query.departmentId;
+    if (query.search) {
+      userWhere.OR = [
+        { firstName: { contains: query.search, mode: "insensitive" } },
+        { lastName: { contains: query.search, mode: "insensitive" } },
+        { email: { contains: query.search, mode: "insensitive" } },
+        { staffProfile: { is: { employeeCode: { contains: query.search, mode: "insensitive" } } } },
+      ];
+    }
+
+    const statusFilter =
+      query.status === "PRESENT" || query.status === "ABSENT" || query.status === "NOT_CLOCKED_IN" || query.status === "CLOCKED_OUT"
+        ? query.status
+        : undefined;
 
     const staff = await this.prisma.user.findMany({
       where: userWhere,
@@ -401,13 +417,15 @@ export class AttendanceService {
       };
     });
 
+    const filtered = statusFilter ? rows.filter((r) => r.status === statusFilter) : rows;
+
     const summary = {
-      present: rows.filter((r) => r.status === "PRESENT").length,
-      absent: rows.filter((r) => r.status === "ABSENT").length,
-      notClockedIn: rows.filter((r) => r.status === "NOT_CLOCKED_IN").length,
+      present: filtered.filter((r) => r.status === "PRESENT").length,
+      absent: filtered.filter((r) => r.status === "ABSENT").length,
+      notClockedIn: filtered.filter((r) => r.status === "NOT_CLOCKED_IN").length,
     };
 
-    return { data: rows, total: rows.length, summary };
+    return { data: filtered, total: filtered.length, summary };
   }
 
   // ---------------------------------------------------------------

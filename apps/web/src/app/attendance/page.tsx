@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api } from '@/lib/api';
-import { formatDate, formatDateTime } from '@/lib/hooks';
+import { api, listOf } from '@/lib/api';
+import { formatDate } from '@/lib/hooks';
 
 interface Row {
   id: string | null;
@@ -87,18 +87,18 @@ export default function AttendancePage() {
     setError(null);
     try {
       const params = new URLSearchParams();
+      if (status) params.set('status', status);
       if (role) params.set('role', role);
       if (departmentId) params.set('departmentId', departmentId);
       if (search) params.set('search', search);
       const r = await api(`/hr/attendance/admin/roster?${params.toString()}`);
-      const rosterList = r?.data ?? r?.roster ?? [];
-      setRows(Array.isArray(rosterList) ? rosterList : Array.isArray(rosterList?.rows) ? rosterList.rows : Array.isArray(rosterList?.roster) ? rosterList.roster : []);
-      setSummary(r?.summary ?? { present: 0, absent: 0, notClockedIn: 0 });
+      setRows(listOf(r));
+      setSummary(r?.data?.summary ?? r?.summary ?? { present: 0, absent: 0, notClockedIn: 0 });
     } catch (e: any) {
       setError(e?.message || 'Could not load attendance');
     }
     setLoading(false);
-  }, [role, departmentId, search]);
+  }, [status, role, departmentId, search]);
 
   useEffect(() => {
     loadRoster();
@@ -115,8 +115,7 @@ export default function AttendancePage() {
     setHistoryLoading(true);
     try {
       const r = await api(`/hr/attendance/admin/${row.userId}`);
-      const hist = r?.data ?? r?.history ?? r?.records ?? [];
-      setHistory(Array.isArray(hist) ? hist : Array.isArray(hist?.data) ? hist.data : Array.isArray(hist?.results) ? hist.results : []);
+      setHistory(listOf(r));
     } catch {
       setHistory([]);
     }

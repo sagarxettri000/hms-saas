@@ -32,6 +32,7 @@ export interface AdmissionSearchParams {
   patientId?: string;
   departmentId?: string;
   status?: string;
+  search?: string;
   from?: string;
   to?: string;
   page?: number;
@@ -161,6 +162,24 @@ export class AdmissionsService {
     if (params.patientId) where.patientId = params.patientId;
     if (params.departmentId) where.departmentId = params.departmentId;
     if (params.status) where.status = params.status;
+
+    if (params.search && params.search.trim()) {
+      const term = params.search.trim();
+      where.OR = [
+        { admissionNumber: { contains: term, mode: "insensitive" } },
+        {
+          patient: {
+            is: {
+              OR: [
+                { firstName: { contains: term, mode: "insensitive" } },
+                { lastName: { contains: term, mode: "insensitive" } },
+                { mrn: { contains: term, mode: "insensitive" } },
+              ],
+            },
+          },
+        },
+      ];
+    }
 
     if (params.from || params.to) {
       where.admissionDate = {};

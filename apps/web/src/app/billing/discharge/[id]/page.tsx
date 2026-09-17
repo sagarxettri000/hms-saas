@@ -36,6 +36,8 @@ export default function DischargeWorkspacePage() {
   const [cancelReason, setCancelReason] = useState('');
   const [showFinalize, setShowFinalize] = useState(false);
   const [showDischargeConfirm, setShowDischargeConfirm] = useState(false);
+  const [departmentNameState, setDepartmentNameState] = useState('');
+  const [doctorNameState, setDoctorNameState] = useState('');
 
   useEffect(() => {
     const t = setTimeout(() => setFlash(null), 4000);
@@ -45,7 +47,7 @@ export default function DischargeWorkspacePage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const admRes = (await api(`/ipd/admissions/${admissionId}`)) as ApiResponse<Row>;
+      const admRes = (await api(`/admissions/${admissionId}`)) as ApiResponse<Row>;
       const adm = (admRes.data ?? admRes) as Row;
       const patientId = adm.patientId;
 
@@ -57,6 +59,25 @@ export default function DischargeWorkspacePage() {
 
       setAdmission(adm);
       setPatient((adm.patient as Row) || null);
+
+      // Resolve department / doctor names (admission only carries ids)
+      if (adm.departmentId) {
+        api(`/departments/${adm.departmentId}`)
+          .then((d: any) => setDepartmentNameState(d?.data?.name || ''))
+          .catch(() => setDepartmentNameState(''));
+      } else {
+        setDepartmentNameState('');
+      }
+      if (adm.admittingDoctorId) {
+        api(`/doctors/${adm.admittingDoctorId}`)
+          .then((d: any) => {
+            const doc = d?.data ?? d;
+            setDoctorNameState([doc?.firstName, doc?.lastName].filter(Boolean).join(' ') || doc?.name || '');
+          })
+          .catch(() => setDoctorNameState(''));
+      } else {
+        setDoctorNameState('');
+      }
 
       const billData = (billRes.data?.data ?? billRes.data ?? null) as any;
       if (billData && billData.id) {
@@ -219,9 +240,9 @@ export default function DischargeWorkspacePage() {
   async function handleCompleteDischarge() {
     setActionLoading(true);
     try {
-      await api(`/ipd/admissions/${admissionId}/discharge`, {
-        method: 'PATCH',
-        body: JSON.stringify({ dischargeType: 'BILLING_CLEARED' }),
+      await api(`/admissions/${admissionId}/discharge`, {
+        method: 'POST',
+        body: JSON.stringify({ dischargeType: 'RECOVERED' }),
       });
       setShowDischargeConfirm(false);
       setFlash('Patient discharged successfully.');
@@ -239,9 +260,11 @@ export default function DischargeWorkspacePage() {
   const details = detailCharges;
   const payments = paymentsHistory;
   const totalDeposits = deposits.reduce((s, d) => s + Number(d.amount || 0), 0);
-  const bed = admission.bed as Row | undefined;
+  const allocations = (admission.bedAllocations as Row[] | undefined) || [];
+  const bed = allocations[0]?.bed as Row | undefined;
   const ward = bed?.ward as Row | undefined;
-  const doctor = admission.admittingDoctor as Row | undefined;
+  const departmentName = departmentNameState || admission.departmentId || '—';
+  const doctorName = doctorNameState || admission.admittingDoctorId || '—';
   const patientNameStr = patient ? [patient.firstName, patient.lastName].filter(Boolean).join(' ') : '—';
 
   return (
@@ -292,8 +315,8 @@ export default function DischargeWorkspacePage() {
               <table className="table">
                 <tbody>
                   <tr><td style={{ fontWeight: 600 }}>Admission Type</td><td>{admission.admissionType}</td></tr>
-                  <tr><td style={{ fontWeight: 600 }}>Department</td><td>{admission.department?.name || admission.departmentId || '—'}</td></tr>
-                  <tr><td style={{ fontWeight: 600 }}>Admitting Doctor</td><td>{doctor?.firstName ? `${doctor.firstName} ${doctor.lastName}` : '—'}</td></tr>
+                  <tr><td style={{ fontWeight: 600 }}>Department</td><td>{departmentName}</td></tr>
+                  <tr><td style={{ fontWeight: 600 }}>Admitting Doctor</td><td>{doctorName}</td></tr>
                   <tr><td style={{ fontWeight: 600 }}>Diagnosis</td><td>{admission.finalDiagnosis || admission.primaryDiagnosis || admission.provisionalDiagnosis || '—'}</td></tr>
                   <tr><td style={{ fontWeight: 600 }}>Discharge Summary</td><td>{admission.dischargeSummary || '—'}</td></tr>
                 </tbody>

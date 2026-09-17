@@ -467,6 +467,117 @@ function MedicineCsvImportModal({ onClose, onDone }: { onClose: () => void; onDo
   );
 }
 
+function EditMedicineModal({
+  med, onClose, onDone,
+}: {
+  med: any;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [values, setValues] = useState(() => ({
+    name: med?.name || '',
+    form: med?.form || '',
+    strength: med?.strength || '',
+    salesRate: Number(med?.salesRate ?? med?.salesPrice ?? 0),
+  }));
+  const [stockValue, setStockValue] = useState<number | null>(null);
+  const [stockId, setStockId] = useState<string | null>(null);
+  const [storeLabel, setStoreLabel] = useState('primary store');
+  const [loadingStock, setLoadingStock] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([api('/pharmacy/stores?limit=200'), api(`/pharmacy/inventory?medicineId=${med.id}&limit=20`)])
+      .then(([storesRes, invRes]: any[]) => {
+        const stores = toList(storesRes);
+        const primary = stores.find((s: any) => String(s.location || '').toLowerCase().includes('ground floor'))
+          || stores[0];
+        if (!primary) { if (!cancelled) { setLoadingStock(false); } return; }
+        setStoreLabel(primary.name || 'primary store');
+        const item = toList(invRes).find((i: any) => String(i.storeId) === String(primary.id));
+        if (!cancelled) {
+          setStockValue(item ? Number(item.currentStock) || 0 : 0);
+          setStockId(item?.id ?? null);
+          setLoadingStock(false);
+        }
+      })
+      .catch(() => { if (!cancelled) setLoadingStock(false); });
+    return () => { cancelled = true; };
+  }, [med.id]);
+
+  function set(field: string, value: any) {
+    setValues((v) => ({ ...v, [field]: value }));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!values.name.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      await api(`/pharmacy/medicines/${med.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name: values.name, form: values.form, strength: values.strength, salesRate: Number(values.salesRate) || 0 }),
+      });
+      if (stockId && stockValue != null) {
+        await api(`/pharmacy/inventory/${stockId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ currentStock: Number(stockValue) || 0 }),
+        });
+      }
+      onDone();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update medicine');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 className="modal-title">Edit Medicine</h3>
+          <button className="modal-close" onClick={onClose}>x</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="form-grid">
+            <div className="field">
+              <label className="label">Name *</label>
+              <input className="input" value={values.name} onChange={(e) => set('name', e.target.value)} required />
+            </div>
+            <div className="field">
+              <label className="label">Form</label>
+              <input className="input" value={values.form} onChange={(e) => set('form', e.target.value)} placeholder="Tablet, Injection..." />
+            </div>
+            <div className="field">
+              <label className="label">Strength</label>
+              <input className="input" value={values.strength} onChange={(e) => set('strength', e.target.value)} placeholder="500mg" />
+            </div>
+            <div className="field">
+              <label className="label">Stock ({storeLabel})</label>
+              <input className="input" type="number" min="0" value={stockValue ?? ''} onChange={(e) => setStockValue(Number(e.target.value))} disabled={loadingStock} placeholder={loadingStock ? 'Loading…' : '0'} />
+            </div>
+            <div className="field">
+              <label className="label">Sales Price</label>
+              <input className="input" type="number" min="0" step="0.01" value={values.salesRate || ''} onChange={(e) => set('salesRate', Number(e.target.value))} />
+            </div>
+          </div>
+          {error && <div className="alert alert-error">{error}</div>}
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function MedicinesTab() {
   const [medicines, setMedicines] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -475,6 +586,7 @@ function MedicinesTab() {
   const [sort, setSort] = useState('name-asc');
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [editTarget, setEditTarget] = useState<any>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -560,6 +672,7 @@ function MedicinesTab() {
                 <th>Sales Price</th>
                 <th>Reorder Level</th>
                 <th>Status</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -583,7 +696,10 @@ function MedicinesTab() {
                       <span className={`badge ${m.isActive ? 'badge-green' : 'badge-gray'}`}>
                         {m.isActive ? 'ACTIVE' : 'INACTIVE'}
                       </span>
-                      {low && <span className="badge badge-yellow" style={{ marginLeft: 4 }}>LOW</span>}
+                        {low && <span className="badge badge-yellow" style={{ marginLeft: 4 }}>LOW</span>}
+                    </td>
+                    <td>
+                      <button className="btn btn-sm btn-secondary" onClick={() => setEditTarget(m)}>Edit</button>
                     </td>
                   </tr>
                 );
@@ -595,6 +711,13 @@ function MedicinesTab() {
 
       {showAdd && <AddMedicineModal onClose={() => setShowAdd(false)} onDone={() => { setShowAdd(false); load(); }} />}
       {showImport && <MedicineCsvImportModal onClose={() => setShowImport(false)} onDone={() => { setShowImport(false); load(); }} />}
+      {editTarget && (
+        <EditMedicineModal
+          med={editTarget}
+          onClose={() => setEditTarget(null)}
+          onDone={() => { setEditTarget(null); load(); }}
+        />
+      )}
     </>
   );
 }

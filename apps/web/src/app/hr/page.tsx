@@ -318,7 +318,6 @@ export default function HrPage() {
         <button className={`tab ${tab === 'rosters' ? 'active' : ''}`} onClick={() => setTab('rosters')}>Rosters</button>
         <button className={`tab ${tab === 'leaves' ? 'active' : ''}`} onClick={() => setTab('leaves')}>Leaves</button>
         <button className={`tab ${tab === 'departments' ? 'active' : ''}`} onClick={() => setTab('departments')}>Departments</button>
-        <button className={`tab ${tab === 'attendance' ? 'active' : ''}`} onClick={() => setTab('attendance')}>Attendance</button>
         <button className={`tab ${tab === 'training' ? 'active' : ''}`} onClick={() => setTab('training')}>Training</button>
       </div>
 

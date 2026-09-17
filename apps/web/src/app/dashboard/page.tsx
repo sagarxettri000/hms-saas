@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { api, safe } from '@/lib/api';
 import { formatMoney, formatDate, formatDateTime, badgeTone } from '@/lib/hooks';
-import AttendanceCard from '@/components/AttendanceCard';
+
 import {
   BarList,
   DashboardSkeletons,
@@ -1318,7 +1318,7 @@ export default function DashboardPage() {
           </div>
 
           {group !== 'ADMIN' && group !== 'SUPER' && (
-            <AttendanceCard role={role} />
+            
           )}
 
           {group === 'RAD' && radMeta && (

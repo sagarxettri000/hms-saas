@@ -14,7 +14,6 @@ import {
   Leaderboard,
   OccupancyBar,
   Sparkline,
-  StockHealth,
   TrendChart,
   WidgetCard,
   deltaOf,
@@ -90,12 +89,6 @@ function listOf(r: any): any[] {
   if (Array.isArray(u.items)) return u.items;
   if (Array.isArray(u.appointments)) return u.appointments;
   if (Array.isArray(u.invoices)) return u.invoices;
-  return [];
-}
-
-function toList(v: any): any[] {
-  if (v == null) return [];
-  if (Array.isArray(v)) return v;
   return [];
 }
 
@@ -242,7 +235,6 @@ export default function DashboardPage() {
   const [yesterday, setYesterday] = useState<any>(null);
   const [doctors, setDoctors] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
-  const [stockHealth, setStockHealth] = useState<any>(null);
   const [labPipeline, setLabPipeline] = useState<any>(null);
   const [bedsState, setBedsState] = useState<any>({ occupied: 0, total: 0 });
   const [pharmSummary, setPharmSummary] = useState<any>(null);
@@ -360,14 +352,12 @@ export default function DashboardPage() {
 
   async function loadAdminData(isSuper: boolean) {
     const todayStart = startOfToday().toISOString();
-    const [summaryR, todayR, analyticsR, usersStatsR, todaySummaryR, alertsR, pharmSummaryR] = await Promise.all([
+    const [summaryR, todayR, analyticsR, usersStatsR, todaySummaryR] = await Promise.all([
       safe(api('/reports/summary')),
       safe(api('/appointments/today')),
       safe(api('/billing/analytics')),
       safe(api('/users/stats')),
       safe(api(`/reports/summary?from=${todayStart}`)),
-      safe(api('/pharmacy/alerts')),
-      safe(api('/pharmacy/summary')),
     ]);
     const s = summaryOf(summaryR);
     const appts = listOf(todayR);
@@ -378,11 +368,6 @@ export default function DashboardPage() {
     const todaySum = summaryOf(todaySummaryR);
     const beds = s.bedOccupancy || { occupied: 0, total: 0 };
     const occupancy = beds.total > 0 ? Math.round((beds.occupied / beds.total) * 100) : 0;
-    const pharmAlerts = summaryOf(alertsR);
-    const pharmSummary = summaryOf(pharmSummaryR);
-    const pharmTotal = pharmSummary.totalMedicines ?? 0;
-    const pharmLow = toList(pharmAlerts?.lowStock).length;
-    const pharmOut = toList(pharmAlerts?.outOfStock).length;
 
     setFinance(analytics);
     setBedsState(beds);
@@ -430,14 +415,6 @@ export default function DashboardPage() {
       },
       { label: 'Total staff', value: totalStaff, tone: 'blue', icon: '👥' },
     ]);
-
-    setStockHealth({
-      pct: pharmTotal > 0 ? ((pharmTotal - pharmLow - pharmOut) / pharmTotal) * 100 : 100,
-      low: pharmLow,
-      out: pharmOut,
-      expiring: pharmAlerts?.summary?.nearExpiryCount ?? 0,
-      total: pharmTotal,
-    });
 
     setFocus({
       title: "Today's schedule",
@@ -885,31 +862,17 @@ export default function DashboardPage() {
   }
 
   async function loadPharmacyData() {
-    const [summaryR, alertsR, analyticsR] = await Promise.all([
+    const [summaryR, analyticsR] = await Promise.all([
       safe(api('/pharmacy/summary')),
-      safe(api('/pharmacy/alerts')),
       safe(api('/billing/analytics')),
     ]);
     const s = summaryOf(summaryR);
-    const alerts = summaryOf(alertsR);
     const pharmacyRevenue = summaryOf(analyticsR)?.today?.revenueByType?.PHARMACY ?? 0;
-    const lowStock = Array.isArray(alerts.lowStock) ? alerts.lowStock : [];
-    const outOfStock = Array.isArray(alerts.outOfStock) ? alerts.outOfStock : [];
     const totalMedicines = s.totalMedicines ?? 0;
-    const lowCount = lowStock.length;
-    const outCount = outOfStock.length;
 
     setPharmSummary(s);
     setPharmTrend(Array.isArray(s.trend) ? s.trend : []);
     setPharmTop(Array.isArray(s.topMedicines) ? s.topMedicines : []);
-
-    setStockHealth({
-      pct: totalMedicines > 0 ? ((totalMedicines - lowCount - outCount) / totalMedicines) * 100 : 100,
-      low: lowCount,
-      out: outCount,
-      expiring: alerts.summary?.nearExpiryCount ?? 0,
-      total: totalMedicines,
-    });
 
     const revSpark = Array.isArray(s.trend)
       ? s.trend.slice(-14).map((t: any) => Number(t.revenue) || 0)
@@ -934,31 +897,11 @@ export default function DashboardPage() {
         href: '/pharmacy?tab=billing',
       },
       { label: 'Inventory value', value: formatMoney(s.totalStockValue ?? 0), tone: 'blue', icon: '📦' },
-      {
-        label: 'Low stock items',
-        value: s.lowStockCount ?? alerts.summary?.lowStockCount ?? 0,
-        tone: (s.lowStockCount ?? 0) > 0 ? 'amber' : 'green',
-        icon: '⚠',
-        href: '/pharmacy?tab=alerts',
-      },
     ]);
-
-    setFocus({
-      title: 'Low stock items',
-      headers: ['Medicine', 'Store', 'Stock', 'Reorder level'],
-      href: '/pharmacy?tab=alerts',
-      rows: lowStock.slice(0, 8).map((item: any) => [
-        item.medicine?.name || item.name || '—',
-        item.store?.name || '—',
-        Number(item.currentStock ?? 0),
-        Number(item.reorderLevel ?? 0),
-      ]),
-    });
 
     setQuickLinks([
       { label: 'Dispense medicines', href: '/pharmacy?tab=billing', icon: '📋' },
       { label: 'Walk-in sales', href: '/pharmacy?tab=billing', icon: '₨' },
-      { label: 'Stock alerts', href: '/pharmacy?tab=alerts', icon: '⚠' },
     ]);
   }
 
@@ -1008,32 +951,18 @@ export default function DashboardPage() {
   }
 
   async function loadInventoryData() {
-    const [invR, alertsR, posR, grnR] = await Promise.all([
+    const [invR, posR, grnR] = await Promise.all([
       safe(api('/pharmacy/inventory?limit=1')),
-      safe(api('/pharmacy/alerts')),
       safe(api('/procurement/purchase-orders?limit=100')),
       safe(api('/procurement/goods-receipts?limit=100')),
     ]);
-    const alerts = summaryOf(alertsR);
     const openPoStatuses = ['DRAFT', 'SENT', 'CONFIRMED', 'PARTIAL_RECEIVED'];
     const pendingPos = listOf(posR).filter((p: any) => openPoStatuses.includes(p.status));
     const receivedThisMonth = listOf(grnR).filter((g: any) => isThisMonth(g.receivedDate)).length;
     const invCount = countOf(invR);
-    const lowCount = alerts.summary?.lowStockCount ?? 0;
-    const outCount = alerts.summary?.outOfStockCount ?? 0;
-
-    setStockHealth({
-      pct: invCount > 0 ? ((invCount - lowCount - outCount) / invCount) * 100 : 100,
-      low: lowCount,
-      out: outCount,
-      expiring: alerts.summary?.nearExpiryCount ?? 0,
-      total: invCount,
-    });
 
     setStats([
       { label: 'Total items', value: invCount, tone: 'blue', icon: '📦' },
-      { label: 'Low stock alerts', value: lowCount, tone: lowCount > 0 ? 'amber' : 'green', icon: '⚠' },
-      { label: 'Out of stock', value: outCount, tone: outCount > 0 ? 'red' : 'green', icon: '🚫' },
       { label: 'Pending purchase orders', value: pendingPos.length, tone: pendingPos.length > 0 ? 'amber' : 'green', icon: '↦' },
       { label: 'Received this month', value: receivedThisMonth, tone: 'green', icon: '📥' },
     ]);
@@ -1055,7 +984,6 @@ export default function DashboardPage() {
     setQuickLinks([
       { label: 'Procurement', href: '/procurement', icon: '↦' },
       { label: 'Goods receipts', href: '/procurement', icon: '📥' },
-      { label: 'Stock alerts', href: '/pharmacy?tab=alerts', icon: '⚠' },
     ]);
   }
 
@@ -1584,45 +1512,6 @@ export default function DashboardPage() {
             <div className="dash-widget-grid">
               <WidgetCard title="Bed occupancy">
                 <OccupancyBar occupied={beds?.occupied ?? 0} total={beds?.total ?? 0} pct={bedsPct} />
-              </WidgetCard>
-              {stockHealth && (
-                <WidgetCard
-                  title="Pharmacy stock health"
-                  action={
-                    <a className="dash-link" href="/pharmacy?tab=alerts">
-                      View alerts
-                    </a>
-                  }
-                >
-                  <StockHealth
-                    pct={stockHealth.pct}
-                    low={stockHealth.low}
-                    out={stockHealth.out}
-                    expiring={stockHealth.expiring}
-                    total={stockHealth.total}
-                  />
-                </WidgetCard>
-              )}
-            </div>
-          )}
-
-          {stockHealth && group !== 'ADMIN' && ['PHARMACY', 'INVENTORY'].includes(group) && (
-            <div className="dash-widget-grid">
-              <WidgetCard
-                title="Stock health"
-                action={
-                  <a className="dash-link" href="/pharmacy?tab=alerts">
-                    View alerts
-                  </a>
-                }
-              >
-                <StockHealth
-                  pct={stockHealth.pct}
-                  low={stockHealth.low}
-                  out={stockHealth.out}
-                  expiring={stockHealth.expiring}
-                  total={stockHealth.total}
-                />
               </WidgetCard>
             </div>
           )}

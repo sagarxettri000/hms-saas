@@ -287,42 +287,6 @@ export function Leaderboard({ rows, empty = 'No data yet.' }: { rows: LeaderRow[
   );
 }
 
-export function StockHealth({
-  pct,
-  low = 0,
-  out = 0,
-  expiring = 0,
-  total = 0,
-}: {
-  pct: number;
-  low?: number;
-  out?: number;
-  expiring?: number;
-  total?: number;
-}) {
-  const p = Math.min(100, Math.max(0, Number(pct) || 0));
-  const color = p >= 75 ? '#16a34a' : p >= 50 ? '#f59e0b' : '#ef4444';
-  return (
-    <div>
-      <div className="dash-health-head">
-        <span className="dash-health-pct">{Math.round(p)}%</span>
-        <span className="muted">healthy of {total || '—'} items</span>
-      </div>
-      <div className="dash-bar-track-lg">
-        <span className="dash-bar-fill" style={{ width: `${p}%`, background: color }} />
-      </div>
-      <div className="dash-health-stats">
-        {low > 0 && <span className="dash-health-chip warn">Low {low}</span>}
-        {out > 0 && <span className="dash-health-chip danger">Out {out}</span>}
-        {expiring > 0 && <span className="dash-health-chip amber">Expiring {expiring}</span>}
-        {(low <= 0 && out <= 0 && expiring <= 0) || (total === 0 && low <= 0 && out <= 0 && expiring <= 0) ? (
-          <span className="dash-health-chip ok">All good</span>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 export function OccupancyBar({
   occupied,
   total,

@@ -20,6 +20,12 @@ const CLINICAL_WIDE = [...CLINICAL, ...FRONT, ...ADMIN, ...SUPER, 'ANESTHETIST']
 const CLINICAL_NO_DOCTOR = CLINICAL_WIDE.filter((r) => r !== 'DOCTOR');
 const CLINICAL_NO_DOCTOR_NURSE = CLINICAL_NO_DOCTOR.filter((r) => r !== 'NURSE');
 const CLINICAL_WIDE_NO_NURSE = CLINICAL_WIDE.filter((r) => r !== 'NURSE');
+// Receptionist scope: diagnostics (hematology/lab/radiology/blood bank) and
+// pharmacy billing/medicines are not part of the receptionist workflow, so
+// these nav items exclude RECEPTIONIST while every other role is unchanged.
+const CLINICAL_WIDE_NO_RECEPTION = CLINICAL_WIDE.filter((r) => r !== 'RECEPTIONIST');
+const CLINICAL_NO_DOCTOR_NO_RECEPTION = CLINICAL_NO_DOCTOR.filter((r) => r !== 'RECEPTIONIST');
+const CLINICAL_NO_DOCTOR_NURSE_NO_RECEPTION = CLINICAL_NO_DOCTOR_NURSE.filter((r) => r !== 'RECEPTIONIST');
 const FINANCE = ['RECEPTIONIST', 'RECEPTION_SUPERVISOR', 'FINANCE_MANAGER'];
 const LAB = ['LAB_TECHNICIAN', 'PATHOLOGIST'];
 const RAD = ['RADIOLOGIST', 'RADIOLOGY_TECHNICIAN'];
@@ -60,18 +66,18 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Diagnostics',
     items: [
-      { label: 'Hematology', href: '/hematology', icon: '◒', roles: [...LAB, ...RAD, ...CLINICAL_WIDE], flag: 'laboratory' },
-      { label: 'Laboratory', href: '/laboratory', icon: '◉', roles: [...LAB, ...CLINICAL_WIDE], flag: 'laboratory' },
-      { label: 'Radiology', href: '/radiology', icon: '▤', roles: [...RAD, ...CLINICAL_WIDE], flag: 'radiology' },
+      { label: 'Hematology', href: '/hematology', icon: '◒', roles: [...LAB, ...RAD, ...CLINICAL_WIDE_NO_RECEPTION], flag: 'laboratory' },
+      { label: 'Laboratory', href: '/laboratory', icon: '◉', roles: [...LAB, ...CLINICAL_WIDE_NO_RECEPTION], flag: 'laboratory' },
+      { label: 'Radiology', href: '/radiology', icon: '▤', roles: [...RAD, ...CLINICAL_WIDE_NO_RECEPTION], flag: 'radiology' },
       { label: 'DICOM', href: '/dicom', icon: '◫', roles: [...RAD, ...ADMIN, ...SUPER], flag: 'radiology' },
-      { label: 'Blood Bank', href: '/blood-bank', icon: '✖', roles: [...CLINICAL_NO_DOCTOR, 'BLOOD_BANK_STAFF'], flag: 'blood_bank' },
+      { label: 'Blood Bank', href: '/blood-bank', icon: '✖', roles: [...CLINICAL_NO_DOCTOR_NO_RECEPTION, 'BLOOD_BANK_STAFF'], flag: 'blood_bank' },
     ],
   },
   {
     title: 'Pharmacy',
     items: [
-      { label: 'Billing', href: '/pharmacy?tab=billing', icon: '₨', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER], flag: 'pharmacy' },
-      { label: 'Medicines', href: '/pharmacy?tab=medicines', icon: '☤', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE, ...ADMIN, ...SUPER], flag: 'pharmacy' },
+      { label: 'Billing', href: '/pharmacy?tab=billing', icon: '₨', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE_NO_RECEPTION, ...ADMIN, ...SUPER], flag: 'pharmacy' },
+      { label: 'Medicines', href: '/pharmacy?tab=medicines', icon: '☤', roles: [...PHARMACY, ...CLINICAL_NO_DOCTOR_NURSE_NO_RECEPTION, ...ADMIN, ...SUPER], flag: 'pharmacy' },
       { label: 'Bills', href: '/pharmacy?tab=bills', icon: '▧', roles: [...PHARMACY, ...ADMIN, ...SUPER], flag: 'pharmacy' },
       { label: 'Stores & Stock', href: '/pharmacy?tab=stores', icon: '▥', roles: [...PHARMACY, ...INVENTORY, ...ADMIN, ...SUPER], flag: 'pharmacy' },
     ],

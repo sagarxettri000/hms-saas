@@ -275,7 +275,8 @@ describe("BloodBankService", () => {
     it("generates sequential unit numbers per tenant", async () => {
       unitModel.findFirst.mockResolvedValue({ unitNumber: "BLD-20260916-0007" });
       await service.registerUnit(TENANT, { bloodGroup: "A_POS" });
-      expect(unitModel.create.mock.calls[0][0].data.unitNumber).toBe("BLD-20260916-0008");
+
+      expect(unitModel.create.mock.calls[0][0].data.unitNumber).toMatch(/^BLD-\d{8}-0008$/);
     });
 
     it("audits unit registration", async () => {

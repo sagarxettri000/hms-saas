@@ -25,7 +25,7 @@ import {
 } from "../../common/decorators/permissions.decorator";
 import { PermissionAction, UserRole } from "@hms/shared";
 
-const ADMIN_ROLES = [UserRole.HOSPITAL_ADMIN, UserRole.HOSPITAL_OWNER, UserRole.HR_MANAGER];
+const ADMIN_ROLES = [UserRole.HOSPITAL_ADMIN, UserRole.HOSPITAL_OWNER, UserRole.HR_MANAGER, UserRole.PLATFORM_SUPER_ADMIN];;
 
 @ApiTags("HR Attendance & Training")
 @Controller("hr")

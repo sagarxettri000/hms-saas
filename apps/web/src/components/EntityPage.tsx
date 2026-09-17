@@ -665,12 +665,22 @@ function FieldInput({
     );
   }
   if (field.type === 'date') {
+    const norm = (raw: string): string => {
+      const t = raw.trim();
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(t)) {
+        const [dd, mm, yyyy] = t.split('/');
+        return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+      }
+      if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+      return t;
+    };
     return (
       <input
         {...common}
-        type="date"
+        type="text"
+        placeholder="YYYY-MM-DD or DD/MM/YYYY"
         value={value ?? ''}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange(norm(e.target.value))}
         required={field.required}
       />
     );

@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { formatMoney, formatDate, formatDateTime } from '@/lib/hooks';
@@ -8,15 +8,13 @@ import ReceiptModal from '@/components/ReceiptModal';
 import PaymentModal from '@/components/PaymentModal';
 import PatientPrescriptions from '@/components/PatientPrescriptions';
 
-const VALID_TABS = ['medicines', 'billing', 'bills', 'stores', 'alerts', 'expiry'];
+const VALID_TABS = ['medicines', 'billing', 'bills', 'stores'];
 
 const TAB_LABELS: Record<string, string> = {
   medicines: 'Medicines',
   billing: 'Billing',
   bills: 'Bills',
   stores: 'Stores',
-  alerts: 'Alerts',
-  expiry: 'Expiry Tracking',
 };
 
 const CATEGORIES = [
@@ -37,32 +35,6 @@ const CATEGORIES = [
   'Others',
 ];
 
-const DRUG_INTERACTIONS = [
-  { drugs: 'Warfarin + Aspirin', severity: 'MAJOR', effect: 'Increased bleeding risk', action: 'Avoid combination; monitor INR closely' },
-  { drugs: 'Opioids + Benzodiazepines', severity: 'MAJOR', effect: 'Respiratory depression, sedation', action: 'Avoid co-prescription; reduce doses if unavoidable' },
-  { drugs: 'Digoxin + Amiodarone', severity: 'MAJOR', effect: 'Digoxin toxicity', action: 'Reduce digoxin dose by half; monitor levels' },
-  { drugs: 'Metformin + Iodinated Contrast', severity: 'MAJOR', effect: 'Lactic acidosis risk', action: 'Withhold metformin 48 hours around contrast imaging' },
-  { drugs: 'ACE Inhibitors + Potassium Supplements', severity: 'MAJOR', effect: 'Hyperkalemia', action: 'Monitor serum potassium regularly' },
-  { drugs: 'SSRIs + Tramadol', severity: 'MODERATE', effect: 'Serotonin syndrome risk', action: 'Watch for agitation, tremor, hyperthermia' },
-  { drugs: 'NSAIDs + ACE/ARB Antihypertensives', severity: 'MODERATE', effect: 'Reduced BP control, renal impairment', action: 'Use lowest NSAID dose for shortest duration' },
-  { drugs: 'Fluoroquinolones + Corticosteroids', severity: 'MODERATE', effect: 'Increased tendon rupture risk', action: 'Avoid in elderly; counsel patient' },
-  { drugs: 'Levothyroxine + Calcium/Iron', severity: 'MINOR', effect: 'Reduced thyroxine absorption', action: 'Separate doses by at least 4 hours' },
-  { drugs: 'Ciprofloxacin + Antacids/Iron', severity: 'MINOR', effect: 'Reduced antibiotic absorption', action: 'Separate administration by 2 hours' },
-];
-
-const CONTROLLED_SUBSTANCES = [
-  { name: 'Morphine', form: 'Injection / Tablet', schedule: 'Schedule X' },
-  { name: 'Fentanyl', form: 'Injection / Patch', schedule: 'Schedule X' },
-  { name: 'Pethidine (Meperidine)', form: 'Injection', schedule: 'Schedule X' },
-  { name: 'Oxycodone', form: 'Tablet', schedule: 'Schedule X' },
-  { name: 'Tramadol', form: 'Injection / Capsule', schedule: 'Schedule H1' },
-  { name: 'Ketamine', form: 'Injection', schedule: 'Schedule H1' },
-  { name: 'Diazepam', form: 'Injection / Tablet', schedule: 'Schedule H1' },
-  { name: 'Alprazolam', form: 'Tablet', schedule: 'Schedule H1' },
-  { name: 'Lorazepam', form: 'Injection / Tablet', schedule: 'Schedule H1' },
-  { name: 'Phenobarbital', form: 'Injection / Tablet', schedule: 'Schedule H1' },
-];
-
 function toList(res: any): any[] {
   const d = res?.data?.data ?? res?.data ?? res;
   if (Array.isArray(d)) return d;
@@ -72,28 +44,6 @@ function toList(res: any): any[] {
 function toObj(res: any): any {
   const d = res?.data?.data ?? res?.data ?? res;
   return d ?? null;
-}
-
-function daysUntil(value: any): number | null {
-  if (!value) return null;
-  return Math.ceil((new Date(value).getTime() - Date.now()) / 86400000);
-}
-
-function expiryStatus(days: number | null): string {
-  if (days === null) return 'UNKNOWN';
-  if (days < 0) return 'EXPIRED';
-  if (days <= 30) return 'EXPIRING_30_DAYS';
-  if (days <= 60) return 'EXPIRING_60_DAYS';
-  return 'SAFE';
-}
-
-function ExpiryBadge({ status }: { status: string }) {
-  if (status === 'EXPIRED') return <span className="badge badge-red">EXPIRED</span>;
-  if (status === 'EXPIRING_30_DAYS')
-    return <span className="badge" style={{ background: '#ea580c', color: '#fff' }}>EXPIRING IN 30 DAYS</span>;
-  if (status === 'EXPIRING_60_DAYS') return <span className="badge badge-yellow">EXPIRING IN 60 DAYS</span>;
-  if (status === 'SAFE') return <span className="badge badge-green">SAFE</span>;
-  return <span className="badge badge-gray">NO EXPIRY DATA</span>;
 }
 
 function RxStatusBadge({ status }: { status: string }) {
@@ -480,34 +430,8 @@ function EditMedicineModal({
     strength: med?.strength || '',
     salesRate: Number(med?.salesRate ?? med?.salesPrice ?? 0),
   }));
-  const [stockValue, setStockValue] = useState<number | null>(null);
-  const [stockId, setStockId] = useState<string | null>(null);
-  const [storeId, setStoreId] = useState<string | null>(null);
-  const [storeLabel, setStoreLabel] = useState('primary store');
-  const [loadingStock, setLoadingStock] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([api('/pharmacy/stores?limit=200'), api(`/pharmacy/inventory?medicineId=${med.id}&limit=20`)])
-      .then(([storesRes, invRes]: any[]) => {
-        const stores = toList(storesRes);
-        const primary = stores.find((s: any) => String(s.location || '').toLowerCase().includes('ground floor'))
-          || stores[0];
-        if (!primary) { if (!cancelled) { setLoadingStock(false); } return; }
-        setStoreLabel(primary.name || 'primary store');
-        setStoreId(String(primary.id));
-        const item = toList(invRes).find((i: any) => String(i.storeId) === String(primary.id));
-        if (!cancelled) {
-          setStockValue(item ? Number(item.currentStock) || 0 : 0);
-          setStockId(item?.id ?? null);
-          setLoadingStock(false);
-        }
-      })
-      .catch(() => { if (!cancelled) setLoadingStock(false); });
-    return () => { cancelled = true; };
-  }, [med.id]);
 
   function set(field: string, value: any) {
     setValues((v) => ({ ...v, [field]: value }));
@@ -523,26 +447,6 @@ function EditMedicineModal({
         method: 'PATCH',
         body: JSON.stringify({ name: values.name, form: values.form, strength: values.strength, salesRate: Number(values.salesRate) || 0 }),
       });
-      if (stockValue != null) {
-        const stock = Number(stockValue) || 0;
-        if (stockId) {
-          await api(`/pharmacy/inventory/${stockId}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ currentStock: stock }),
-          });
-        } else if (storeId) {
-          await api('/pharmacy/inventory', {
-            method: 'POST',
-            body: JSON.stringify({
-              storeId,
-              medicineId: med.id,
-              name: values.name || med.name,
-              itemType: 'MEDICINE',
-              currentStock: stock,
-            }),
-          });
-        }
-      }
       onDone();
     } catch (err: any) {
       setError(err.message || 'Failed to update medicine');
@@ -571,10 +475,6 @@ function EditMedicineModal({
             <div className="field">
               <label className="label">Strength</label>
               <input className="input" value={values.strength} onChange={(e) => set('strength', e.target.value)} placeholder="500mg" />
-            </div>
-            <div className="field">
-              <label className="label">Stock ({storeLabel})</label>
-              <input className="input" type="number" min="0" value={stockValue ?? ''} onChange={(e) => setStockValue(Number(e.target.value))} disabled={loadingStock} placeholder={loadingStock ? 'Loading…' : '0'} />
             </div>
             <div className="field">
               <label className="label">Sales Price</label>
@@ -606,33 +506,8 @@ function MedicinesTab() {
 
   const load = useCallback(() => {
     setLoading(true);
-    Promise.all([
-      api('/pharmacy/medicines?limit=200'),
-      api('/pharmacy/stores?limit=200'),
-      api('/pharmacy/inventory?limit=500'),
-    ])
-      .then(([medRes, storeRes, invRes]: any[]) => {
-        const medRows = toList(medRes);
-        const stores = toList(storeRes);
-        const ground = stores.filter((s: any) =>
-          String(s.location || '').toLowerCase().includes('ground floor'),
-        );
-        const primary = ground[0] || stores[0];
-        const stockMap: Record<string, number> = {};
-        if (primary) {
-          toList(invRes).forEach((it: any) => {
-            if (String(it.storeId) === String(primary.id)) {
-              stockMap[it.medicineId] = Number(it.currentStock) || 0;
-            }
-          });
-        }
-        setMedicines(
-          medRows.map((m: any) => ({
-            ...m,
-            stock: stockMap[m.id] ?? Number(m.stock ?? m.currentStock ?? 0),
-          })),
-        );
-      })
+    api('/pharmacy/medicines?limit=200')
+      .then((res: any) => setMedicines(toList(res)))
       .catch(() => setMedicines([]))
       .finally(() => setLoading(false));
   }, []);
@@ -660,8 +535,6 @@ function MedicinesTab() {
     .sort((a, b) => {
       switch (sort) {
         case 'name-desc': return (b.name || '').localeCompare(a.name || '');
-        case 'stock-asc': return (Number(a.stock ?? a.currentStock ?? 0)) - (Number(b.stock ?? b.currentStock ?? 0));
-        case 'stock-desc': return (Number(b.stock ?? b.currentStock ?? 0)) - (Number(a.stock ?? a.currentStock ?? 0));
         case 'price-asc': return (Number(a.salesRate) || 0) - (Number(b.salesRate) || 0);
         case 'price-desc': return (Number(b.salesRate) || 0) - (Number(a.salesRate) || 0);
         default: return (a.name || '').localeCompare(b.name || '');
@@ -686,8 +559,6 @@ function MedicinesTab() {
         <select className="input" style={{ width: 190 }} value={sort} onChange={(e) => setSort(e.target.value)}>
           <option value="name-asc">Name (A-Z)</option>
           <option value="name-desc">Name (Z-A)</option>
-          <option value="stock-asc">Stock (Low first)</option>
-          <option value="stock-desc">Stock (High first)</option>
           <option value="price-asc">Price (Low first)</option>
           <option value="price-desc">Price (High first)</option>
         </select>
@@ -709,7 +580,6 @@ function MedicinesTab() {
                 <th>Generic</th>
                 <th>Category</th>
                 <th>Form / Strength</th>
-                <th>Stock</th>
                 <th>Sales Price</th>
                 <th>Reorder Level</th>
                 <th>Status</th>
@@ -718,9 +588,7 @@ function MedicinesTab() {
             </thead>
             <tbody>
               {filtered.map((m) => {
-                const stock = Number(m.stock ?? m.currentStock ?? 0);
                 const reorder = Number(m.reorderLevel) || 0;
-                const low = stock <= reorder;
                 return (
                   <tr key={m.id}>
                     <td style={{ fontWeight: 600 }}>
@@ -730,14 +598,12 @@ function MedicinesTab() {
                     <td>{m.genericName || '—'}</td>
                     <td>{m.category ? <span className="badge badge-blue">{m.category}</span> : '—'}</td>
                     <td>{[m.form, m.strength].filter(Boolean).join(' ') || '—'}</td>
-                    <td style={{ color: low ? '#dc2626' : undefined, fontWeight: low ? 700 : 400 }}>{stock}</td>
                     <td>{formatMoney(m.salesRate)}</td>
                     <td>{reorder}</td>
                     <td>
                       <span className={`badge ${m.isActive ? 'badge-green' : 'badge-gray'}`}>
                         {m.isActive ? 'ACTIVE' : 'INACTIVE'}
                       </span>
-                        {low && <span className="badge badge-yellow" style={{ marginLeft: 4 }}>LOW</span>}
                     </td>
                     <td>
                       <button className="btn btn-sm btn-secondary" onClick={() => setEditTarget(m)}>Edit</button>
@@ -758,235 +624,6 @@ function MedicinesTab() {
           onClose={() => setEditTarget(null)}
           onDone={() => { setEditTarget(null); load(); }}
         />
-      )}
-    </>
-  );
-}
-
-const EXPIRY_TRACKING_WINDOW_DAYS = 30;
-
-function expiryState(raw: any): 'expired' | 'expiring' | 'safe' | 'none' {
-  if (!raw) return 'none';
-  const diffDays = Math.round(
-    (new Date(raw).getTime() - Date.now()) / 86400000,
-  );
-  if (diffDays < 0) return 'expired';
-  if (diffDays <= EXPIRY_TRACKING_WINDOW_DAYS) return 'expiring';
-  return 'safe';
-}
-
-function ExpiryTrackingTab() {
-  const [items, setItems] = useState<any[]>([]);
-  const [stores, setStores] = useState<any[]>([]);
-  const [storeId, setStoreId] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const url = `/pharmacy/inventory?limit=500${storeId ? `&storeId=${storeId}` : ''}`;
-      const data = toList(await api(url));
-      setItems(Array.isArray(data) ? data : []);
-    } catch {
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [storeId]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useEffect(() => {
-    api('/pharmacy/stores?limit=200')
-      .then((r) => {
-        const d = toList(r);
-        setStores(Array.isArray(d) ? d : []);
-      })
-      .catch(() => setStores([]));
-  }, []);
-
-  const rows = useMemo(() => {
-    return items
-      .map((item: any) => {
-        const raw = item.expiryDate || '';
-        return { ...item, effectiveExpiry: raw, state: expiryState(raw) };
-      })
-      .sort((a: any, b: any) => {
-        if (!a.effectiveExpiry) return 1;
-        if (!b.effectiveExpiry) return -1;
-        return String(a.effectiveExpiry).localeCompare(String(b.effectiveExpiry));
-      });
-  }, [items]);
-
-  const trackedCount = rows.filter((r: any) => r.effectiveExpiry).length;
-  const expiredCount = rows.filter((r: any) => r.state === 'expired' && r.isActive !== false).length;
-  const expiringCount = rows.filter((r: any) => r.state === 'expiring' && r.isActive !== false).length;
-  const safeCount = rows.filter((r: any) => r.state === 'safe' && r.isActive !== false).length;
-
-  const saveExpiry = async (item: any, value: string) => {
-    setSavingId(item.id);
-    try {
-      await api(`/pharmacy/inventory/${item.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ expiryDate: value || null }),
-      });
-      setItems((prev) =>
-        prev.map((it) =>
-          it.id === item.id
-            ? { ...it, expiryDate: value ? `${value}T00:00:00.000Z` : null }
-            : it,
-        ),
-      );
-    } catch (err) {
-      window.alert(
-        err instanceof Error ? `Failed to save expiry date: ${err.message}` : 'Failed to save expiry date',
-      );
-    } finally {
-      setSavingId(null);
-    }
-  };
-
-  const markRemoved = async (item: any) => {
-    if (!window.confirm(`Mark "${item.name}" as removed / write off?`)) return;
-    setSavingId(item.id);
-    try {
-      const qty = Number(item.currentStock) || 0;
-      if (qty > 0) {
-        await api(`/pharmacy/inventory/${item.id}/adjust`, {
-          method: 'POST',
-          body: JSON.stringify({
-            type: 'ADJUSTMENT',
-            quantity: qty,
-            direction: 'OUT',
-            remarks: 'Marked removed / write-off',
-          }),
-        });
-      }
-      await api(`/pharmacy/inventory/${item.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ isActive: false }),
-      });
-      await load();
-    } catch (err) {
-      window.alert(
-        err instanceof Error ? err.message : 'Failed to mark item as removed',
-      );
-    } finally {
-      setSavingId(null);
-    }
-  };
-
-  return (
-    <>
-      <div className="toolbar" style={{ marginBottom: 16 }}>
-        <select className="input" style={{ width: 240 }} value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-          <option value="">All Stores</option>
-          {stores.map((s: any) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-        <button className="btn btn-secondary" onClick={load}>Refresh</button>
-      </div>
-
-      <div className="stat-grid" style={{ marginBottom: 20 }}>
-        <div className="stat-card">
-          <div className="stat-label">Tracked Items</div>
-          <div className="stat-value">{trackedCount}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Expired</div>
-          <div className="stat-value stat-red">{expiredCount}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Expiring ({EXPIRY_TRACKING_WINDOW_DAYS}d)</div>
-          <div className="stat-value" style={{ color: 'var(--warning)' }}>{expiringCount}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Safe</div>
-          <div className="stat-value stat-green">{safeCount}</div>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="loading">Loading inventory items...</div>
-      ) : rows.length === 0 ? (
-        <div className="empty">No inventory items found.</div>
-      ) : (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Store</th>
-                <th>Expiry Date</th>
-                <th>Status</th>
-                <th>Value</th>
-                <th style={{ width: 1 }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((item: any) => {
-                const removed = item.isActive === false;
-                return (
-                  <tr key={item.id} style={removed ? { opacity: 0.5 } : undefined}>
-                    <td>
-                      <strong>{item.name}</strong>
-                      {item.batchNumber && (
-                        <div className="note">Batch: {item.batchNumber}</div>
-                      )}
-                    </td>
-                    <td>{item.store?.name || '—'}</td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <input
-                          className="input"
-                          type="date"
-                          style={{ maxWidth: 170 }}
-                          value={item.effectiveExpiry ? String(item.effectiveExpiry).slice(0, 10) : ''}
-                          onChange={(e) => saveExpiry(item, e.target.value)}
-                          disabled={removed || savingId === item.id}
-                        />
-                        {savingId === item.id && <span className="note">saving…</span>}
-                      </div>
-                    </td>
-                    <td>
-                      {removed ? (
-                        <span className="badge badge-gray">REMOVED</span>
-                      ) : item.state === 'expired' ? (
-                        <span className="badge badge-red">EXPIRED</span>
-                      ) : item.state === 'expiring' ? (
-                        <span className="badge badge-yellow">EXPIRING SOON</span>
-                      ) : item.state === 'safe' ? (
-                        <span className="badge badge-green">SAFE</span>
-                      ) : (
-                        <span className="badge badge-gray">NO DATE</span>
-                      )}
-                    </td>
-                    <td>
-                      {item.purchaseRate != null
-                        ? formatMoney(Number(item.purchaseRate) * (Number(item.currentStock) || 0))
-                        : '—'}
-                    </td>
-                    <td>
-                      {!removed && (
-                        <button
-                          className="btn btn-sm btn-secondary"
-                          onClick={() => markRemoved(item)}
-                          disabled={savingId === item.id}
-                        >
-                          Mark Removed
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
       )}
     </>
   );
@@ -1102,16 +739,14 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
   const [payRef, setPayRef] = useState('');
   const [isCredit, setIsCredit] = useState(false);
   const [notes, setNotes] = useState('');
-  const [invList, setInvList] = useState<any[]>([]);
 
   useEffect(() => {
-    Promise.all([api('/pharmacy/stores'), api('/pharmacy/inventory?limit=500')])
-      .then(([storeRes, invRes]: any[]) => {
-        const allStores = toList(storeRes);
+    api('/pharmacy/stores')
+      .then((res: any) => {
+        const allStores = toList(res);
         const filtered = allStores.filter((s: any) => s.location?.toLowerCase().includes('ground floor'));
         const available = filtered.length > 0 ? filtered : allStores;
         if (available.length > 0) setStoreId(available[0].id);
-        setInvList(toList(invRes));
       })
       .catch(() => {});
   }, []);
@@ -1157,18 +792,6 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
     setPatientId('');
   }
 
-  const stockOf = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const item of invList) {
-      const medId = item.medicineId || item.medicine?.id;
-      const st = Number(item.currentStock) || 0;
-      if (!medId) continue;
-      if (storeId && item.storeId !== storeId) continue;
-      map[medId] = (map[medId] || 0) + st;
-    }
-    return map;
-  }, [invList, storeId]);
-
   async function searchMedicines(q: string) {
     setSearch(q);
     if (q.length < 2) { setSearchResults([]); return; }
@@ -1182,18 +805,12 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
 
   function addToSale(med: any) {
     if (items.find((s) => s.medicineId === med.id)) return;
-    const st = stockOf[med.id] ?? 0;
-    if (st <= 0) {
-      setError(`"${med.name}" is out of stock in the selected store.`);
-      return;
-    }
     setError('');
     setItems((prev) => [...prev, {
       medicineId: med.id,
       medicineName: med.name,
       quantity: 1,
       unitPrice: Number(med.salesRate) || 0,
-      available: st,
     }]);
     setSearch('');
     setSearchResults([]);
@@ -1206,8 +823,7 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
       if (field === 'quantity' || field === 'unitPrice') {
         v = Number(value) || 0;
         if (field === 'quantity') {
-          const maxQty = stockOf[medicineId] ?? Number.MAX_SAFE_INTEGER;
-          v = Math.max(1, Math.min(maxQty, v));
+          v = Math.max(1, v);
         }
       }
       return { ...item, [field]: v };
@@ -1217,8 +833,7 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
   function bumpItem(medicineId: string, delta: number) {
     setItems((prev) => prev.map((item) => {
       if (item.medicineId !== medicineId) return item;
-      const maxQty = stockOf[medicineId] ?? Number.MAX_SAFE_INTEGER;
-      const next = Math.max(1, Math.min(maxQty, Number(item.quantity) + delta));
+      const next = Math.max(1, Number(item.quantity) + delta);
       return { ...item, quantity: next };
     }));
   }
@@ -1420,33 +1035,25 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
                       border: '1px solid var(--border)', borderRadius: 8, maxHeight: 240, overflowY: 'auto',
                       background: 'var(--surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
                     }}>
-                      {searchResults.map((med) => {
-                        const st = stockOf[med.id] ?? 0;
-                        const low = st > 0 && st <= 5;
-                        return (
-                          <div
-                            key={med.id}
-                            onMouseDown={() => addToSale(med)}
-                            style={{
-                              padding: '10px 14px', cursor: st > 0 ? 'pointer' : 'not-allowed', fontSize: 13,
-                              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
-                              borderBottom: '1px solid var(--border)',
-                              opacity: st > 0 ? 1 : 0.55,
-                            }}
-                          >
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontWeight: 600 }}>{med.name}</div>
-                              {med.genericName && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{med.genericName}</div>}
-                            </div>
-                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                              <div style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatMoney(med.salesRate)}</div>
-                              <div style={{ fontSize: 11, color: st <= 0 ? '#dc2626' : (low ? '#d97706' : 'var(--text-muted)') }}>
-                                {st <= 0 ? 'Out of stock' : `In stock: ${st}`}
-                              </div>
-                            </div>
+                      {searchResults.map((med) => (
+                        <div
+                          key={med.id}
+                          onMouseDown={() => addToSale(med)}
+                          style={{
+                            padding: '10px 14px', cursor: 'pointer', fontSize: 13,
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+                            borderBottom: '1px solid var(--border)',
+                          }}
+                        >
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 600 }}>{med.name}</div>
+                            {med.genericName && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{med.genericName}</div>}
                           </div>
-                        );
-                      })}
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <div style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatMoney(med.salesRate)}</div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1475,7 +1082,6 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
                     {it.medicineName}
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                       {formatMoney(it.unitPrice)} / unit
-                      {it.available != null && ` · Available: ${it.available}`}
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1506,12 +1112,7 @@ function WalkInSaleModal({ onClose, onReceipt }: { onClose: () => void; onReceip
                     <button type="button" className="btn btn-sm btn-danger" onClick={() => removeItem(it.medicineId)}>Remove</button>
                   </div>
                 </div>
-                {it.available != null && it.quantity > it.available && (
-                  <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>
-                    Quantity exceeds available stock ({it.available}).
-                  </div>
-                )}
-              </div>
+                </div>
             ))}
             {items.length > 0 && (
               <>
@@ -1929,283 +1530,6 @@ function StoresTab() {
   );
 }
 
-function AlertsTab() {
-  const [alerts, setAlerts] = useState<any>(null);
-  const [expiryAlerts, setExpiryAlerts] = useState<any[]>([]);
-  const [log, setLog] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [drug, setDrug] = useState(CONTROLLED_SUBSTANCES[0].name);
-  const [qty, setQty] = useState(1);
-  const [patient, setPatient] = useState('');
-  const [notes, setNotes] = useState('');
-
-  const load = useCallback(() => {
-    setLoading(true);
-    api('/pharmacy/alerts')
-      .then((alertRes: any) => {
-        const data = alertRes?.data ?? alertRes;
-        setAlerts(data);
-        const expiring = toList(data?.nearExpiry)
-          .filter((i: any) => {
-            const days = daysUntil(i.expiryDate);
-            return i.expiryDate && days !== null;
-          })
-          .sort((a: any, b: any) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
-        setExpiryAlerts(expiring);
-      })
-      .catch(() => setAlerts(null))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const loadLog = useCallback(() => {
-    api('/pharmacy/controlled-substances?limit=200')
-      .then((res: any) => {
-        setLog(toList(res).map((row: any) => ({
-          id: row.id,
-          drug: row.drug,
-          quantity: Number(row.quantity),
-          patient: row.patient,
-          notes: row.notes,
-          at: row.loggedAt,
-          by: row.loggedBy,
-        })));
-      })
-      .catch(() => setLog([]));
-  }, []);
-
-  useEffect(() => {
-    load();
-    loadLog();
-  }, [load, loadLog]);
-
-  async function addUsage() {
-    if (qty <= 0) return;
-    await api('/pharmacy/controlled-substances', {
-      method: 'POST',
-      body: JSON.stringify({ drug, quantity: qty, patient: patient.trim(), notes: notes.trim() }),
-    });
-    await loadLog();
-    setQty(1);
-    setPatient('');
-    setNotes('');
-  }
-
-  async function deleteEntry(id: string) {
-    await api(`/pharmacy/controlled-substances/${id}`, { method: 'DELETE' });
-    await loadLog();
-  }
-
-  const lowStockCount = toList(alerts?.lowStock).length;
-  const nearExpiryCount = expiryAlerts.length;
-  const outOfStockCount = toList(alerts?.outOfStock).length;
-
-  return (
-    <>
-      {loading ? (
-        <div className="loading">Loading alerts...</div>
-      ) : (
-        <>
-          <div className="stat-grid" style={{ marginBottom: 20 }}>
-            <div className="stat-card">
-              <div className="stat-label">Low Stock</div>
-              <div className="stat-value stat-red">{lowStockCount}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Near Expiry</div>
-              <div className="stat-value stat-red">{nearExpiryCount}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Out of Stock</div>
-              <div className="stat-value stat-red">{outOfStockCount}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Interaction Rules Loaded</div>
-              <div className="stat-value stat-blue">{DRUG_INTERACTIONS.length}</div>
-            </div>
-          </div>
-
-          <div className="card" style={{ marginBottom: 20 }}>
-            <div className="row-between" style={{ marginBottom: 10 }}>
-              <span className="card-title">Low Stock Alerts</span>
-              <button className="btn btn-sm btn-secondary" onClick={load}>Refresh</button>
-            </div>
-            {!alerts?.lowStock || alerts.lowStock.length === 0 ? (
-              <div className="empty">No low stock items.</div>
-            ) : (
-              <div className="table-wrap">
-                <table className="table">
-                  <thead>
-                    <tr><th>Medicine</th><th>Store</th><th>Current Stock</th><th>Reorder Level</th></tr>
-                  </thead>
-                  <tbody>
-                    {alerts.lowStock.map((item: any) => (
-                      <tr key={item.id}>
-                        <td style={{ fontWeight: 600 }}>{item.medicine?.name || item.name}</td>
-                        <td>{item.store?.name || '—'}</td>
-                        <td style={{ color: 'var(--danger)', fontWeight: 700 }}>{item.currentStock}</td>
-                        <td>{item.reorderLevel || '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          <div className="card" style={{ marginBottom: 20 }}>
-            <div className="card-title">Expiry Alerts (within 60 days)</div>
-            {expiryAlerts.length === 0 ? (
-              <div className="empty">No items expiring within 60 days.</div>
-            ) : (
-              <div className="table-wrap">
-                <table className="table">
-                  <thead>
-                    <tr><th>Medicine</th><th>Batch</th><th>Expiry Date</th><th>Days Left</th><th>Status</th></tr>
-                  </thead>
-                  <tbody>
-                    {expiryAlerts.map((item: any) => {
-                      const days = daysUntil(item.expiryDate);
-                      return (
-                        <tr key={item.id}>
-                          <td style={{ fontWeight: 600 }}>{item.medicine?.name || item.name}</td>
-                          <td className="mono">{item.batchNumber || '—'}</td>
-                          <td>{formatDate(item.expiryDate)}</td>
-                          <td style={{ color: days !== null && days <= 30 ? '#dc2626' : undefined, fontWeight: 700 }}>
-                            {days === null ? '—' : `${days}d`}
-                          </td>
-                          <td><ExpiryBadge status={expiryStatus(days)} /></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          <div className="card" style={{ marginBottom: 20 }}>
-            <div className="card-title">Drug Interaction Warnings</div>
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr><th>Drug Combination</th><th>Severity</th><th>Potential Effect</th><th>Recommended Action</th></tr>
-                </thead>
-                <tbody>
-                  {DRUG_INTERACTIONS.map((i) => (
-                    <tr key={i.drugs}>
-                      <td style={{ fontWeight: 600 }}>{i.drugs}</td>
-                      <td>
-                        <span className={`badge ${i.severity === 'MAJOR' ? 'badge-red' : i.severity === 'MODERATE' ? 'badge-yellow' : 'badge-gray'}`}>
-                          {i.severity}
-                        </span>
-                      </td>
-                      <td>{i.effect}</td>
-                      <td>{i.action}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="card" style={{ marginBottom: 20 }}>
-            <div className="card-title">Controlled Substance Register</div>
-            <div className="table-wrap" style={{ marginBottom: 16 }}>
-              <table className="table">
-                <thead>
-                  <tr><th>Substance</th><th>Common Form</th><th>Schedule</th></tr>
-                </thead>
-                <tbody>
-                  {CONTROLLED_SUBSTANCES.map((c) => (
-                    <tr key={c.name}>
-                      <td style={{ fontWeight: 600 }}>{c.name}</td>
-                      <td>{c.form}</td>
-                      <td><span className="badge badge-red">{c.schedule}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="card-title">Log Usage</div>
-            <div className="form-grid" style={{ marginBottom: 16 }}>
-              <div className="field">
-                <label className="label">Substance</label>
-                <select className="input" value={drug} onChange={(e) => setDrug(e.target.value)}>
-                  {CONTROLLED_SUBSTANCES.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
-                </select>
-              </div>
-              <div className="field">
-                <label className="label">Quantity Used</label>
-                <input className="input" type="number" min={1} value={qty} onChange={(e) => setQty(Number(e.target.value))} />
-              </div>
-              <div className="field">
-                <label className="label">Patient</label>
-                <input className="input" value={patient} onChange={(e) => setPatient(e.target.value)} placeholder="Patient name or MRN" />
-              </div>
-              <div className="field">
-                <label className="label">Notes</label>
-                <textarea className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Prescription reference, administered by..." />
-              </div>
-            </div>
-            <button className="btn btn-primary" style={{ marginBottom: 20 }} onClick={addUsage}>Record Usage Entry</button>
-
-            <div className="card-title">Usage Log</div>
-            {log.length === 0 ? (
-              <div className="empty">No controlled substance usage recorded yet.</div>
-            ) : (
-              <div className="table-wrap">
-                <table className="table">
-                  <thead>
-                    <tr><th>Date</th><th>Substance</th><th>Quantity</th><th>Patient</th><th>Notes</th><th>Logged By</th><th></th></tr>
-                  </thead>
-                  <tbody>
-                    {log.map((entry) => (
-                      <tr key={entry.id}>
-                        <td>{formatDateTime(entry.at)}</td>
-                        <td style={{ fontWeight: 600 }}>{entry.drug}</td>
-                        <td>{entry.quantity}</td>
-                        <td>{entry.patient || '—'}</td>
-                        <td>{entry.notes || '—'}</td>
-                        <td>{entry.by || '—'}</td>
-                        <td>
-                          <button className="btn btn-sm btn-danger" onClick={() => deleteEntry(entry.id)}>Delete</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {alerts?.outOfStock?.length > 0 && (
-            <div className="card">
-              <div className="card-title">Out of Stock Items</div>
-              <div className="table-wrap">
-                <table className="table">
-                  <thead>
-                    <tr><th>Medicine</th><th>Store</th><th>Batch</th></tr>
-                  </thead>
-                  <tbody>
-                    {alerts.outOfStock.map((item: any) => (
-                      <tr key={item.id}>
-                        <td style={{ fontWeight: 600 }}>{item.medicine?.name || item.name}</td>
-                        <td>{item.store?.name || '—'}</td>
-                        <td className="mono">{item.batchNumber || '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </>
-  );
-}
-
 function PharmacyPageInner() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => getTab(searchParams));
@@ -2224,7 +1548,7 @@ function PharmacyPageInner() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Pharmacy</h1>
-          <p className="page-subtitle">Medicines, billing, stores, alerts and expiry management</p>
+          <p className="page-subtitle">Medicines, billing and stores management</p>
         </div>
       </div>
 
@@ -2240,8 +1564,6 @@ function PharmacyPageInner() {
       {activeTab === 'billing' && <DispensingTab />}
       {activeTab === 'bills' && <BillsTab />}
       {activeTab === 'stores' && <StoresTab />}
-      {activeTab === 'alerts' && <AlertsTab />}
-      {activeTab === 'expiry' && <ExpiryTrackingTab />}
     </>
   );
 }

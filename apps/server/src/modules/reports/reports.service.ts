@@ -65,6 +65,7 @@ export class ReportsService {
 
     const invWhere = this.dateWhere(tenantId, "issuedDate", range);
     invWhere.status = { not: "CANCELLED" };
+    invWhere.type = { not: "PHARMACY" };
 
     const [invoices, appointments, patients, admissions, beds, doctors, labOrders, radiologyOrders, activeAdmits, overdueCount] =
       await Promise.all([
@@ -94,7 +95,7 @@ export class ReportsService {
         this.prisma.admission.count({
           where: { tenantId, status: { in: ["ADMITTED", "PENDING"] } },
         }),
-        this.prisma.invoice.count({ where: { tenantId, status: "OVERDUE" } }),
+        this.prisma.invoice.count({ where: { tenantId, status: "OVERDUE", type: { not: "PHARMACY" } } }),
       ]);
 
     const occupiedBeds = await this.prisma.bed.count({
@@ -124,6 +125,7 @@ export class ReportsService {
     const range = this.parseRange(params.from, params.to);
     const where = this.dateWhere(tenantId, "issuedDate", range);
     where.status = { not: "CANCELLED" };
+    where.type = { not: "PHARMACY" };
     const rows = await this.prisma.invoice.findMany({
       where,
       select: { status: true, totalAmount: true, paidAmount: true, dueAmount: true },

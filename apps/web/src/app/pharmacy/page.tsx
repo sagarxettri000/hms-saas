@@ -5,16 +5,18 @@ import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { formatMoney, formatDate, formatDateTime } from '@/lib/hooks';
 import ReceiptModal from '@/components/ReceiptModal';
+import { TrendChart, BarList } from '@/app/dashboard/DashboardWidgets';
 import PaymentModal from '@/components/PaymentModal';
 import PatientPrescriptions from '@/components/PatientPrescriptions';
 
-const VALID_TABS = ['medicines', 'billing', 'bills', 'stores'];
+const VALID_TABS = ['medicines', 'billing', 'bills', 'stores', 'analytics'];
 
 const TAB_LABELS: Record<string, string> = {
   medicines: 'Medicines',
   billing: 'Billing',
   bills: 'Bills',
   stores: 'Stores',
+  analytics: 'Analytics',
 };
 
 const CATEGORIES = [
@@ -1460,6 +1462,90 @@ function BillsTab() {
   );
 }
 
+type PharmacySummary = {
+  billedToday?: number;
+  billsToday?: number;
+  revenueToday?: number;
+  trend?: { date: string; revenue: number; collection: number }[];
+  topMedicines?: { name: string; revenue: number; quantity: number }[];
+  collectionByMethod?: Record<string, number>;
+  walkInBillsToday?: number;
+  prescriptionBillsToday?: number;
+};
+
+function AnalyticsTab() {
+  const [summary, setSummary] = useState<PharmacySummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    api('/pharmacy/summary')
+      .then((res: any) => setSummary(res?.data?.data ?? res?.data ?? res))
+      .catch(() => setError('Could not load pharmacy analytics. Please try again.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <div className="loading">Loading analytics...</div>;
+  if (error) return <div className="empty" role="alert">{error}<br /><button className="btn btn-secondary" style={{ marginTop: 8 }} onClick={load}>Retry</button></div>;
+  if (!summary) return null;
+
+  const methodEntries = Object.entries(summary.collectionByMethod || {});
+  const totalCollected = methodEntries.reduce((s, [, v]) => s + (Number(v) || 0), 0);
+  const walkIn = Number(summary.walkInBillsToday) || 0;
+  const prescription = Number(summary.prescriptionBillsToday) || 0;
+  const saleSplit = [
+    { label: `Prescription sales (${prescription})`, value: prescription },
+    { label: `Walk-in sales (${walkIn})`, value: walkIn },
+  ];
+
+  return (
+    <>
+      <div className="toolbar" style={{ marginBottom: 16 }}>
+        <span className="note">Today: {summary.billsToday ?? 0} bill(s) · {formatMoney(summary.billedToday ?? 0)} billed · {formatMoney(summary.revenueToday ?? 0)} collected</span>
+        <button className="btn btn-secondary" onClick={load}>Refresh</button>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3>Revenue &amp; collections — last 30 days</h3>
+        <TrendChart data={summary.trend || []} />
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3>Top medicines (today)</h3>
+        <BarList
+          data={(summary.topMedicines || []).map((m) => ({ label: m.name, value: Number(m.revenue) || 0 }))}
+        />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+        <div className="card">
+          <h3>Collections by method (30 days)</h3>
+          {methodEntries.length === 0 ? (
+            <p className="empty">No collections yet.</p>
+          ) : (
+            <BarList data={methodEntries.map(([k, v]) => ({ label: k, value: Number(v) || 0 }))} />
+          )}
+          {totalCollected > 0 && (
+            <p className="note">Total collected: {formatMoney(totalCollected)}</p>
+          )}
+        </div>
+        <div className="card">
+          <h3>Sales by type (today)</h3>
+          {walkIn + prescription === 0 ? (
+            <p className="empty">No sales today.</p>
+          ) : (
+            <BarList data={saleSplit} money={false} />
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 function StoresTab() {
   const [stores, setStores] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
@@ -1564,6 +1650,7 @@ function PharmacyPageInner() {
       {activeTab === 'billing' && <DispensingTab />}
       {activeTab === 'bills' && <BillsTab />}
       {activeTab === 'stores' && <StoresTab />}
+      {activeTab === 'analytics' && <AnalyticsTab />}
     </>
   );
 }

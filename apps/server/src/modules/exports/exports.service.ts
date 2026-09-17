@@ -43,7 +43,7 @@ export class ExportsService {
       d.setHours(23, 59, 59, 999);
       range.to = d;
     }
-    const where: any = { tenantId };
+    const where: any = { tenantId, type: { not: "PHARMACY" } };
     if (range.from || range.to) where.issuedDate = {};
     if (range.from) where.issuedDate.gte = range.from;
     if (range.to) where.issuedDate.lte = range.to;

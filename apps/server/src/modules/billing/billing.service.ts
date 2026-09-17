@@ -433,6 +433,7 @@ export class BillingService {
     await this.refreshOverdueStatus(tenantId);
 
     const where: any = { tenantId };
+    if (!params.type) where.type = { not: "PHARMACY" };
     if (params.patientId) where.patientId = params.patientId;
     if (params.status) where.status = params.status;
     if (params.type) where.type = params.type;
@@ -484,6 +485,8 @@ export class BillingService {
     const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { tenantId };
+    if (!params.invoiceId)
+      where.NOT = { invoice: { is: { type: "PHARMACY" } } };
     if (params.patientId) where.patientId = params.patientId;
     if (params.invoiceId) where.invoiceId = params.invoiceId;
     if (params.status) where.status = params.status;
@@ -1405,6 +1408,8 @@ amount: Number(refund.amount),
     const page = Number(params.page) || 1;
     const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
     const where: any = { tenantId };
+    if (!params.invoiceId)
+      where.NOT = { invoice: { is: { type: "PHARMACY" } } };
     if (params.patientId) where.patientId = params.patientId;
     if (params.status) where.status = params.status;
     if (params.search) {
@@ -2236,6 +2241,7 @@ amount: Number(refund.amount),
     const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { tenantId };
+    where.NOT = { invoice: { is: { type: "PHARMACY" } } };
     if (params.type) where.type = params.type;
     if (params.from || params.to) {
       where.createdAt = {};
@@ -2285,11 +2291,16 @@ amount: Number(refund.amount),
           tenantId,
           issuedDate: { gte: start, lte: end },
           status: { not: "CANCELLED" },
+          type: { not: "PHARMACY" },
         },
         select: { totalAmount: true, status: true },
       }),
       this.prisma.payment.findMany({
-        where: { tenantId, paidAt: { gte: start, lte: end } },
+        where: {
+          tenantId,
+          paidAt: { gte: start, lte: end },
+          NOT: { invoice: { is: { type: "PHARMACY" } } },
+        },
         select: { amount: true, method: true },
       }),
       this.prisma.refund.findMany({
@@ -2297,6 +2308,7 @@ amount: Number(refund.amount),
           tenantId,
           refundedAt: { gte: start, lte: end },
           status: "COMPLETED",
+          NOT: { invoice: { is: { type: "PHARMACY" } } },
         },
         select: { amount: true, refundMethod: true },
       }),
@@ -2430,7 +2442,7 @@ amount: Number(refund.amount),
   // ---------- Summary ----------
 
   async getBillingSummary(tenantId: string, params: BillingSummaryParams) {
-    const where: any = { tenantId };
+    const where: any = { tenantId, type: { not: "PHARMACY" } };
     const payWhere: any = { tenantId };
     if (params.from || params.to) {
       where.issuedDate = {};
@@ -2454,16 +2466,20 @@ amount: Number(refund.amount),
           select: { totalAmount: true, status: true },
         }),
         this.prisma.payment.findMany({
-          where: payWhere,
+          where: { ...payWhere, NOT: { invoice: { is: { type: "PHARMACY" } } } },
           select: { amount: true, method: true },
         }),
         this.prisma.refund.findMany({
-          where: { ...payWhere, status: "COMPLETED" },
+          where: {
+            ...payWhere,
+            status: "COMPLETED",
+            NOT: { invoice: { is: { type: "PHARMACY" } } },
+          },
           select: { amount: true },
         }),
         this.prisma.deposit.count({ where: payWhere }),
         this.prisma.invoice.count({
-          where: { tenantId, status: "OVERDUE" },
+          where: { tenantId, status: "OVERDUE", type: { not: "PHARMACY" } },
         }),
       ]);
 
@@ -2511,38 +2527,38 @@ amount: Number(refund.amount),
       await Promise.all([
         this.prisma.invoice.aggregate({
           _sum: { totalAmount: true },
-          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" } },
+          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" }, type: { not: "PHARMACY" } },
         }),
         this.prisma.invoice.count({
-          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" } },
+          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" }, type: { not: "PHARMACY" } },
         }),
         this.prisma.invoice.count({
-          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: "PAID" },
+          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: "PAID", type: { not: "PHARMACY" } },
         }),
         this.prisma.invoice.count({
-          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, OR: [{ isCredit: true }, { status: "PARTIAL" }] },
+          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, OR: [{ isCredit: true }, { status: "PARTIAL" }], type: { not: "PHARMACY" } },
         }),
         this.prisma.invoice.aggregate({
           _sum: { dueAmount: true },
-          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" } },
+          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" }, type: { not: "PHARMACY" } },
         }),
         this.prisma.invoice.groupBy({
           by: ["type"],
           _sum: { totalAmount: true },
-          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" } },
+          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" }, type: { not: "PHARMACY" } },
         }),
         this.prisma.payment.groupBy({
           by: ["method"],
           _sum: { amount: true },
-          where: { tenantId, paidAt: { gte: dayStart, lt: dayEnd } },
+          where: { tenantId, paidAt: { gte: dayStart, lt: dayEnd }, NOT: { invoice: { is: { type: "PHARMACY" } } } },
         }),
         this.prisma.payment.aggregate({
           _sum: { amount: true },
-          where: { tenantId, paidAt: { gte: dayStart, lt: dayEnd } },
+          where: { tenantId, paidAt: { gte: dayStart, lt: dayEnd }, NOT: { invoice: { is: { type: "PHARMACY" } } } },
         }),
         this.prisma.refund.aggregate({
           _sum: { amount: true },
-          where: { tenantId, refundedAt: { gte: dayStart, lt: dayEnd }, status: "COMPLETED" },
+          where: { tenantId, refundedAt: { gte: dayStart, lt: dayEnd }, status: "COMPLETED", NOT: { invoice: { is: { type: "PHARMACY" } } } },
         }),
         this.prisma.deposit.aggregate({
           _sum: { amount: true },
@@ -2564,11 +2580,11 @@ amount: Number(refund.amount),
     const [monthInvAgg, monthPayAgg] = await Promise.all([
       this.prisma.invoice.aggregate({
         _sum: { totalAmount: true },
-        where: { tenantId, issuedDate: { gte: monthStart }, status: { not: "CANCELLED" } },
+        where: { tenantId, issuedDate: { gte: monthStart }, status: { not: "CANCELLED" }, type: { not: "PHARMACY" } },
       }),
       this.prisma.payment.aggregate({
         _sum: { amount: true },
-        where: { tenantId, paidAt: { gte: monthStart } },
+        where: { tenantId, paidAt: { gte: monthStart }, NOT: { invoice: { is: { type: "PHARMACY" } } } },
       }),
     ]);
 
@@ -2577,12 +2593,12 @@ amount: Number(refund.amount),
       this.prisma.invoice.groupBy({
         by: ["issuedDate"],
         _sum: { totalAmount: true },
-        where: { tenantId, issuedDate: { gte: last30Start }, status: { not: "CANCELLED" } },
+        where: { tenantId, issuedDate: { gte: last30Start }, status: { not: "CANCELLED" }, type: { not: "PHARMACY" } },
       }),
       this.prisma.payment.groupBy({
         by: ["paidAt"],
         _sum: { amount: true },
-        where: { tenantId, paidAt: { gte: last30Start } },
+        where: { tenantId, paidAt: { gte: last30Start }, NOT: { invoice: { is: { type: "PHARMACY" } } } },
       }),
     ]);
     const trendMap: Record<string, { revenue: number; collection: number }> = {};
@@ -2604,7 +2620,7 @@ amount: Number(refund.amount),
     const doctorGroup = await this.prisma.invoiceItem.groupBy({
       by: ["doctorId"],
       _sum: { lineTotal: true },
-      where: { tenantId, doctorId: { not: null } },
+      where: { tenantId, doctorId: { not: null }, invoice: { is: { type: { not: "PHARMACY" } } } },
     });
     const doctorIncome: Record<string, number> = {};
     for (const g of doctorGroup) if (g.doctorId) doctorIncome[g.doctorId] = n(g._sum.lineTotal);
@@ -2613,7 +2629,7 @@ amount: Number(refund.amount),
     const userGroup = await this.prisma.payment.groupBy({
       by: ["receivedBy", "method"],
       _sum: { amount: true },
-      where: { tenantId, receivedBy: { not: null } },
+      where: { tenantId, receivedBy: { not: null }, NOT: { invoice: { is: { type: "PHARMACY" } } } },
     });
     const METHOD_KEYS = ["CASH", "CARD", "BANK", "ONLINE"];
     const userCollection: Record<string, { total: number; CASH: number; CARD: number; BANK: number; ONLINE: number }> = {};

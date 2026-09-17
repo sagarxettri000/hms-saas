@@ -1495,9 +1495,16 @@ export class PharmacyService {
     const todayInvoices = await this.prisma.invoice.findMany({
       where: { tenantId, type: "PHARMACY", issuedDate: { gte: todayStart }, status: { not: "CANCELLED" } },
       select: {
+        patientId: true,
         items: { select: { serviceName: true, quantity: true, lineTotal: true } },
       },
     });
+    let walkInBills = 0;
+    let prescriptionBills = 0;
+    for (const inv of todayInvoices) {
+      if (inv.patientId) prescriptionBills += 1;
+      else walkInBills += 1;
+    }
     const medMap: Record<string, { revenue: number; quantity: number }> = {};
     for (const inv of todayInvoices) {
       for (const item of inv.items) {
@@ -1512,6 +1519,15 @@ export class PharmacyService {
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
 
+    // Collection by payment method (pharmacy invoices only)
+    const methodGroups = await this.prisma.payment.groupBy({
+      by: ["method"],
+      _sum: { amount: true },
+      where: { tenantId, paidAt: { gte: last30Start }, invoice: { type: "PHARMACY" } },
+    });
+    const collectionByMethod: Record<string, number> = {};
+    for (const g of methodGroups) collectionByMethod[g.method] = num(g._sum.amount);
+
     return {
       totalMedicines,
       pendingPrescriptions,
@@ -1523,6 +1539,9 @@ export class PharmacyService {
       revenueToday: revenueToday._sum.amount || 0,
       trend,
       topMedicines,
+      collectionByMethod,
+      walkInBillsToday: walkInBills,
+      prescriptionBillsToday: prescriptionBills,
     };
   }
 }

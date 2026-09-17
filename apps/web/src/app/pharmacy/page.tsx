@@ -482,6 +482,7 @@ function EditMedicineModal({
   }));
   const [stockValue, setStockValue] = useState<number | null>(null);
   const [stockId, setStockId] = useState<string | null>(null);
+  const [storeId, setStoreId] = useState<string | null>(null);
   const [storeLabel, setStoreLabel] = useState('primary store');
   const [loadingStock, setLoadingStock] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -496,6 +497,7 @@ function EditMedicineModal({
           || stores[0];
         if (!primary) { if (!cancelled) { setLoadingStock(false); } return; }
         setStoreLabel(primary.name || 'primary store');
+        setStoreId(String(primary.id));
         const item = toList(invRes).find((i: any) => String(i.storeId) === String(primary.id));
         if (!cancelled) {
           setStockValue(item ? Number(item.currentStock) || 0 : 0);
@@ -521,11 +523,25 @@ function EditMedicineModal({
         method: 'PATCH',
         body: JSON.stringify({ name: values.name, form: values.form, strength: values.strength, salesRate: Number(values.salesRate) || 0 }),
       });
-      if (stockId && stockValue != null) {
-        await api(`/pharmacy/inventory/${stockId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ currentStock: Number(stockValue) || 0 }),
-        });
+      if (stockValue != null) {
+        const stock = Number(stockValue) || 0;
+        if (stockId) {
+          await api(`/pharmacy/inventory/${stockId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ currentStock: stock }),
+          });
+        } else if (storeId) {
+          await api('/pharmacy/inventory', {
+            method: 'POST',
+            body: JSON.stringify({
+              storeId,
+              medicineId: med.id,
+              name: values.name || med.name,
+              itemType: 'MEDICINE',
+              currentStock: stock,
+            }),
+          });
+        }
       }
       onDone();
     } catch (err: any) {
@@ -590,8 +606,33 @@ function MedicinesTab() {
 
   const load = useCallback(() => {
     setLoading(true);
-    api('/pharmacy/medicines?limit=200')
-      .then((res: any) => setMedicines(toList(res)))
+    Promise.all([
+      api('/pharmacy/medicines?limit=200'),
+      api('/pharmacy/stores?limit=200'),
+      api('/pharmacy/inventory?limit=500'),
+    ])
+      .then(([medRes, storeRes, invRes]: any[]) => {
+        const medRows = toList(medRes);
+        const stores = toList(storeRes);
+        const ground = stores.filter((s: any) =>
+          String(s.location || '').toLowerCase().includes('ground floor'),
+        );
+        const primary = ground[0] || stores[0];
+        const stockMap: Record<string, number> = {};
+        if (primary) {
+          toList(invRes).forEach((it: any) => {
+            if (String(it.storeId) === String(primary.id)) {
+              stockMap[it.medicineId] = Number(it.currentStock) || 0;
+            }
+          });
+        }
+        setMedicines(
+          medRows.map((m: any) => ({
+            ...m,
+            stock: stockMap[m.id] ?? Number(m.stock ?? m.currentStock ?? 0),
+          })),
+        );
+      })
       .catch(() => setMedicines([]))
       .finally(() => setLoading(false));
   }, []);

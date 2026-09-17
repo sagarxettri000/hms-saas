@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { api, API_URL } from '@/lib/api';
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
 import { formatDate, formatDateTime, formatMoney } from '@/lib/hooks';
 import { INVOICE_TYPES, PAYMENT_METHODS } from '@/lib/options';
 import type { Row } from '@/lib/types';
@@ -101,31 +101,6 @@ export default function ReceiptModal({
     }
     return () => { cancelled = true; };
   }, [invoice.id]);
-
-  const downloadPdf = useCallback(
-    async (endpoint: string, defaultName: string) => {
-      try {
-        const tenantId = typeof window !== 'undefined' ? localStorage.getItem('tenantId') : null;
-        const headers: Record<string, string> = { 'X-HMS-CSRF': '1' };
-        if (tenantId) headers['X-Tenant-ID'] = tenantId;
-        const res = await fetch(`${API_URL}${endpoint}`, { headers, credentials: 'include' });
-        if (!res.ok) throw new Error(`Download failed (${res.status})`);
-        const blob = await res.blob();
-        const filename = res.headers.get('Content-Disposition')?.match(/filename="?(.+?)"?$/)?.[1] || defaultName;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      } catch (err) {
-        alert(err instanceof Error ? err.message : 'Download failed');
-      }
-    },
-    [],
-  );
 
   if (error) {
     return (
@@ -474,21 +449,7 @@ export default function ReceiptModal({
           <button className="btn btn-secondary" onClick={onClose}>
             Close
           </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => downloadPdf(`/billing/invoices/${data.id}/pdf`, `${data.invoiceNumber}.pdf`)}
-          >
-            Download PDF
-          </button>
-          {payments.length > 0 && (
-            <button
-              className="btn btn-secondary"
-              onClick={() => downloadPdf(`/billing/invoices/${data.id}/receipt`, `receipt-${data.invoiceNumber}.pdf`)}
-            >
-              Download Receipt
-            </button>
-          )}
-          <button className="btn" onClick={() => window.print()}>
+          <button className="btn" onClick={() => window.print()} disabled={payments.length === 0} title={payments.length === 0 ? 'Print invoice is available after a payment is recorded' : undefined}>
             Print invoice
           </button>
         </div>

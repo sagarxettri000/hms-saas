@@ -325,7 +325,17 @@ export default function AdmissionsPage() {
                 </div>
                 <div className="field field-full">
                   <label className="label">Date of birth</label>
-                  <input className="input" type="date" value={quickPatient.dateOfBirth} onChange={(e) => setQuickPatient((p) => ({ ...p, dateOfBirth: e.target.value }))} />
+                  <input className="input" type="text" placeholder="YYYY-MM-DD or DD/MM/YYYY" value={quickPatient.dateOfBirth} onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    let norm = raw;
+                    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw)) {
+                      const [dd, mm, yyyy] = raw.split('/');
+                      norm = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+                    } else if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+                      norm = raw;
+                    }
+                    setQuickPatient((p) => ({ ...p, dateOfBirth: norm }));
+                  }} />
                 </div>
               </div>
               {patientError && <div className="alert alert-error" style={{ marginTop: 12 }}>{patientError}</div>}

@@ -225,13 +225,48 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.replace('/login');
   }
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
+  const isActive = (href: string) => {
+    const base = href.split('?')[0];
+    // Tabbed items (…?tab=x) only light up for their exact tab.
+    if (href.includes('?')) return pathname + search === href;
+    return pathname === base || pathname.startsWith(base + '/');
+  };
 
   const allItems = SECTIONS.flatMap((s) => s.items);
-  const currentPage = allItems.find((i) => isActive(i.href));
-  const denied = currentPage ? !canAccess(currentPage, role) : false;
+  // Access gate: a page is denied only when EVERY nav item targeting it is
+  // inaccessible to this role. Several items can share one path (e.g. the
+  // generic Clinical "Emergency" link and the ER workspace tabs both live on
+  // /emergency) — blocking on the first match locked ER staff out of their
+  // own workspace because the one generic item excludes them.
+  const pathItems = allItems.filter((i) => i.href.split('?')[0] === pathname);
+  const denied = pathItems.length > 0 && pathItems.every((i) => !canAccess(i, role));
 
   const [menuOpen, setMenuOpen] = useState(false);
+  // usePathname() excludes the query string, so tab switches within the same
+  // page (/emergency?tab=a → ?tab=b) never re-fire it. Next performs those
+  // navigations through history.pushState, so wrap it (and replaceState) to
+  // re-sync the search string on every soft navigation.
+  const [search, setSearch] = useState('');
+  useEffect(() => {
+    setSearch(window.location.search || '');
+    const readSearch = () => setSearch(new URL(window.location.href).search || '');
+    const origPush = window.history.pushState.bind(window.history);
+    const origReplace = window.history.replaceState.bind(window.history);
+    window.history.pushState = (...args: any[]) => {
+      origPush(...(args as Parameters<typeof origPush>));
+      readSearch();
+    };
+    window.history.replaceState = (...args: any[]) => {
+      origReplace(...(args as Parameters<typeof origReplace>));
+      readSearch();
+    };
+    window.addEventListener('popstate', readSearch);
+    return () => {
+      window.history.pushState = origPush;
+      window.history.replaceState = origReplace;
+      window.removeEventListener('popstate', readSearch);
+    };
+  }, []);
 
   useEffect(() => {
     if (isPublic) return;

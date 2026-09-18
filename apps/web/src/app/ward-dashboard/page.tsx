@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { compareBeds } from '../../lib/bedOrder';
 import { api } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/hooks';
 
@@ -99,7 +100,7 @@ function TransferModal({ record, onClose, onDone }: { record: any; onClose: () =
             <label className="label">To Bed *</label>
             <select className="input" value={toBedId} onChange={(e) => setToBedId(e.target.value)} required>
               <option value="">-- Select bed --</option>
-              {availableBeds.map((b: any) => (
+                    {availableBeds.slice().sort(compareBeds).map((b: any) => (
                 <option key={b.id} value={b.id}>
                   {b.bedNumber} - {b.ward?.name || 'No Ward'} ({b.bedType})
                 </option>

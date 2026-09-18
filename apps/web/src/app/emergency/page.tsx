@@ -156,11 +156,18 @@ function RegisterTab({ onRegistered }: { onRegistered: () => void }) {
     firstName: '', lastName: '', gender: 'MALE', age: '', phone: '', addressLine1: '', city: '',
   });
   const [caseForm, setCaseForm] = useState<Record<string, any>>({
-    triageLevel: 'URGENT', arrivalMode: 'WALK_IN', chiefComplaint: '',
+    triageLevel: 'URGENT', arrivalMode: 'WALK_IN', chiefComplaint: '', doctorId: '',
   });
+  const [doctors, setDoctors] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    api('/doctors?limit=200')
+      .then((r: any) => setDoctors(toList(r)))
+      .catch(() => setDoctors([]));
+  }, []);
 
   const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
   const setCase = (k: string, v: any) => setCaseForm((f) => ({ ...f, [k]: v }));
@@ -186,12 +193,14 @@ function RegisterTab({ onRegistered }: { onRegistered: () => void }) {
       if (!patientId) throw new Error('no id');
       const c = await api('/emergency', {
         method: 'POST',
-        body: JSON.stringify({ patientId, ...caseForm }),
+        body: JSON.stringify({ patientId, ...caseForm, doctorId: caseForm.doctorId || undefined }),
       });
       const caseNumber = c?.data?.caseNumber || c?.caseNumber;
-      setSuccess(`Patient registered and ER case ${caseNumber || ''} started.`);
+      const docName = doctors.find((d) => d.id === caseForm.doctorId);
+      const docLabel = docName ? [docName.user?.firstName, docName.user?.lastName].filter(Boolean).join(' ') : '';
+      setSuccess(`Patient registered and ER case ${caseNumber || ''} started.${docLabel ? ` Assigned to Dr. ${docLabel}.` : ''}`);
       setForm({ firstName: '', lastName: '', gender: 'MALE', age: '', phone: '', addressLine1: '', city: '' });
-      setCaseForm({ triageLevel: 'URGENT', arrivalMode: 'WALK_IN', chiefComplaint: '' });
+      setCaseForm({ triageLevel: 'URGENT', arrivalMode: 'WALK_IN', chiefComplaint: '', doctorId: '' });
       onRegistered();
     } catch (e: any) {
       setError(e?.message ? `Could not register: ${e.message}` : 'Could not register the patient.');
@@ -238,7 +247,19 @@ function RegisterTab({ onRegistered }: { onRegistered: () => void }) {
         <label style={{ gridColumn: '1 / -1' }}>Chief complaint
           <input className="input" value={caseForm.chiefComplaint} onChange={(e) => setCase('chiefComplaint', e.target.value)} placeholder="e.g. chest pain, RTA injury…" />
         </label>
+        <label style={{ gridColumn: '1 / -1' }}>Attending doctor
+          <select className="input" value={caseForm.doctorId} onChange={(e) => setCase('doctorId', e.target.value)}>
+            <option value="">— Assign later —</option>
+            {doctors.map((d) => (
+              <option key={d.id} value={d.id}>
+                Dr. {[d.user?.firstName, d.user?.lastName].filter(Boolean).join(' ') || d.name || d.id}
+                {d.specialization ? ` · ${d.specialization}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
+      <p className="note" style={{ marginTop: 6 }}>The selected doctor gets this patient in their "My Patients" list immediately.</p>
 
       <button className="btn btn-primary" style={{ marginTop: 14 }} disabled={saving} onClick={submit}>
         {saving ? 'Registering…' : 'Register & start ER case'}
@@ -361,6 +382,8 @@ function AdmitModal({ erCase, erWardId, onClose, onDone }: {
   const [beds, setBeds] = useState<any[]>([]);
   const [bedId, setBedId] = useState('');
   const [admittedTo, setAdmittedTo] = useState('Emergency Ward');
+  const [doctorId, setDoctorId] = useState('');
+  const [doctors, setDoctors] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -370,6 +393,9 @@ function AdmitModal({ erCase, erWardId, onClose, onDone }: {
     api(`/bed-management/beds?${params.toString()}`)
       .then((r: any) => setBeds(toList(r).filter((b) => b.status !== 'OCCUPIED')))
       .catch(() => setBeds([]));
+    api('/doctors?limit=200')
+      .then((r: any) => setDoctors(toList(r)))
+      .catch(() => setDoctors([]));
   }, [erWardId]);
 
   async function submit() {
@@ -378,7 +404,7 @@ function AdmitModal({ erCase, erWardId, onClose, onDone }: {
     try {
       await api(`/emergency/${erCase.id}/admit`, {
         method: 'PATCH',
-        body: JSON.stringify({ bedId: bedId || undefined, admittedTo }),
+        body: JSON.stringify({ bedId: bedId || undefined, admittedTo, doctorId: doctorId || undefined }),
       });
       onDone();
     } catch (e: any) {
@@ -405,6 +431,16 @@ function AdmitModal({ erCase, erWardId, onClose, onDone }: {
         </label>
         <label style={{ display: 'block', margin: '10px 0' }}>Admitting to
           <input className="input" value={admittedTo} onChange={(e) => setAdmittedTo(e.target.value)} />
+        </label>
+        <label style={{ display: 'block', margin: '10px 0' }}>Attending doctor
+          <select className="input" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
+            <option value="">— None —</option>
+            {doctors.map((d) => (
+              <option key={d.id} value={d.id}>
+                Dr. {[d.user?.firstName, d.user?.lastName].filter(Boolean).join(' ') || d.name || d.id}
+              </option>
+            ))}
+          </select>
         </label>
         <p className="note">Creates a real IPD admission (type EMERGENCY) and claims the selected bed. The patient then appears on the bed board and supports transfers.</p>
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
@@ -462,6 +498,7 @@ function DischargeCaseModal({ erCase, onClose, onDone }: {
 function BedsTab() {
   const [wardId, setWardId] = useState<string | null>(null);
   const [beds, setBeds] = useState<any[]>([]);
+  const [erCases, setErCases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [transferring, setTransferring] = useState<any>(null);
@@ -474,6 +511,11 @@ function BedsTab() {
         setWardId(er?.id ?? null);
       })
       .catch(() => setError('Could not load wards.'));
+    // ER cases are needed to map an admission back to its EmergencyCase id
+    // (the transfer endpoint is ER-scoped and keyed by case id).
+    api('/emergency?limit=200')
+      .then((r: any) => setErCases(toList(r)))
+      .catch(() => setErCases([]));
   }, []);
 
   const load = useCallback(() => {
@@ -517,7 +559,15 @@ function BedsTab() {
                 </div>
               )}
               {occupied && b.allocations?.[0]?.admission?.id && (
-                <button className="btn btn-secondary" style={{ marginTop: 8 }} onClick={() => setTransferring(b.allocations[0].admission)}>
+                <button
+                  className="btn btn-secondary"
+                  style={{ marginTop: 8 }}
+                  onClick={() => {
+                    const adm = b.allocations[0].admission;
+                    const erCase = erCases.find((c) => c.admissionId === adm.id);
+                    setTransferring({ ...adm, emergencyCaseId: erCase?.id });
+                  }}
+                >
                   Transfer
                 </button>
               )}
@@ -540,26 +590,46 @@ function BedsTab() {
 function TransferModal({ admission, currentBedId, onClose, onDone }: {
   admission: any; currentBedId?: string; onClose: () => void; onDone: () => void;
 }) {
+  const [mode, setMode] = useState<'bed' | 'ward'>('bed');
   const [target, setTarget] = useState('');
+  const [wardId, setWardId] = useState('');
+  const [doctorId, setDoctorId] = useState('');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [freeBeds, setFreeBeds] = useState<any[]>([]);
+  const [wards, setWards] = useState<any[]>([]);
+  const [doctors, setDoctors] = useState<any[]>([]);
 
   useEffect(() => {
     api('/bed-management/beds?status=AVAILABLE&limit=200')
       .then((r: any) => setFreeBeds(toList(r)))
       .catch(() => setFreeBeds([]));
+    api('/bed-management/wards?limit=100')
+      .then((r: any) => setWards(toList(r).filter((w: any) => !/emergency/i.test(w.name || ''))))
+      .catch(() => setWards([]));
+    api('/doctors?limit=200')
+      .then((r: any) => setDoctors(toList(r)))
+      .catch(() => setDoctors([]));
   }, []);
 
   async function submit() {
-    if (!target) { setError('Pick a destination bed.'); return; }
+    if (mode === 'bed' && !target) { setError('Pick a destination bed.'); return; }
+    if (mode === 'ward' && !wardId) { setError('Pick a destination ward.'); return; }
     setError(null);
     setBusy(true);
     try {
-      await api('/bed-management/transfer', {
-        method: 'POST',
-        body: JSON.stringify({ admissionId: admission.id, toBedId: target, reason: reason || undefined }),
+      await api(`/emergency/${admission.emergencyCaseId || admission.id}/transfer`, {
+        method: 'PATCH',
+        body: JSON.stringify(
+          mode === 'bed'
+            ? { toBedId: target, reason: reason || undefined }
+            : {
+                toWardId: wardId,
+                doctorId: doctorId || undefined,
+                reason: reason || undefined,
+              },
+        ),
       });
       onDone();
     } catch (e: any) {
@@ -569,22 +639,67 @@ function TransferModal({ admission, currentBedId, onClose, onDone }: {
     }
   }
 
+  const wardOptions = wards.map((w) => (
+    <option key={w.id} value={w.id}>{w.name}{w.location ? ` · ${w.location}` : ''}</option>
+  ));
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
         <h3>Transfer patient</h3>
-        <p className="note">{[admission.patient?.firstName, admission.patient?.lastName].filter(Boolean).join(' ')} — move to another bed.</p>
+        <p className="note">{[admission.patient?.firstName, admission.patient?.lastName].filter(Boolean).join(' ')} — move to another ER bed, or transfer out to a ward (updates the main admission record).</p>
         {error && <div role="alert" className="note" style={{ color: '#dc2626' }}>{error}</div>}
-        <label style={{ display: 'block', margin: '10px 0' }}>Destination bed
-          <select className="input" value={target} onChange={(e) => setTarget(e.target.value)}>
-            <option value="">— Select a free bed —</option>
-            {freeBeds.filter((b) => b.id !== currentBedId).map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.bedNumber}{b.room?.name ? ` · ${b.room.name}` : ''}{b.ward?.name ? ` · ${b.ward.name}` : ''}
-              </option>
-            ))}
-          </select>
-        </label>
+
+        <div style={{ display: 'flex', gap: 8, margin: '10px 0' }}>
+          <button
+            className={`btn btn-sm ${mode === 'bed' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => { setMode('bed'); setError(null); }}
+            type="button"
+          >
+            ⊞ Another bed
+          </button>
+          <button
+            className={`btn btn-sm ${mode === 'ward' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => { setMode('ward'); setError(null); }}
+            type="button"
+          >
+            ⇢ To ward
+          </button>
+        </div>
+
+        {mode === 'bed' ? (
+          <label style={{ display: 'block', margin: '10px 0' }}>Destination bed
+            <select className="input" value={target} onChange={(e) => setTarget(e.target.value)}>
+              <option value="">— Select a free bed —</option>
+              {freeBeds.filter((b) => b.id !== currentBedId).map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.bedNumber}{b.room?.name ? ` · ${b.room.name}` : ''}{b.ward?.name ? ` · ${b.ward.name}` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <>
+            <label style={{ display: 'block', margin: '10px 0' }}>Destination ward
+              <select className="input" value={wardId} onChange={(e) => setWardId(e.target.value)}>
+                <option value="">— Select ward —</option>
+                {wardOptions}
+              </select>
+            </label>
+            <label style={{ display: 'block', margin: '10px 0' }}>Receiving doctor
+              <select className="input" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
+                <option value="">— Keep current —</option>
+                {doctors.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    Dr. {[d.user?.firstName, d.user?.lastName].filter(Boolean).join(' ') || d.name || d.id}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="note">The main Admit record moves to the chosen ward and department, and the receiving doctor gets the patient in their "My Patients" list.</p>
+          </>
+        )}
+
         <label style={{ display: 'block', margin: '10px 0' }}>Reason
           <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. deteriorating, ICU needed" />
         </label>

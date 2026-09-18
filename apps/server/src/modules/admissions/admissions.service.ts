@@ -37,6 +37,9 @@ export interface AdmissionSearchParams {
   to?: string;
   page?: number;
   limit?: number;
+  /** Include type=EMERGENCY admissions. Off by default: ER admissions are
+   * managed from the Emergency workspace and stay out of the main Admit list. */
+  includeEmergency?: boolean;
 }
 
 @Injectable()
@@ -127,28 +130,35 @@ export class AdmissionsService {
             where: { id: encounter.id },
             data: { status: "ADMITTED" },
           })
-          .catch((err) => console.warn(`Failed to update encounter status: ${err.message}`));
+          .catch((err) =>
+            console.warn(`Failed to update encounter status: ${err.message}`),
+          );
       }
     }
 
     await this.logAudit(tenantId, userId, "CREATE", "Admission", admission.id);
 
     if (dto.admittingDoctorId) {
-      this.prisma.doctorProfile.findFirst({
-        where: { id: dto.admittingDoctorId, tenantId },
-        select: { userId: true },
-      }).then((doctor) => {
-        if (doctor?.userId) {
-          this.notifications.create(tenantId, {
-            userId: doctor.userId,
-            title: "Patient Admitted",
-            body: `Patient ${admission.patient.firstName} ${admission.patient.lastName} has been admitted (${admission.admissionNumber})`,
-            type: "ADMISSION_CREATED",
-            referenceType: "Admission",
-            referenceId: admission.id,
-          }).catch(() => {});
-        }
-      }).catch(() => {});
+      this.prisma.doctorProfile
+        .findFirst({
+          where: { id: dto.admittingDoctorId, tenantId },
+          select: { userId: true },
+        })
+        .then((doctor) => {
+          if (doctor?.userId) {
+            this.notifications
+              .create(tenantId, {
+                userId: doctor.userId,
+                title: "Patient Admitted",
+                body: `Patient ${admission.patient.firstName} ${admission.patient.lastName} has been admitted (${admission.admissionNumber})`,
+                type: "ADMISSION_CREATED",
+                referenceType: "Admission",
+                referenceId: admission.id,
+              })
+              .catch(() => {});
+          }
+        })
+        .catch(() => {});
     }
 
     return admission;
@@ -162,6 +172,7 @@ export class AdmissionsService {
     if (params.patientId) where.patientId = params.patientId;
     if (params.departmentId) where.departmentId = params.departmentId;
     if (params.status) where.status = params.status;
+    if (!params.includeEmergency) where.admissionType = { not: "EMERGENCY" };
 
     if (params.search && params.search.trim()) {
       const term = params.search.trim();
@@ -260,7 +271,12 @@ export class AdmissionsService {
     });
     if (!admission) throw new NotFoundException("Admission not found");
 
-    const { tenantId: _t, admissionNumber: _a, patientId: _p, ...fields } = dto as any;
+    const {
+      tenantId: _t,
+      admissionNumber: _a,
+      patientId: _p,
+      ...fields
+    } = dto as any;
     return this.prisma.admission.update({
       where: { id },
       data: { ...fields, updatedBy: userId },
@@ -458,7 +474,9 @@ export class AdmissionsService {
             where: { id: admission.encounterId },
             data: { status: "DISCHARGED" },
           })
-          .catch((err) => console.warn(`Failed to update encounter status: ${err.message}`));
+          .catch((err) =>
+            console.warn(`Failed to update encounter status: ${err.message}`),
+          );
       }
 
       await this.logAudit(tenantId, userId, "UPDATE", "Admission", id, {
@@ -466,21 +484,26 @@ export class AdmissionsService {
       });
 
       if (admission.admittingDoctorId) {
-        this.prisma.doctorProfile.findFirst({
-          where: { id: admission.admittingDoctorId, tenantId },
-          select: { userId: true },
-        }).then((doctor) => {
-          if (doctor?.userId) {
-            this.notifications.create(tenantId, {
-              userId: doctor.userId,
-              title: "Patient Discharged",
-              body: `Patient has been discharged (${admission.admissionNumber})`,
-              type: "ADMISSION_DISCHARGED",
-              referenceType: "Admission",
-              referenceId: id,
-            }).catch(() => {});
-          }
-        }).catch(() => {});
+        this.prisma.doctorProfile
+          .findFirst({
+            where: { id: admission.admittingDoctorId, tenantId },
+            select: { userId: true },
+          })
+          .then((doctor) => {
+            if (doctor?.userId) {
+              this.notifications
+                .create(tenantId, {
+                  userId: doctor.userId,
+                  title: "Patient Discharged",
+                  body: `Patient has been discharged (${admission.admissionNumber})`,
+                  type: "ADMISSION_DISCHARGED",
+                  referenceType: "Admission",
+                  referenceId: id,
+                })
+                .catch(() => {});
+            }
+          })
+          .catch(() => {});
       }
 
       return updated;
@@ -590,6 +613,7 @@ export class AdmissionsService {
       where: {
         tenantId,
         status: { in: ["PENDING", "ADMITTED", "TRANSFERRED"] },
+        admissionType: { not: "EMERGENCY" },
       },
       include: {
         patient: {

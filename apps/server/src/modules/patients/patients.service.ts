@@ -60,6 +60,12 @@ export interface CreatePatientDto {
   }>;
   consentGiven?: boolean;
   consentNotes?: string;
+  /** Attending doctor (DoctorProfile id). When provided at registration, an
+   * OPD encounter is created so the patient lands in the doctor's
+   * "My Patients" list right away. */
+  doctorId?: string;
+  chiefComplaint?: string;
+  symptoms?: string;
 }
 
 export interface UpdatePatientDto extends Partial<CreatePatientDto> {}
@@ -192,6 +198,30 @@ export class PatientsService {
 
       return created;
     });
+
+    // Optional walk-in doctor assignment: open an OPD encounter for the
+    // freshly registered patient under the chosen doctor.
+    if (dto.doctorId) {
+      const doctor = await this.prisma.doctorProfile.findFirst({
+        where: { id: dto.doctorId, tenantId, isActive: true },
+        select: { id: true, userId: true },
+      });
+      if (!doctor) throw new NotFoundException("Doctor not found");
+      await this.prisma.encounter.create({
+        data: {
+          tenantId,
+          patientId: patient.id,
+          doctorId: doctor.id,
+          doctorUserId: doctor.userId || undefined,
+          type: "OPD",
+          status: "ACTIVE",
+          chiefComplaint: dto.chiefComplaint,
+          symptoms: dto.symptoms,
+          clinicalNotes: "Created at patient registration",
+          createdBy: userId,
+        },
+      });
+    }
 
     await this.logAudit(tenantId, userId, "CREATE", "Patient", patient.id);
 
@@ -395,14 +425,44 @@ export class PatientsService {
     const { allergies, chronicConditions } = dto as any;
 
     const allowedFields = [
-      "firstName", "middleName", "lastName", "dateOfBirth", "age", "gender",
-      "bloodGroup", "nationality", "religion", "phone", "mobile", "email",
-      "addressLine1", "addressLine2", "city", "district", "province", "country",
-      "postalCode", "emergencyContactName", "emergencyContactRelationship",
-      "emergencyContactPhone", "emergencyContactMobile", "guardianName",
-      "guardianRelationship", "guardianPhone", "guardianEmail", "guardianIdType",
-      "guardianIdNumber", "occupation", "education", "maritalStatus", "nationalId",
-      "passportNumber", "patientType", "isForeign", "isStaff", "consentGiven",
+      "firstName",
+      "middleName",
+      "lastName",
+      "dateOfBirth",
+      "age",
+      "gender",
+      "bloodGroup",
+      "nationality",
+      "religion",
+      "phone",
+      "mobile",
+      "email",
+      "addressLine1",
+      "addressLine2",
+      "city",
+      "district",
+      "province",
+      "country",
+      "postalCode",
+      "emergencyContactName",
+      "emergencyContactRelationship",
+      "emergencyContactPhone",
+      "emergencyContactMobile",
+      "guardianName",
+      "guardianRelationship",
+      "guardianPhone",
+      "guardianEmail",
+      "guardianIdType",
+      "guardianIdNumber",
+      "occupation",
+      "education",
+      "maritalStatus",
+      "nationalId",
+      "passportNumber",
+      "patientType",
+      "isForeign",
+      "isStaff",
+      "consentGiven",
       "consentNotes",
     ] as const;
 
@@ -410,9 +470,12 @@ export class PatientsService {
     for (const key of allowedFields) {
       if ((dto as any)[key] !== undefined) updateData[key] = (dto as any)[key];
     }
-    if (updateData.email !== undefined) updateData.email = String(updateData.email).toLowerCase();
+    if (updateData.email !== undefined)
+      updateData.email = String(updateData.email).toLowerCase();
     if (updateData.dateOfBirth)
-      updateData.dateOfBirth = this.normalizeDate(updateData.dateOfBirth as any);
+      updateData.dateOfBirth = this.normalizeDate(
+        updateData.dateOfBirth as any,
+      );
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const result = await tx.patient.update({
@@ -605,7 +668,10 @@ export class PatientsService {
       const dto = rows[i];
       try {
         if (!dto.firstName || !dto.lastName) {
-          errors.push({ row: i + 1, error: "firstName and lastName are required" });
+          errors.push({
+            row: i + 1,
+            error: "firstName and lastName are required",
+          });
           continue;
         }
 

@@ -19,6 +19,9 @@ export interface CreateEmergencyCaseDto {
   vitals?: any;
   examination?: string;
   history?: string;
+  /** Attending ER doctor (DoctorProfile id). Creates an EMERGENCY encounter
+   * so the case appears in that doctor's "My Patients" list. */
+  doctorId?: string;
 }
 
 export interface CreateEmergencyInvoiceDto {
@@ -82,8 +85,19 @@ export class EmergencyService {
       where: { id: dto.patientId, tenantId, deletedAt: null },
     });
     if (!patient) throw new NotFoundException("Patient not found");
+
+    // Optional attending doctor — validated against this tenant.
+    let doctor: { id: string; userId: string | null } | null = null;
+    if (dto.doctorId) {
+      doctor = await this.prisma.doctorProfile.findFirst({
+        where: { id: dto.doctorId, tenantId, isActive: true },
+        select: { id: true, userId: true },
+      });
+      if (!doctor) throw new NotFoundException("Doctor not found");
+    }
+
     const caseNumber = await this.generateCaseNumber(tenantId);
-    return this.prisma.emergencyCase.create({
+    const created = await this.prisma.emergencyCase.create({
       data: {
         tenantId,
         patientId: dto.patientId,
@@ -106,6 +120,29 @@ export class EmergencyService {
         },
       },
     });
+
+    // Record the doctor's EMERGENCY encounter (with the triage vitals if
+    // provided) so the patient shows up in the doctor's "My Patients".
+    if (doctor) {
+      await this.prisma.encounter.create({
+        data: {
+          tenantId,
+          patientId: dto.patientId,
+          doctorId: doctor.id,
+          doctorUserId: doctor.userId || undefined,
+          type: "EMERGENCY",
+          status: "ACTIVE",
+          chiefComplaint: dto.chiefComplaint,
+          symptoms: dto.chiefComplaint,
+          examination: dto.examination,
+          history: dto.history,
+          clinicalNotes: `Emergency case ${caseNumber}`,
+          createdBy: userId,
+        },
+      });
+    }
+
+    return created;
   }
 
   async findAll(tenantId: string, query: any) {
@@ -238,7 +275,12 @@ export class EmergencyService {
   async admit(
     tenantId: string,
     id: string,
-    body: { admittedTo?: string; bedId?: string; notes?: string },
+    body: {
+      admittedTo?: string;
+      bedId?: string;
+      notes?: string;
+      doctorId?: string;
+    },
     userId?: string,
   ) {
     const ec = await this.prisma.emergencyCase.findFirst({
@@ -266,6 +308,16 @@ export class EmergencyService {
       if (occupied) throw new ConflictException("Bed is already occupied");
     }
 
+    // Attending doctor for the admission (validated against this tenant).
+    let doctorProfile: { id: string; userId: string | null } | null = null;
+    if (body.doctorId) {
+      doctorProfile = await this.prisma.doctorProfile.findFirst({
+        where: { id: body.doctorId, tenantId, isActive: true },
+        select: { id: true, userId: true },
+      });
+      if (!doctorProfile) throw new NotFoundException("Doctor not found");
+    }
+
     const admission = await this.prisma.$transaction(async (tx) => {
       const created = await tx.admission.create({
         data: {
@@ -276,6 +328,7 @@ export class EmergencyService {
           provisionalDiagnosis: ec.chiefComplaint,
           notes: body.notes || `Admitted from ER case ${ec.caseNumber}`,
           status: "ADMITTED",
+          ...(doctorProfile ? { admittingDoctorId: doctorProfile.id } : {}),
           createdBy: userId,
         },
       });
@@ -383,6 +436,204 @@ export class EmergencyService {
     });
 
     return { success: true };
+  }
+
+  /**
+   * Transfer an admitted ER patient to another bed, or out of the ER into a
+   * ward. The linked Admission (visible to IPD/ward flows) is kept in sync:
+   * a ward transfer re-homes it to the ward's department and re-assigns the
+   * admitting doctor, and the ER case is flagged TRANSFERRED_OUT so the ER
+   * board stops managing it. Bed allocation/movement bookkeeping matches the
+   * shared bed-management transfer exactly.
+   */
+  async transfer(
+    tenantId: string,
+    id: string,
+    body: {
+      toBedId?: string;
+      reason?: string;
+      toWardId?: string;
+      doctorId?: string;
+      notes?: string;
+    },
+    userId?: string,
+  ) {
+    if (!body.toBedId && !body.toWardId)
+      throw new BadRequestException(
+        "Provide a destination bed or a destination ward",
+      );
+    if (body.toBedId && body.toWardId)
+      throw new BadRequestException(
+        "Choose either a bed transfer or a ward transfer, not both",
+      );
+
+    const ec = await this.prisma.emergencyCase.findFirst({
+      where: { id, tenantId },
+      include: {
+        admission: {
+          include: { bedAllocations: { where: { releasedAt: null } } },
+        },
+      },
+    });
+    if (!ec) throw new NotFoundException("Emergency case not found");
+    if (ec.dischargedAt)
+      throw new BadRequestException("Cannot transfer a discharged case");
+    if (!ec.admitted || !ec.admission)
+      throw new BadRequestException(
+        "Case is not admitted — admit it to a bed before transferring",
+      );
+
+    const currentAlloc = ec.admission.bedAllocations[0];
+    if (!currentAlloc)
+      throw new ConflictException(
+        "No active bed allocation found for this case",
+      );
+
+    let ward = null as
+      | { id: string; name: string; departmentId: string | null }
+      | null;
+    if (body.toWardId) {
+      ward = await this.prisma.ward.findFirst({
+        where: { id: body.toWardId, tenantId, isActive: true },
+        select: { id: true, name: true, departmentId: true },
+      });
+      if (!ward) throw new NotFoundException("Destination ward not found");
+    }
+
+    let doctorProfile = null as { id: string; userId: string | null } | null;
+    if (body.doctorId) {
+      doctorProfile = await this.prisma.doctorProfile.findFirst({
+        where: { id: body.doctorId, tenantId, isActive: true },
+        select: { id: true, userId: true },
+      });
+      if (!doctorProfile)
+        throw new NotFoundException("Doctor not found");
+    }
+
+    const toBedId = body.toBedId || null;
+    if (toBedId) {
+      const newBed = await this.prisma.bed.findFirst({
+        where: { id: toBedId, tenantId, isActive: true },
+      });
+      if (!newBed) throw new NotFoundException("Target bed not found");
+      if (newBed.status !== "AVAILABLE")
+        throw new ConflictException(
+          `Target bed is not available (status: ${newBed.status})`,
+        );
+      if (newBed.id === currentAlloc.bedId)
+        throw new ConflictException("Patient is already in this bed");
+    }
+
+    const admissionId = ec.admission.id;
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Free the current bed (same convention as bed-management transfers:
+      // the vacated bed goes to CLEANING, not straight to AVAILABLE).
+      await tx.bedAllocation.update({
+        where: { id: currentAlloc.id },
+        data: { status: "AVAILABLE", releasedAt: new Date() },
+      });
+      await tx.bed.update({
+        where: { id: currentAlloc.bedId },
+        data: { status: "CLEANING" },
+      });
+
+      // Claim the destination bed (bed transfer, or the first free bed in the
+      // destination ward when transferring out of the ER).
+      let claimedBedId = toBedId;
+      if (ward && !claimedBedId) {
+        const freeBed = await tx.bed.findFirst({
+          where: { tenantId, wardId: ward.id, isActive: true, status: "AVAILABLE" },
+          orderBy: { bedNumber: "asc" },
+        });
+        if (!freeBed)
+          throw new ConflictException(
+            `No free bed in ward "${ward.name}" — pick one manually via bed transfer`,
+          );
+        claimedBedId = freeBed.id;
+      }
+      if (claimedBedId) {
+        const claimed = await tx.bed.updateMany({
+          where: { id: claimedBedId, tenantId, status: { not: "OCCUPIED" } },
+          data: { status: "OCCUPIED" },
+        });
+        if (claimed.count === 0)
+          throw new ConflictException("Target bed was just taken — retry");
+        await tx.bedAllocation.create({
+          data: {
+            tenantId,
+            bedId: claimedBedId,
+            admissionId,
+            status: "OCCUPIED",
+            createdBy: userId,
+          },
+        });
+      }
+
+      await tx.bedMovement.create({
+        data: {
+          tenantId,
+          bedId: currentAlloc.bedId,
+          admissionId,
+          fromBedId: currentAlloc.bedId,
+          toBedId: claimedBedId,
+          reason:
+            body.reason ||
+            (ward
+              ? `ER → ward transfer to ${ward.name}`
+              : "ER bed transfer"),
+          movedBy: userId,
+        },
+      });
+
+      // Keep the shared Admission record authoritative for IPD flows.
+      await tx.admission.update({
+        where: { id: admissionId },
+        data: {
+          ...(ward
+            ? {
+                departmentId: ward.departmentId || undefined,
+                admissionType: "TRANSFER",
+                notes: body.notes || `Transferred from ER to ${ward.name}`,
+              }
+            : {}),
+          ...(doctorProfile ? { admittingDoctorId: doctorProfile.id } : {}),
+          updatedBy: userId,
+        },
+      });
+
+      if (ward) {
+        // The ER board keeps showing the case but with its new location; the
+        // linked admission carries on in the ward under the receiving doctor.
+        await tx.emergencyCase.update({
+          where: { id: ec.id },
+          data: {
+            admittedTo: ward.name,
+            triageNotes: body.notes || ec.triageNotes,
+          },
+        });
+        // Re-point the linked encounter (if any) at the receiving doctor so
+        // "my patients" and ward follow-ups follow the transfer.
+        if (doctorProfile) {
+          await tx.encounter.updateMany({
+            where: { patientId: ec.patientId, tenantId, type: "EMERGENCY" },
+            data: {
+              doctorId: doctorProfile.id,
+              doctorUserId: doctorProfile.userId || undefined,
+            },
+          },
+          );
+        }
+      }
+
+      return { claimedBedId, ward: ward?.name || null };
+    });
+
+    return {
+      success: true,
+      admissionId,
+      movedToBedId: result.claimedBedId,
+      transferredToWard: result.ward,
+    };
   }
 
   /** ER-scoped billing: only EMERGENCY invoices, tenant-isolated. */

@@ -122,10 +122,36 @@ export class EmergencyController {
   @Permissions(PermissionAction.EDIT)
   admit(
     @Param("id") id: string,
-    @Body() body: { admittedTo?: string; bedId?: string; notes?: string },
+    @Body() body: {
+      admittedTo?: string;
+      bedId?: string;
+      notes?: string;
+      doctorId?: string;
+    },
     @Req() req: any,
   ) {
     return this.emergencyService.admit(
+      req.user.tenantId,
+      id,
+      body,
+      req.user.id,
+    );
+  }
+
+  @Patch(":id/transfer")
+  @Permissions(PermissionAction.EDIT)
+  transfer(
+    @Param("id") id: string,
+    @Body() body: {
+      toBedId?: string;
+      toWardId?: string;
+      doctorId?: string;
+      reason?: string;
+      notes?: string;
+    },
+    @Req() req: any,
+  ) {
+    return this.emergencyService.transfer(
       req.user.tenantId,
       id,
       body,

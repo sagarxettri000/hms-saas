@@ -97,6 +97,9 @@ export default function LoginPage() {
       }
       if (res.data.user.mustChangePassword) {
         router.push('/change-password');
+      } else if (res.data.user.role === 'EMERGENCY_STAFF') {
+        // ER staff live in the Emergency workspace, not the general dashboard.
+        router.push('/emergency?tab=dashboard');
       } else {
         router.push('/dashboard');
       }

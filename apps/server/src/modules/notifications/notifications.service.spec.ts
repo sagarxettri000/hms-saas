@@ -9,7 +9,7 @@ describe("NotificationsService", () => {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     user: {
-      findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(null),
     },
   };
   const hub = { emit: jest.fn() };
@@ -46,7 +46,10 @@ describe("NotificationsService", () => {
   });
 
   it("dispatches email for an EMAIL-channel notification", async () => {
-    prisma.user.findUnique.mockResolvedValue({ email: "doc@hosp.com", phone: null });
+    prisma.user.findFirst.mockResolvedValue({
+      email: "doc@hosp.com",
+      phone: null,
+    });
     const service = makeService();
     await service.create("t1", {
       userId: "u1",
@@ -65,7 +68,7 @@ describe("NotificationsService", () => {
   });
 
   it("dispatches SMS for an SMS-channel notification", async () => {
-    prisma.user.findUnique.mockResolvedValue({ phone: "+9779800000000" });
+    prisma.user.findFirst.mockResolvedValue({ phone: "+9779800000000" });
     const service = makeService();
     await service.create("t1", {
       userId: "u1",
@@ -82,7 +85,7 @@ describe("NotificationsService", () => {
   });
 
   it("dispatches both for an ALL-channel notification", async () => {
-    prisma.user.findUnique.mockResolvedValue({
+    prisma.user.findFirst.mockResolvedValue({
       email: "doc@hosp.com",
       phone: "+9779800000000",
     });
@@ -99,7 +102,7 @@ describe("NotificationsService", () => {
   });
 
   it("does not dispatch when the user has no contact info", async () => {
-    prisma.user.findUnique.mockResolvedValue({ email: null, phone: null });
+    prisma.user.findFirst.mockResolvedValue({ email: null, phone: null });
     const service = makeService();
     await service.create("t1", {
       userId: "u1",

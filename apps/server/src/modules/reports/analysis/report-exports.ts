@@ -1,5 +1,8 @@
 function escapePdfText(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
 }
 
 function pdfString(value: string): string {
@@ -36,7 +39,9 @@ export function buildReportPdf(options: ReportPdfOptions): Buffer {
   const usableWidth = pageWidth - margin * 2;
   const totalWeight = options.columns.reduce((s, c) => s + c.width, 0);
   const colWidths = options.columns.map((c) =>
-    totalWeight > 0 ? (c.width / totalWeight) * usableWidth : usableWidth / options.columns.length,
+    totalWeight > 0
+      ? (c.width / totalWeight) * usableWidth
+      : usableWidth / options.columns.length,
   );
   const tableTop = pageHeight - 90;
 
@@ -78,9 +83,11 @@ export function buildReportPdf(options: ReportPdfOptions): Buffer {
     header.push(`${pdfString(options.title)} Tj`);
     header.push("/F1 9 Tf");
     header.push("0.3 0.3 0.3 rg");
-    let hx = margin;
+    const hx = margin;
     header.push(`${pageWidth - margin} ${pageHeight - margin} Td`);
-    header.push(`${pdfString(shortenRight(String(options.subtitle || ""), 60))} Tj`);
+    header.push(
+      `${pdfString(shortenRight(String(options.subtitle || ""), 60))} Tj`,
+    );
     header.push("ET");
     header.push("BT /F1 9 Tf");
     header.push("0.3 0.3 0.3 rg");
@@ -122,7 +129,10 @@ export function buildReportPdf(options: ReportPdfOptions): Buffer {
       const w = colWidths[i];
       const cell = row[i] || "";
       const maxLen = Math.floor(w / 4.6);
-      const shown = cell.length > maxLen ? cell.slice(0, Math.max(1, maxLen - 2)) + ".." : cell;
+      const shown =
+        cell.length > maxLen
+          ? cell.slice(0, Math.max(1, maxLen - 2)) + ".."
+          : cell;
       const tx = col.align === "right" ? x + w - 8 : x + 8;
       lines.push(`${tx} ${top - 14} Td`);
       lines.push(`${pdfString(shown)} Tj`);
@@ -155,16 +165,16 @@ export function buildReportPdf(options: ReportPdfOptions): Buffer {
   }
 
   addObject("<< /Type /Catalog /Pages 2 0 R >>");
-  const kids = pages
-    .map((_, i) => 4 + i * 2)
-    .join(" 0 R ");
+  const kids = pages.map((_, i) => 4 + i * 2).join(" 0 R ");
   addObject(`<< /Type /Pages /Kids [${kids}] /Count ${pages.length} >>`);
   for (let i = 0; i < pages.length; i++) {
     const contentObj = 3 + i * 2;
     const pageObj = 4 + i * 2;
     const fontObj = 5 + i * 2;
     const stream = pages[i].join("\n");
-    addObject(`<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`);
+    addObject(
+      `<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`,
+    );
     addObject(
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Contents ${contentObj} 0 R /Resources << /Font << /F1 ${fontObj} 0 R >> >> >>`,
     );
@@ -173,7 +183,8 @@ export function buildReportPdf(options: ReportPdfOptions): Buffer {
 
   const xrefOffset = Buffer.byteLength(pdf, "latin1");
   pdf += `xref\n0 ${offsets.length + 1}\n0000000000 65535 f \n`;
-  for (const off of offsets) pdf += `${String(off).padStart(10, "0")} 00000 n \n`;
+  for (const off of offsets)
+    pdf += `${String(off).padStart(10, "0")} 00000 n \n`;
   pdf += `trailer\n<< /Size ${offsets.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
 
   return Buffer.from(pdf, "latin1");
@@ -184,7 +195,9 @@ function shorten(value: string, max: number): string {
 }
 
 function shortenRight(value: string, max: number): string {
-  return value.length > max ? "..." + value.slice(value.length - max + 3) : value;
+  return value.length > max
+    ? "..." + value.slice(value.length - max + 3)
+    : value;
 }
 
 function xmlEscape(value: string): string {
@@ -215,7 +228,7 @@ export function buildReportXls(options: ReportXlsOptions): Buffer {
     '<?mso-application progid="Excel.Sheet"?>',
     '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"',
     ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">',
-    '<Styles>',
+    "<Styles>",
     '<Style ss:ID="header"><Font ss:Bold="1"/><Interior ss:Color="#DDE7F0" ss:Pattern="Solid"/></Style>',
     '<Style ss:ID="money"><NumberFormat ss:Format="0.00"/></Style>',
     '<Style ss:ID="total"><Font ss:Bold="1"/><Interior ss:Color="#EEF1F4" ss:Pattern="Solid"/></Style>',
@@ -230,7 +243,10 @@ export function buildReportXls(options: ReportXlsOptions): Buffer {
   rowsXml.push(titleRow, subRow);
   rowsXml.push(
     `<Row>${options.columns
-      .map((c) => `<Cell ss:StyleID="header"><Data ss:Type="String">${xmlEscape(c.title)}</Data></Cell>`)
+      .map(
+        (c) =>
+          `<Cell ss:StyleID="header"><Data ss:Type="String">${xmlEscape(c.title)}</Data></Cell>`,
+      )
       .join("")}</Row>`,
   );
 

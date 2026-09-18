@@ -1750,6 +1750,7 @@ model Admission {
   radiologyOrders           RadiologyOrder[]
   chargeTransactions        ChargeTransaction[]
   dischargeBills            DischargeBill[]
+  emergencyCase             EmergencyCase?
 
   @@index([tenantId, patientId])
   @@index([status])
@@ -2253,11 +2254,14 @@ model EmergencyCase {
   admittedTo       String?
   admittedAt       DateTime?
   dischargedAt     DateTime?
+  admissionId      String? @unique
+  admission        Admission? @relation(fields: [admissionId], references: [id], onDelete: SetNull)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   createdBy        String?
 
   @@index([tenantId, patientId])
+  @@index([tenantId, admissionId])
   @@map("emergency_cases")
   @@index([patientId])
 }

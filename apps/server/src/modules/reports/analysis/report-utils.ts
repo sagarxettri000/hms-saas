@@ -40,8 +40,18 @@ export function monthKey(d: Date | undefined): string {
 }
 
 const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 
 export function monthLabel(key: string): string {
@@ -50,7 +60,10 @@ export function monthLabel(key: string): string {
   return `${MONTHS[m - 1] || m} ${y}`;
 }
 
-export function applyRange(field: string, filters: ResolvedFilters): any | undefined {
+export function applyRange(
+  field: string,
+  filters: ResolvedFilters,
+): any | undefined {
   const w: any = {};
   if (filters.from) w.gte = filters.from;
   if (filters.to) w.lte = filters.to;
@@ -127,7 +140,10 @@ export function invoiceWhere(ctx: ExecContext, extra: any = {}): any {
   return where;
 }
 
-export async function fetchInvoices(ctx: ExecContext, extra: any = {}): Promise<any[]> {
+export async function fetchInvoices(
+  ctx: ExecContext,
+  extra: any = {},
+): Promise<any[]> {
   return ctx.prisma.invoice.findMany({
     where: invoiceWhere(ctx, extra),
     include: { items: true, patient: PATIENT_SELECT },
@@ -187,7 +203,11 @@ export async function doctorNames(
   return m;
 }
 
-export async function userNames(prisma: any, tenantId: string, ids: string[]): Promise<Map<string, string>> {
+export async function userNames(
+  prisma: any,
+  tenantId: string,
+  ids: string[],
+): Promise<Map<string, string>> {
   const m = new Map<string, string>();
   const uniq = [...new Set(ids.filter(Boolean))];
   if (!uniq.length) return m;
@@ -208,8 +228,14 @@ export async function wardByAdmission(
   const uniq = [...new Set(admissionIds.filter(Boolean))];
   if (!uniq.length) return m;
   const allocs = await prisma.bedAllocation.findMany({
-    where: { tenantId, admissionId: { in: uniq }, status: { in: ["OCCUPIED", "AVAILABLE", "RESERVED"] } },
-    include: { bed: { select: { bedNumber: true, ward: { select: { name: true } } } } },
+    where: {
+      tenantId,
+      admissionId: { in: uniq },
+      status: { in: ["OCCUPIED", "AVAILABLE", "RESERVED"] },
+    },
+    include: {
+      bed: { select: { bedNumber: true, ward: { select: { name: true } } } },
+    },
     orderBy: { allocatedAt: "desc" },
   });
   for (const a of allocs) {
@@ -223,7 +249,10 @@ export async function wardByAdmission(
   return m;
 }
 
-export function sumBy<K>(rows: Record<string, any>[], key: (r: Record<string, any>) => K): Map<K, Record<string, any>> {
+export function sumBy<K>(
+  rows: Record<string, any>[],
+  key: (r: Record<string, any>) => K,
+): Map<K, Record<string, any>> {
   const m = new Map<K, Record<string, any>>();
   for (const r of rows) {
     const k = key(r);
@@ -238,7 +267,11 @@ export function sumBy<K>(rows: Record<string, any>[], key: (r: Record<string, an
   return m;
 }
 
-export function sortRows<T extends Record<string, any>>(rows: T[], by: string, desc = true): T[] {
+export function sortRows<T extends Record<string, any>>(
+  rows: T[],
+  by: string,
+  desc = true,
+): T[] {
   return [...rows].sort((a, b) => {
     const av = a[by];
     const bv = b[by];
@@ -256,5 +289,8 @@ export function sumOf(rows: any[], key: string): number {
 }
 
 export function daysBetween(a: Date, b: Date): number {
-  return Math.max(0, Math.floor((b.getTime() - a.getTime()) / (24 * 3600 * 1000)));
+  return Math.max(
+    0,
+    Math.floor((b.getTime() - a.getTime()) / (24 * 3600 * 1000)),
+  );
 }

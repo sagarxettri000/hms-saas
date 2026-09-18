@@ -56,13 +56,6 @@ export default function LoginShell({ children }: { children: React.ReactNode }) 
           </div>
 
           {children}
-
-          <div className="login-register-text">
-            Don&apos;t have an account yet?{' '}
-            <Link href="/register" className="auth-register-link">
-              Register for free
-            </Link>
-          </div>
         </div>
 
         <footer className="login-footer">

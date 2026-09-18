@@ -60,16 +60,13 @@ export class NotificationsService {
     return notification;
   }
 
-  private async dispatchExternal(
-    tenantId: string,
-    dto: CreateNotificationDto,
-  ) {
+  private async dispatchExternal(tenantId: string, dto: CreateNotificationDto) {
     const channel = (dto.channel || "IN_APP").toUpperCase();
 
     if (channel === "EMAIL" || channel === "ALL") {
       const target = dto.userId
-        ? await this.prisma.user.findUnique({
-            where: { id: dto.userId },
+        ? await this.prisma.user.findFirst({
+            where: { id: dto.userId, tenantId },
             select: { email: true, phone: true },
           })
         : null;
@@ -77,7 +74,7 @@ export class NotificationsService {
         await this.communications.sendEmail(tenantId, {
           to: target.email,
           subject: dto.title,
-          html: `<p>${dto.body}</p>`,
+          html: `<p>${this.escapeHtml(String(dto.body ?? ""))}</p>`,
           text: dto.body,
         });
       }
@@ -85,8 +82,8 @@ export class NotificationsService {
 
     if (channel === "SMS" || channel === "ALL") {
       const target = dto.userId
-        ? await this.prisma.user.findUnique({
-            where: { id: dto.userId },
+        ? await this.prisma.user.findFirst({
+            where: { id: dto.userId, tenantId },
             select: { phone: true },
           })
         : null;
@@ -145,5 +142,14 @@ export class NotificationsService {
       where: { tenantId, userId, readAt: null },
       data: { readAt: new Date(), status: "READ" as any },
     });
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 }

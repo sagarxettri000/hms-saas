@@ -345,7 +345,9 @@ export class BillingService {
     });
     let discountReason = dto.discountReason;
     if (scheme && Number(scheme.discountPercent) > 0 && !dto.discountAmount) {
-      invoiceDiscount = Math.round((subtotal * Number(scheme.discountPercent)) / 100);
+      invoiceDiscount = Math.round(
+        (subtotal * Number(scheme.discountPercent)) / 100,
+      );
       discountReason =
         discountReason || `Scheme: ${scheme.name} (${scheme.discountPercent}%)`;
     }
@@ -367,7 +369,9 @@ export class BillingService {
           type: (dto.type || "OPD") as any,
           subtotal,
           discountAmount: invoiceDiscount,
-          discountPercent: dto.discountPercent ?? (scheme ? Number(scheme.discountPercent) : undefined),
+          discountPercent:
+            dto.discountPercent ??
+            (scheme ? Number(scheme.discountPercent) : undefined),
           discountReason,
           discountApprovedBy: invoiceDiscount ? userId : undefined,
           discountStatus: invoiceDiscount ? "APPROVED" : undefined,
@@ -407,21 +411,29 @@ export class BillingService {
 
     await this.logAudit(tenantId, userId, "CREATE", "Invoice", invoice.id);
 
-    this.prisma.user.findMany({
-      where: { tenantId, role: { in: ["RECEPTIONIST", "FINANCE_MANAGER"] as any } },
-      select: { id: true },
-    }).then((staff) => {
-      for (const s of staff) {
-        this.notifications.create(tenantId, {
-          userId: s.id,
-          title: "New Invoice Issued",
-          body: `Invoice ${invoice.invoiceNumber} for Rs. ${invoice.totalAmount} has been issued`,
-          type: "INVOICE_CREATED",
-          referenceType: "Invoice",
-          referenceId: invoice.id,
-        }).catch(() => {});
-      }
-    }).catch(() => {});
+    this.prisma.user
+      .findMany({
+        where: {
+          tenantId,
+          role: { in: ["RECEPTIONIST", "FINANCE_MANAGER"] as any },
+        },
+        select: { id: true },
+      })
+      .then((staff) => {
+        for (const s of staff) {
+          this.notifications
+            .create(tenantId, {
+              userId: s.id,
+              title: "New Invoice Issued",
+              body: `Invoice ${invoice.invoiceNumber} for Rs. ${invoice.totalAmount} has been issued`,
+              type: "INVOICE_CREATED",
+              referenceType: "Invoice",
+              referenceId: invoice.id,
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
 
     return invoice;
   }
@@ -433,7 +445,8 @@ export class BillingService {
     await this.refreshOverdueStatus(tenantId);
 
     const where: any = { tenantId };
-    if (!params.type) where.type = { not: "PHARMACY" };
+    if (!params.type)
+      where.type = { notIn: ["PHARMACY", "EMERGENCY"] as any };
     if (params.patientId) where.patientId = params.patientId;
     if (params.status) where.status = params.status;
     if (params.type) where.type = params.type;
@@ -486,7 +499,7 @@ export class BillingService {
 
     const where: any = { tenantId };
     if (!params.invoiceId)
-      where.NOT = { invoice: { is: { type: "PHARMACY" } } };
+      where.NOT = { invoice: { is: { type: { in: ["PHARMACY", "EMERGENCY"] as any } } } };
     if (params.patientId) where.patientId = params.patientId;
     if (params.invoiceId) where.invoiceId = params.invoiceId;
     if (params.status) where.status = params.status;
@@ -628,7 +641,7 @@ export class BillingService {
         })
       : null;
 
-    return { ...invoice as any, createdByUser, encounter } as any;
+    return { ...(invoice as any), createdByUser, encounter } as any;
   }
 
   async refreshOverdueStatus(tenantId: string, invoiceId?: string) {
@@ -665,7 +678,9 @@ export class BillingService {
       label: "Discount amount",
     });
     if (discountAmount <= 0)
-      throw new BadRequestException("Discount amount must be greater than zero");
+      throw new BadRequestException(
+        "Discount amount must be greater than zero",
+      );
 
     const settings = await this.getBillingSettings(tenantId);
     const approval = (settings.discountApproval as any) || {
@@ -740,7 +755,8 @@ export class BillingService {
           discountStatus: "APPROVED",
           discountApprovedBy: userId,
           discountApprovedAt: new Date(),
-          totalAmount: Number(invoice.subtotal) - Number(invoice.discountAmount),
+          totalAmount:
+            Number(invoice.subtotal) - Number(invoice.discountAmount),
           dueAmount: Number(invoice.subtotal) - Number(invoice.discountAmount),
         },
       });
@@ -916,21 +932,29 @@ export class BillingService {
           createdBy: userId,
         });
 
-        this.prisma.user.findMany({
-          where: { tenantId, role: { in: ["RECEPTIONIST", "FINANCE_MANAGER"] as any } },
-          select: { id: true },
-        }).then((staff) => {
-          for (const s of staff) {
-            this.notifications.create(tenantId, {
-              userId: s.id,
-              title: "Payment Received",
-              body: `Payment of Rs. ${amount} received for invoice ${invoice.invoiceNumber}`,
-              type: "PAYMENT_RECEIVED",
-              referenceType: "Payment",
-              referenceId: payment.id,
-            }).catch(() => {});
-          }
-        }).catch(() => {});
+        this.prisma.user
+          .findMany({
+            where: {
+              tenantId,
+              role: { in: ["RECEPTIONIST", "FINANCE_MANAGER"] as any },
+            },
+            select: { id: true },
+          })
+          .then((staff) => {
+            for (const s of staff) {
+              this.notifications
+                .create(tenantId, {
+                  userId: s.id,
+                  title: "Payment Received",
+                  body: `Payment of Rs. ${amount} received for invoice ${invoice.invoiceNumber}`,
+                  type: "PAYMENT_RECEIVED",
+                  referenceType: "Payment",
+                  referenceId: payment.id,
+                })
+                .catch(() => {});
+            }
+          })
+          .catch(() => {});
 
         return payment;
       } catch (err: any) {
@@ -1116,9 +1140,9 @@ export class BillingService {
       await this.recordFinancialTransaction(tx, tenantId, {
         type: "REFUND",
         direction: "DEBIT",
-amount: Number(refund.amount),
-          patientId: refund.patientId ?? undefined,
-          invoiceId: refund.invoiceId || undefined,
+        amount: Number(refund.amount),
+        patientId: refund.patientId ?? undefined,
+        invoiceId: refund.invoiceId || undefined,
         referenceType: "refund",
         referenceId: refund.id,
         method: refund.refundMethod as any,
@@ -1409,7 +1433,7 @@ amount: Number(refund.amount),
     const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
     const where: any = { tenantId };
     if (!params.invoiceId)
-      where.NOT = { invoice: { is: { type: "PHARMACY" } } };
+      where.NOT = { invoice: { is: { type: { in: ["PHARMACY", "EMERGENCY"] as any } } } };
     if (params.patientId) where.patientId = params.patientId;
     if (params.status) where.status = params.status;
     if (params.search) {
@@ -1593,18 +1617,12 @@ amount: Number(refund.amount),
       createdBy: userId,
     };
 
-    if (dto.insuranceRate !== undefined)
-      data.insuranceRate = dto.insuranceRate;
-    if (dto.patientRate !== undefined)
-      data.patientRate = dto.patientRate;
-    if (dto.corporateRate !== undefined)
-      data.corporateRate = dto.corporateRate;
-    if (dto.emergencyRate !== undefined)
-      data.emergencyRate = dto.emergencyRate;
-    if (dto.nightRate !== undefined)
-      data.nightRate = dto.nightRate;
-    if (dto.weekendRate !== undefined)
-      data.weekendRate = dto.weekendRate;
+    if (dto.insuranceRate !== undefined) data.insuranceRate = dto.insuranceRate;
+    if (dto.patientRate !== undefined) data.patientRate = dto.patientRate;
+    if (dto.corporateRate !== undefined) data.corporateRate = dto.corporateRate;
+    if (dto.emergencyRate !== undefined) data.emergencyRate = dto.emergencyRate;
+    if (dto.nightRate !== undefined) data.nightRate = dto.nightRate;
+    if (dto.weekendRate !== undefined) data.weekendRate = dto.weekendRate;
 
     return this.prisma.billingService.create({ data });
   }
@@ -1703,7 +1721,11 @@ amount: Number(refund.amount),
         include: {
           category: { select: { id: true, name: true, code: true } },
         },
-        orderBy: [{ categoryId: "asc" }, { displayOrder: "asc" }, { name: "asc" }],
+        orderBy: [
+          { categoryId: "asc" },
+          { displayOrder: "asc" },
+          { name: "asc" },
+        ],
         skip: (page - 1) * limit,
         take: limit,
       }),
@@ -1800,8 +1822,7 @@ amount: Number(refund.amount),
     const existing = await this.prisma.serviceCategory.findFirst({
       where: { id, tenantId },
     });
-    if (!existing)
-      throw new NotFoundException("Service category not found");
+    if (!existing) throw new NotFoundException("Service category not found");
 
     if (dto.name !== undefined && (!dto.name || !String(dto.name).trim()))
       throw new BadRequestException("Category name cannot be empty");
@@ -1818,23 +1839,21 @@ amount: Number(refund.amount),
       where: { id },
       data,
     });
-    await this.logAudit(
-      tenantId,
-      userId,
-      "UPDATE",
-      "ServiceCategory",
-      id,
-    );
+    await this.logAudit(tenantId, userId, "UPDATE", "ServiceCategory", id);
     return updated;
   }
 
   async findServiceCategoryById(tenantId: string, id: string) {
     const category = await this.prisma.serviceCategory.findFirst({
       where: { id, tenantId },
-      include: { services: { where: { isActive: true }, orderBy: { displayOrder: "asc" } } },
+      include: {
+        services: {
+          where: { isActive: true },
+          orderBy: { displayOrder: "asc" },
+        },
+      },
     });
-    if (!category)
-      throw new NotFoundException("Service category not found");
+    if (!category) throw new NotFoundException("Service category not found");
     return category;
   }
 
@@ -1893,7 +1912,14 @@ amount: Number(refund.amount),
 
   async createBillingScheme(
     tenantId: string,
-    dto: { name: string; code?: string; description?: string; discountPercent?: number; rules?: any; isActive?: boolean },
+    dto: {
+      name: string;
+      code?: string;
+      description?: string;
+      discountPercent?: number;
+      rules?: any;
+      isActive?: boolean;
+    },
     userId?: string,
   ) {
     if (!dto.name || !String(dto.name).trim())
@@ -1901,8 +1927,7 @@ amount: Number(refund.amount),
     const existing = await this.prisma.billingScheme.findFirst({
       where: { tenantId, name: dto.name },
     });
-    if (existing)
-      throw new ConflictException("Scheme name already exists");
+    if (existing) throw new ConflictException("Scheme name already exists");
 
     const discountPercent = this.validateMoney(dto.discountPercent ?? 0, {
       min: 0,
@@ -1929,7 +1954,14 @@ amount: Number(refund.amount),
   async updateBillingScheme(
     tenantId: string,
     id: string,
-    dto: { name?: string; code?: string; description?: string; discountPercent?: number; rules?: any; isActive?: boolean },
+    dto: {
+      name?: string;
+      code?: string;
+      description?: string;
+      discountPercent?: number;
+      rules?: any;
+      isActive?: boolean;
+    },
     userId?: string,
   ) {
     const existing = await this.prisma.billingScheme.findFirst({
@@ -1963,11 +1995,20 @@ amount: Number(refund.amount),
     return updated;
   }
 
-  async findBillingSchemes(tenantId: string, params: { search?: string; isActive?: string; page?: number; limit?: number }) {
+  async findBillingSchemes(
+    tenantId: string,
+    params: {
+      search?: string;
+      isActive?: string;
+      page?: number;
+      limit?: number;
+    },
+  ) {
     const page = Number(params.page) || 1;
     const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
     const where: any = { tenantId };
-    if (params.isActive !== undefined) where.isActive = params.isActive === "true";
+    if (params.isActive !== undefined)
+      where.isActive = params.isActive === "true";
     if (params.search) {
       where.OR = [
         { name: { contains: params.search, mode: "insensitive" } },
@@ -2009,7 +2050,13 @@ amount: Number(refund.amount),
   async refundDeposit(
     tenantId: string,
     depositId: string,
-    dto: { amount: number; reason: string; refundMethod?: string; referenceNumber?: string; notes?: string },
+    dto: {
+      amount: number;
+      reason: string;
+      refundMethod?: string;
+      referenceNumber?: string;
+      notes?: string;
+    },
     userId?: string,
   ) {
     const deposit = await this.prisma.deposit.findFirst({
@@ -2124,7 +2171,10 @@ amount: Number(refund.amount),
     tenant: { panNumber?: string | null; vatNumber?: string | null },
   ) {
     if (type !== "PHARMACY") {
-      return { panNumber: tenant.panNumber ?? undefined, vatNumber: tenant.vatNumber ?? undefined };
+      return {
+        panNumber: tenant.panNumber ?? undefined,
+        vatNumber: tenant.vatNumber ?? undefined,
+      };
     }
     let pharmacy: { panNumber?: string; vatNumber?: string } = {};
     try {
@@ -2143,10 +2193,19 @@ amount: Number(refund.amount),
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       select: {
-        name: true, addressLine1: true, addressLine2: true,
-        city: true, district: true, province: true, country: true,
-        phone: true, email: true, website: true,
-        panNumber: true, vatNumber: true, registrationNumber: true,
+        name: true,
+        addressLine1: true,
+        addressLine2: true,
+        city: true,
+        district: true,
+        province: true,
+        country: true,
+        phone: true,
+        email: true,
+        website: true,
+        panNumber: true,
+        vatNumber: true,
+        registrationNumber: true,
       },
     });
     const user = userId
@@ -2156,7 +2215,9 @@ amount: Number(refund.amount),
         })
       : null;
     const generatedBy = user
-      ? [user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ")
+      ? [user.firstName, user.middleName, user.lastName]
+          .filter(Boolean)
+          .join(" ")
       : undefined;
 
     await this.prisma.invoice.update({
@@ -2168,10 +2229,18 @@ amount: Number(refund.amount),
       format: "invoice",
     });
 
-    const taxBlock = await this.taxRegistrationBlock(tenantId, invoice.type, tenant as any);
+    const taxBlock = await this.taxRegistrationBlock(
+      tenantId,
+      invoice.type,
+      tenant as any,
+    );
     const buffer = buildInvoicePdf(
       invoice as any,
-      { ...(tenant as any), panNumber: taxBlock.panNumber, vatNumber: taxBlock.vatNumber },
+      {
+        ...(tenant as any),
+        panNumber: taxBlock.panNumber,
+        vatNumber: taxBlock.vatNumber,
+      },
       generatedBy,
     );
     const filename = `${invoice.invoiceNumber}.pdf`;
@@ -2188,15 +2257,25 @@ amount: Number(refund.amount),
     const payment = paymentId
       ? invoice.payments.find((p: any) => p.id === paymentId)
       : invoice.payments[0];
-    if (!payment) throw new NotFoundException("No payment found for this invoice");
+    if (!payment)
+      throw new NotFoundException("No payment found for this invoice");
 
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       select: {
-        name: true, addressLine1: true, addressLine2: true,
-        city: true, district: true, province: true, country: true,
-        phone: true, email: true, website: true,
-        panNumber: true, vatNumber: true, registrationNumber: true,
+        name: true,
+        addressLine1: true,
+        addressLine2: true,
+        city: true,
+        district: true,
+        province: true,
+        country: true,
+        phone: true,
+        email: true,
+        website: true,
+        panNumber: true,
+        vatNumber: true,
+        registrationNumber: true,
       },
     });
     const user = userId
@@ -2206,7 +2285,9 @@ amount: Number(refund.amount),
         })
       : null;
     const generatedBy = user
-      ? [user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ")
+      ? [user.firstName, user.middleName, user.lastName]
+          .filter(Boolean)
+          .join(" ")
       : undefined;
 
     await this.logAudit(tenantId, userId, "PRINT", "Payment", payment.id, {
@@ -2214,11 +2295,19 @@ amount: Number(refund.amount),
       format: "receipt",
     });
 
-    const taxBlock = await this.taxRegistrationBlock(tenantId, invoice.type, tenant as any);
+    const taxBlock = await this.taxRegistrationBlock(
+      tenantId,
+      invoice.type,
+      tenant as any,
+    );
     const buffer = buildReceiptPdf(
       invoice as any,
       payment as any,
-      { ...(tenant as any), panNumber: taxBlock.panNumber, vatNumber: taxBlock.vatNumber },
+      {
+        ...(tenant as any),
+        panNumber: taxBlock.panNumber,
+        vatNumber: taxBlock.vatNumber,
+      },
       generatedBy,
     );
     const filename = `${payment.paymentNumber}.pdf`;
@@ -2241,7 +2330,7 @@ amount: Number(refund.amount),
     const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { tenantId };
-    where.NOT = { invoice: { is: { type: "PHARMACY" } } };
+    where.NOT = { invoice: { is: { type: { in: ["PHARMACY", "EMERGENCY"] as any } } } };
     if (params.type) where.type = params.type;
     if (params.from || params.to) {
       where.createdAt = {};
@@ -2291,7 +2380,7 @@ amount: Number(refund.amount),
           tenantId,
           issuedDate: { gte: start, lte: end },
           status: { not: "CANCELLED" },
-          type: { not: "PHARMACY" },
+          type: { notIn: ["PHARMACY", "EMERGENCY"] as any },
         },
         select: { totalAmount: true, status: true },
       }),
@@ -2299,7 +2388,7 @@ amount: Number(refund.amount),
         where: {
           tenantId,
           paidAt: { gte: start, lte: end },
-          NOT: { invoice: { is: { type: "PHARMACY" } } },
+          NOT: { invoice: { is: { type: { in: ["PHARMACY", "EMERGENCY"] as any } } } },
         },
         select: { amount: true, method: true },
       }),
@@ -2308,7 +2397,7 @@ amount: Number(refund.amount),
           tenantId,
           refundedAt: { gte: start, lte: end },
           status: "COMPLETED",
-          NOT: { invoice: { is: { type: "PHARMACY" } } },
+          NOT: { invoice: { is: { type: { in: ["PHARMACY", "EMERGENCY"] as any } } } },
         },
         select: { amount: true, refundMethod: true },
       }),
@@ -2442,7 +2531,7 @@ amount: Number(refund.amount),
   // ---------- Summary ----------
 
   async getBillingSummary(tenantId: string, params: BillingSummaryParams) {
-    const where: any = { tenantId, type: { not: "PHARMACY" } };
+    const where: any = { tenantId, type: { notIn: ["PHARMACY", "EMERGENCY"] as any } };
     const payWhere: any = { tenantId };
     if (params.from || params.to) {
       where.issuedDate = {};
@@ -2466,20 +2555,23 @@ amount: Number(refund.amount),
           select: { totalAmount: true, status: true },
         }),
         this.prisma.payment.findMany({
-          where: { ...payWhere, NOT: { invoice: { is: { type: "PHARMACY" } } } },
+          where: {
+            ...payWhere,
+            NOT: { invoice: { is: { type: { in: ["PHARMACY", "EMERGENCY"] as any } } } },
+          },
           select: { amount: true, method: true },
         }),
         this.prisma.refund.findMany({
           where: {
             ...payWhere,
             status: "COMPLETED",
-            NOT: { invoice: { is: { type: "PHARMACY" } } },
+            NOT: { invoice: { is: { type: { in: ["PHARMACY", "EMERGENCY"] as any } } } },
           },
           select: { amount: true },
         }),
         this.prisma.deposit.count({ where: payWhere }),
         this.prisma.invoice.count({
-          where: { tenantId, status: "OVERDUE", type: { not: "PHARMACY" } },
+          where: { tenantId, status: "OVERDUE", type: { notIn: ["PHARMACY", "EMERGENCY"] as any } },
         }),
       ]);
 
@@ -2523,48 +2615,101 @@ amount: Number(refund.amount),
     const n = (v: unknown): number => Number(v ?? 0);
 
     // Today's rollups + grouped breakdowns (all DB-side aggregation)
-    const [todayInvSum, todayBills, todayPaid, todayCredit, todayOutstanding, typeGroup, methodGroup, todayPaySum, refundsSum, depositsSum] =
-      await Promise.all([
-        this.prisma.invoice.aggregate({
-          _sum: { totalAmount: true },
-          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" }, type: { not: "PHARMACY" } },
-        }),
-        this.prisma.invoice.count({
-          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" }, type: { not: "PHARMACY" } },
-        }),
-        this.prisma.invoice.count({
-          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: "PAID", type: { not: "PHARMACY" } },
-        }),
-        this.prisma.invoice.count({
-          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, OR: [{ isCredit: true }, { status: "PARTIAL" }], type: { not: "PHARMACY" } },
-        }),
-        this.prisma.invoice.aggregate({
-          _sum: { dueAmount: true },
-          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" }, type: { not: "PHARMACY" } },
-        }),
-        this.prisma.invoice.groupBy({
-          by: ["type"],
-          _sum: { totalAmount: true },
-          where: { tenantId, issuedDate: { gte: dayStart, lt: dayEnd }, status: { not: "CANCELLED" }, type: { not: "PHARMACY" } },
-        }),
-        this.prisma.payment.groupBy({
-          by: ["method"],
-          _sum: { amount: true },
-          where: { tenantId, paidAt: { gte: dayStart, lt: dayEnd }, NOT: { invoice: { is: { type: "PHARMACY" } } } },
-        }),
-        this.prisma.payment.aggregate({
-          _sum: { amount: true },
-          where: { tenantId, paidAt: { gte: dayStart, lt: dayEnd }, NOT: { invoice: { is: { type: "PHARMACY" } } } },
-        }),
-        this.prisma.refund.aggregate({
-          _sum: { amount: true },
-          where: { tenantId, refundedAt: { gte: dayStart, lt: dayEnd }, status: "COMPLETED", NOT: { invoice: { is: { type: "PHARMACY" } } } },
-        }),
-        this.prisma.deposit.aggregate({
-          _sum: { amount: true },
-          where: { tenantId, receivedAt: { gte: dayStart, lt: dayEnd } },
-        }),
-      ]);
+    const [
+      todayInvSum,
+      todayBills,
+      todayPaid,
+      todayCredit,
+      todayOutstanding,
+      typeGroup,
+      methodGroup,
+      todayPaySum,
+      refundsSum,
+      depositsSum,
+    ] = await Promise.all([
+      this.prisma.invoice.aggregate({
+        _sum: { totalAmount: true },
+        where: {
+          tenantId,
+          issuedDate: { gte: dayStart, lt: dayEnd },
+          status: { not: "CANCELLED" },
+          type: { notIn: ["PHARMACY", "EMERGENCY"] as any },
+        },
+      }),
+      this.prisma.invoice.count({
+        where: {
+          tenantId,
+          issuedDate: { gte: dayStart, lt: dayEnd },
+          status: { not: "CANCELLED" },
+          type: { notIn: ["PHARMACY", "EMERGENCY"] as any },
+        },
+      }),
+      this.prisma.invoice.count({
+        where: {
+          tenantId,
+          issuedDate: { gte: dayStart, lt: dayEnd },
+          status: "PAID",
+          type: { notIn: ["PHARMACY", "EMERGENCY"] as any },
+        },
+      }),
+      this.prisma.invoice.count({
+        where: {
+          tenantId,
+          issuedDate: { gte: dayStart, lt: dayEnd },
+          OR: [{ isCredit: true }, { status: "PARTIAL" }],
+          type: { notIn: ["PHARMACY", "EMERGENCY"] as any },
+        },
+      }),
+      this.prisma.invoice.aggregate({
+        _sum: { dueAmount: true },
+        where: {
+          tenantId,
+          issuedDate: { gte: dayStart, lt: dayEnd },
+          status: { not: "CANCELLED" },
+          type: { notIn: ["PHARMACY", "EMERGENCY"] as any },
+        },
+      }),
+      this.prisma.invoice.groupBy({
+        by: ["type"],
+        _sum: { totalAmount: true },
+        where: {
+          tenantId,
+          issuedDate: { gte: dayStart, lt: dayEnd },
+          status: { not: "CANCELLED" },
+          type: { notIn: ["PHARMACY", "EMERGENCY"] as any },
+        },
+      }),
+      this.prisma.payment.groupBy({
+        by: ["method"],
+        _sum: { amount: true },
+        where: {
+          tenantId,
+          paidAt: { gte: dayStart, lt: dayEnd },
+          NOT: { invoice: { is: { type: { in: ["PHARMACY", "EMERGENCY"] as any } } } },
+        },
+      }),
+      this.prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: {
+          tenantId,
+          paidAt: { gte: dayStart, lt: dayEnd },
+          NOT: { invoice: { is: { type: { in: ["PHARMACY", "EMERGENCY"] as any } } } },
+        },
+      }),
+      this.prisma.refund.aggregate({
+        _sum: { amount: true },
+        where: {
+          tenantId,
+          refundedAt: { gte: dayStart, lt: dayEnd },
+          status: "COMPLETED",
+          NOT: { invoice: { is: { type: { in: ["PHARMACY", "EMERGENCY"] as any } } } },
+        },
+      }),
+      this.prisma.deposit.aggregate({
+        _sum: { amount: true },
+        where: { tenantId, receivedAt: { gte: dayStart, lt: dayEnd } },
+      }),
+    ]);
 
     const byType: Record<string, number> = {};
     for (const g of typeGroup) byType[g.type] = n(g._sum.totalAmount);
@@ -2580,11 +2725,20 @@ amount: Number(refund.amount),
     const [monthInvAgg, monthPayAgg] = await Promise.all([
       this.prisma.invoice.aggregate({
         _sum: { totalAmount: true },
-        where: { tenantId, issuedDate: { gte: monthStart }, status: { not: "CANCELLED" }, type: { not: "PHARMACY" } },
+        where: {
+          tenantId,
+          issuedDate: { gte: monthStart },
+          status: { not: "CANCELLED" },
+          type: { notIn: ["PHARMACY", "EMERGENCY"] as any },
+        },
       }),
       this.prisma.payment.aggregate({
         _sum: { amount: true },
-        where: { tenantId, paidAt: { gte: monthStart }, NOT: { invoice: { is: { type: "PHARMACY" } } } },
+        where: {
+          tenantId,
+          paidAt: { gte: monthStart },
+          NOT: { invoice: { is: { type: { in: ["PHARMACY", "EMERGENCY"] as any } } } },
+        },
       }),
     ]);
 
@@ -2593,15 +2747,25 @@ amount: Number(refund.amount),
       this.prisma.invoice.groupBy({
         by: ["issuedDate"],
         _sum: { totalAmount: true },
-        where: { tenantId, issuedDate: { gte: last30Start }, status: { not: "CANCELLED" }, type: { not: "PHARMACY" } },
+        where: {
+          tenantId,
+          issuedDate: { gte: last30Start },
+          status: { not: "CANCELLED" },
+          type: { notIn: ["PHARMACY", "EMERGENCY"] as any },
+        },
       }),
       this.prisma.payment.groupBy({
         by: ["paidAt"],
         _sum: { amount: true },
-        where: { tenantId, paidAt: { gte: last30Start }, NOT: { invoice: { is: { type: "PHARMACY" } } } },
+        where: {
+          tenantId,
+          paidAt: { gte: last30Start },
+          NOT: { invoice: { is: { type: { in: ["PHARMACY", "EMERGENCY"] as any } } } },
+        },
       }),
     ]);
-    const trendMap: Record<string, { revenue: number; collection: number }> = {};
+    const trendMap: Record<string, { revenue: number; collection: number }> =
+      {};
     for (let d = 0; d < 30; d++) {
       const day = new Date(last30Start);
       day.setDate(day.getDate() + d);
@@ -2620,22 +2784,42 @@ amount: Number(refund.amount),
     const doctorGroup = await this.prisma.invoiceItem.groupBy({
       by: ["doctorId"],
       _sum: { lineTotal: true },
-      where: { tenantId, doctorId: { not: null }, invoice: { is: { type: { not: "PHARMACY" } } } },
+      where: {
+        tenantId,
+        doctorId: { not: null },
+        invoice: { is: { type: { notIn: ["PHARMACY", "EMERGENCY"] as any } } },
+      },
     });
     const doctorIncome: Record<string, number> = {};
-    for (const g of doctorGroup) if (g.doctorId) doctorIncome[g.doctorId] = n(g._sum.lineTotal);
+    for (const g of doctorGroup)
+      if (g.doctorId) doctorIncome[g.doctorId] = n(g._sum.lineTotal);
 
     // User-wise collection — DB group by receivedBy + method, composited in JS
     const userGroup = await this.prisma.payment.groupBy({
       by: ["receivedBy", "method"],
       _sum: { amount: true },
-      where: { tenantId, receivedBy: { not: null }, NOT: { invoice: { is: { type: "PHARMACY" } } } },
+      where: {
+        tenantId,
+        receivedBy: { not: null },
+        NOT: { invoice: { is: { type: { in: ["PHARMACY", "EMERGENCY"] as any } } } },
+      },
     });
     const METHOD_KEYS = ["CASH", "CARD", "BANK", "ONLINE"];
-    const userCollection: Record<string, { total: number; CASH: number; CARD: number; BANK: number; ONLINE: number }> = {};
+    const userCollection: Record<
+      string,
+      {
+        total: number;
+        CASH: number;
+        CARD: number;
+        BANK: number;
+        ONLINE: number;
+      }
+    > = {};
     for (const g of userGroup) {
       if (!g.receivedBy) continue;
-      const u = (userCollection[g.receivedBy] = userCollection[g.receivedBy] || { total: 0, CASH: 0, CARD: 0, BANK: 0, ONLINE: 0 });
+      const u = (userCollection[g.receivedBy] = userCollection[
+        g.receivedBy
+      ] || { total: 0, CASH: 0, CARD: 0, BANK: 0, ONLINE: 0 });
       const amt = n(g._sum.amount);
       u.total += amt;
       if (METHOD_KEYS.includes(g.method)) (u as any)[g.method] += amt;

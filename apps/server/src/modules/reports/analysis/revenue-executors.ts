@@ -32,7 +32,9 @@ const INVOICE_TYPES = {
   PHARMACY: ["PHARMACY"],
 };
 
-export async function depositCollections(ctx: ExecContext): Promise<ExecResult> {
+export async function depositCollections(
+  ctx: ExecContext,
+): Promise<ExecResult> {
   const where: any = { tenantId: ctx.tenantId };
   const r = applyRange("receivedAt", ctx.filters);
   if (r) where.receivedAt = r;
@@ -50,9 +52,13 @@ export async function depositCollections(ctx: ExecContext): Promise<ExecResult> 
     orderBy: { receivedAt: "desc" },
   });
 
-  const byUser = [...new Set(deposits.map((d) => d.receivedBy).filter(Boolean))] as string[];
+  const byUser = [
+    ...new Set(deposits.map((d) => d.receivedBy).filter(Boolean)),
+  ] as string[];
   const userMap = await userNames(ctx.prisma, ctx.tenantId, byUser);
-  const deptIds = [...new Set(deposits.map((d) => d.admission?.departmentId).filter(Boolean))] as string[];
+  const deptIds = [
+    ...new Set(deposits.map((d) => d.admission?.departmentId).filter(Boolean)),
+  ] as string[];
   const deptMap = await deptNames(ctx.prisma, ctx.tenantId, deptIds);
 
   const rows = deposits.map((d) => ({
@@ -60,7 +66,9 @@ export async function depositCollections(ctx: ExecContext): Promise<ExecResult> 
     depositNumber: d.depositNumber,
     patient: fullName(d.patient),
     uhid: uhid(d.patient),
-    department: d.admission?.departmentId ? deptMap.get(d.admission.departmentId) || "-" : "-",
+    department: d.admission?.departmentId
+      ? deptMap.get(d.admission.departmentId) || "-"
+      : "-",
     amount: money(d.amount),
     method: d.method || "-",
     receivedBy: userMap.get(d.receivedBy) || "-",
@@ -81,9 +89,12 @@ export async function depositCollections(ctx: ExecContext): Promise<ExecResult> 
 
 export async function creditSales(ctx: ExecContext): Promise<ExecResult> {
   const extra: any = {};
-  if (ctx.filters.departmentId) extra.items = { some: { departmentId: ctx.filters.departmentId } };
+  if (ctx.filters.departmentId)
+    extra.items = { some: { departmentId: ctx.filters.departmentId } };
   if (ctx.filters.doctorId) {
-    extra.items = { some: { ...(extra.items?.some || {}), doctorId: ctx.filters.doctorId } };
+    extra.items = {
+      some: { ...(extra.items?.some || {}), doctorId: ctx.filters.doctorId },
+    };
   }
   if (ctx.filters.status) {
     extra.status = ctx.filters.status;
@@ -92,7 +103,11 @@ export async function creditSales(ctx: ExecContext): Promise<ExecResult> {
   }
   const invoices = await fetchInvoices(ctx, extra);
 
-  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  const refundMap = await refundByInvoice(
+    ctx.prisma,
+    ctx.tenantId,
+    invoices.map((i) => i.id),
+  );
   for (const inv of invoices) {
     const ref = refundMap.get(inv.id) || 0;
     inv.paidAmount = money(inv.paidAmount) - ref;
@@ -100,12 +115,26 @@ export async function creditSales(ctx: ExecContext): Promise<ExecResult> {
   }
 
   const deptIds = new Set<string>();
-  for (const i of invoices) for (const it of i.items || []) if (it.departmentId) deptIds.add(it.departmentId);
+  for (const i of invoices)
+    for (const it of i.items || [])
+      if (it.departmentId) deptIds.add(it.departmentId);
   const deptMap = await deptNames(ctx.prisma, ctx.tenantId, [...deptIds]);
 
   const rows = invoices.map((inv) => {
-    const depts = [...new Set((inv.items || []).map((it: any) => deptMap.get(it.departmentId) || "-").filter((d: any) => d !== "-"))];
-    const services = [...new Set((inv.items || []).map((it: any) => it.serviceName || "-").filter((s: any) => s !== "-"))];
+    const depts = [
+      ...new Set(
+        (inv.items || [])
+          .map((it: any) => deptMap.get(it.departmentId) || "-")
+          .filter((d: any) => d !== "-"),
+      ),
+    ];
+    const services = [
+      ...new Set(
+        (inv.items || [])
+          .map((it: any) => it.serviceName || "-")
+          .filter((s: any) => s !== "-"),
+      ),
+    ];
     const gross = money(inv.subtotal);
     const discount = money(inv.discountAmount);
     const tax = money(inv.taxAmount);
@@ -154,8 +183,12 @@ export async function freeAndConcession(ctx: ExecContext): Promise<ExecResult> {
       { items: { some: { rate: { lte: 0 } } } },
     ],
   };
-  if (ctx.filters.departmentId) extra.AND = [{ items: { some: { departmentId: ctx.filters.departmentId } } }];
-  if (ctx.filters.doctorId) extra.AND = [{ items: { some: { doctorId: ctx.filters.doctorId } } }];
+  if (ctx.filters.departmentId)
+    extra.AND = [
+      { items: { some: { departmentId: ctx.filters.departmentId } } },
+    ];
+  if (ctx.filters.doctorId)
+    extra.AND = [{ items: { some: { doctorId: ctx.filters.doctorId } } }];
   const invoices = await fetchInvoices(ctx, extra);
 
   const rows: Record<string, any>[] = [];
@@ -164,7 +197,10 @@ export async function freeAndConcession(ctx: ExecContext): Promise<ExecResult> {
       const fin = itemFinance(inv, item);
       const free = itemFreeAmount(item);
       if (fin.discount <= 0 && free <= 0) continue;
-      const concession = inv.discountStatus === "APPROVED" || inv.discountApprovedBy ? fin.discount : 0;
+      const concession =
+        inv.discountStatus === "APPROVED" || inv.discountApprovedBy
+          ? fin.discount
+          : 0;
       rows.push({
         issuedDate: inv.issuedDate,
         patient: fullName(inv.patient),
@@ -182,8 +218,12 @@ export async function freeAndConcession(ctx: ExecContext): Promise<ExecResult> {
     }
   }
 
-  const deptIds = [...new Set(rows.map((r) => r.department).filter((x) => x !== "-"))] as string[];
-  const docIds = [...new Set(rows.map((r) => r.doctor).filter((x) => x !== "-"))] as string[];
+  const deptIds = [
+    ...new Set(rows.map((r) => r.department).filter((x) => x !== "-")),
+  ] as string[];
+  const docIds = [
+    ...new Set(rows.map((r) => r.doctor).filter((x) => x !== "-")),
+  ] as string[];
   const [deptMap, docMap] = await Promise.all([
     deptNames(ctx.prisma, ctx.tenantId, deptIds),
     doctorNames(ctx.prisma, ctx.tenantId, docIds),
@@ -196,7 +236,13 @@ export async function freeAndConcession(ctx: ExecContext): Promise<ExecResult> {
   const t = (k: string) => r2(sumOf(rows, k));
   return {
     rows,
-    totals: { gross: t("gross"), discount: t("discount"), concession: t("concession"), free: t("free"), net: t("net") },
+    totals: {
+      gross: t("gross"),
+      discount: t("discount"),
+      concession: t("concession"),
+      free: t("free"),
+      net: t("net"),
+    },
     cards: [
       { label: "Concessions Given", value: t("concession") },
       { label: "Free Amount", value: t("free") },
@@ -234,7 +280,10 @@ export async function testPriceList(ctx: ExecContext): Promise<ExecResult> {
     })),
     cards: [
       { label: "Tests", value: tests.length },
-      { label: "Active", value: tests.filter((t) => t.isActive !== false).length },
+      {
+        label: "Active",
+        value: tests.filter((t) => t.isActive !== false).length,
+      },
     ],
   };
 }
@@ -257,7 +306,11 @@ export async function billPrint(ctx: ExecContext): Promise<ExecResult> {
   const t = (k: string) => r2(sumOf(rows, k));
   return {
     rows,
-    totals: { totalAmount: t("totalAmount"), paidAmount: t("paidAmount"), dueAmount: t("dueAmount") },
+    totals: {
+      totalAmount: t("totalAmount"),
+      paidAmount: t("paidAmount"),
+      dueAmount: t("dueAmount"),
+    },
     cards: [
       { label: "Bills", value: rows.length },
       { label: "Total", value: t("totalAmount") },
@@ -267,7 +320,10 @@ export async function billPrint(ctx: ExecContext): Promise<ExecResult> {
 }
 
 export async function dayWiseCollection(ctx: ExecContext): Promise<ExecResult> {
-  const where: any = { tenantId: ctx.tenantId, status: { in: ["COMPLETED", "PARTIAL"] } };
+  const where: any = {
+    tenantId: ctx.tenantId,
+    status: { in: ["COMPLETED", "PARTIAL"] },
+  };
   const r = applyRange("paidAt", ctx.filters);
   if (r) where.paidAt = r;
   if (ctx.filters.paymentMode) where.method = ctx.filters.paymentMode;
@@ -281,7 +337,15 @@ export async function dayWiseCollection(ctx: ExecContext): Promise<ExecResult> {
   const buckets = new Map<string, Record<string, number>>();
   for (const p of payments) {
     const day = dateKey(p.paidAt);
-    const b = buckets.get(day) || { opd: 0, ipd: 0, lab: 0, radiology: 0, pharmacy: 0, other: 0, total: 0 };
+    const b = buckets.get(day) || {
+      opd: 0,
+      ipd: 0,
+      lab: 0,
+      radiology: 0,
+      pharmacy: 0,
+      other: 0,
+      total: 0,
+    };
     const amt = money(p.amount);
     const type = p.invoice?.type || "OTHER";
     if (INVOICE_TYPES.OPD.includes(type)) b.opd += amt;
@@ -310,7 +374,15 @@ export async function dayWiseCollection(ctx: ExecContext): Promise<ExecResult> {
   const t = (k: string) => r2(sumOf(rows, k));
   return {
     rows,
-    totals: { opd: t("opd"), ipd: t("ipd"), lab: t("lab"), radiology: t("radiology"), pharmacy: t("pharmacy"), other: t("other"), total: t("total") },
+    totals: {
+      opd: t("opd"),
+      ipd: t("ipd"),
+      lab: t("lab"),
+      radiology: t("radiology"),
+      pharmacy: t("pharmacy"),
+      other: t("other"),
+      total: t("total"),
+    },
     cards: [
       { label: "Total Collection", value: t("total") },
       { label: "OPD", value: t("opd") },
@@ -324,27 +396,49 @@ export async function dayWiseCollection(ctx: ExecContext): Promise<ExecResult> {
   };
 }
 
-export async function departmentWiseRevenue(ctx: ExecContext): Promise<ExecResult> {
+export async function departmentWiseRevenue(
+  ctx: ExecContext,
+): Promise<ExecResult> {
   const extra: any = {};
-  if (ctx.filters.departmentId) extra.items = { some: { departmentId: ctx.filters.departmentId } };
+  if (ctx.filters.departmentId)
+    extra.items = { some: { departmentId: ctx.filters.departmentId } };
   const invoices = await fetchInvoices(ctx, extra);
-  const refunds = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  const refunds = await refundByInvoice(
+    ctx.prisma,
+    ctx.tenantId,
+    invoices.map((i) => i.id),
+  );
 
   const byDept = new Map<string, Record<string, number>>();
   const deptIds = new Set<string>();
   for (const inv of invoices) {
     const items = inv.items || [];
     const invRefund = refunds.get(inv.id) || 0;
-    const totalLine = items.reduce((s: number, i: any) => s + money(i.lineTotal), 0);
+    const totalLine = items.reduce(
+      (s: number, i: any) => s + money(i.lineTotal),
+      0,
+    );
     for (const item of items) {
       if (!item.departmentId) continue;
       deptIds.add(item.departmentId);
       const fin = itemFinance(inv, item);
-      const refundShare = totalLine > 0 ? invRefund * (money(item.lineTotal) / totalLine) : 0;
-      const cur = byDept.get(item.departmentId) || { gross: 0, discount: 0, concession: 0, refund: 0, net: 0, paid: 0, outstanding: 0 };
+      const refundShare =
+        totalLine > 0 ? invRefund * (money(item.lineTotal) / totalLine) : 0;
+      const cur = byDept.get(item.departmentId) || {
+        gross: 0,
+        discount: 0,
+        concession: 0,
+        refund: 0,
+        net: 0,
+        paid: 0,
+        outstanding: 0,
+      };
       cur.gross += fin.gross;
       cur.discount += fin.discount;
-      cur.concession += inv.discountStatus === "APPROVED" || inv.discountApprovedBy ? fin.discount : 0;
+      cur.concession +=
+        inv.discountStatus === "APPROVED" || inv.discountApprovedBy
+          ? fin.discount
+          : 0;
       cur.refund += refundShare;
       cur.net += fin.net - refundShare;
       cur.paid += fin.paid;
@@ -391,43 +485,77 @@ export async function departmentWiseRevenue(ctx: ExecContext): Promise<ExecResul
   };
 }
 
-export async function discountOutstanding(ctx: ExecContext): Promise<ExecResult> {
+export async function discountOutstanding(
+  ctx: ExecContext,
+): Promise<ExecResult> {
   const extra: any = {
     OR: [{ discountAmount: { gt: 0 } }, { dueAmount: { gt: 0 } }],
   };
-  if (ctx.filters.departmentId) extra.AND = [{ items: { some: { departmentId: ctx.filters.departmentId } } }];
+  if (ctx.filters.departmentId)
+    extra.AND = [
+      { items: { some: { departmentId: ctx.filters.departmentId } } },
+    ];
   const invoices = await fetchInvoices(ctx, extra);
 
-  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  const refundMap = await refundByInvoice(
+    ctx.prisma,
+    ctx.tenantId,
+    invoices.map((i) => i.id),
+  );
 
   const rows = invoices.map((inv) => {
     const ref = refundMap.get(inv.id) || 0;
-    const depts = [...new Set((inv.items || []).map((it: any) => it.departmentId).filter(Boolean))];
-    const fin = itemFinance(inv, { lineTotal: money(inv.subtotal), quantity: 1 } as any);
+    const depts = [
+      ...new Set(
+        (inv.items || []).map((it: any) => it.departmentId).filter(Boolean),
+      ),
+    ];
+    const fin = itemFinance(inv, {
+      lineTotal: money(inv.subtotal),
+      quantity: 1,
+    } as any);
     return {
       patient: fullName(inv.patient),
       invoiceNumber: inv.invoiceNumber,
       department: depts.join(", ") || "-",
       gross: r2(money(inv.subtotal)),
       discount: r2(money(inv.discountAmount)),
-      concession: r2(inv.discountStatus === "APPROVED" || inv.discountApprovedBy ? money(inv.discountAmount) : 0),
+      concession: r2(
+        inv.discountStatus === "APPROVED" || inv.discountApprovedBy
+          ? money(inv.discountAmount)
+          : 0,
+      ),
       paid: r2(money(inv.paidAmount) - ref),
       outstanding: r2(money(inv.dueAmount) + ref),
     };
   });
 
-  const deptIds = [...new Set(rows.flatMap((r) => r.department.split(", ")))] as string[];
+  const deptIds = [
+    ...new Set(rows.flatMap((r) => r.department.split(", "))),
+  ] as string[];
   const deptMap = await deptNames(ctx.prisma, ctx.tenantId, deptIds);
   for (const r of rows) {
-    r.department = r.department.split(", ").map((d: string) => deptMap.get(d) || d).join(", ");
+    r.department = r.department
+      .split(", ")
+      .map((d: string) => deptMap.get(d) || d)
+      .join(", ");
   }
 
   const t = (k: string) => r2(sumOf(rows, k));
   return {
     rows,
-    totals: { gross: t("gross"), discount: t("discount"), concession: t("concession"), paid: t("paid"), outstanding: t("outstanding") },
+    totals: {
+      gross: t("gross"),
+      discount: t("discount"),
+      concession: t("concession"),
+      paid: t("paid"),
+      outstanding: t("outstanding"),
+    },
     cards: [
-      { label: "Bills With Discount", value: rows.filter((r) => r.discount > 0).length },
+      {
+        label: "Bills With Discount",
+        value: rows.filter((r) => r.discount > 0).length,
+      },
       { label: "Discount", value: t("discount") },
       { label: "Outstanding", value: t("outstanding") },
     ],
@@ -436,11 +564,17 @@ export async function discountOutstanding(ctx: ExecContext): Promise<ExecResult>
 
 export async function doctorWiseIncome(ctx: ExecContext): Promise<ExecResult> {
   const extra: any = {};
-  if (ctx.filters.departmentId) extra.items = { some: { departmentId: ctx.filters.departmentId } };
-  if (ctx.filters.doctorId) extra.items = { some: { doctorId: ctx.filters.doctorId } };
+  if (ctx.filters.departmentId)
+    extra.items = { some: { departmentId: ctx.filters.departmentId } };
+  if (ctx.filters.doctorId)
+    extra.items = { some: { doctorId: ctx.filters.doctorId } };
   const invoices = await fetchInvoices(ctx, extra);
 
-  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  const refundMap = await refundByInvoice(
+    ctx.prisma,
+    ctx.tenantId,
+    invoices.map((i) => i.id),
+  );
   for (const inv of invoices) {
     const ref = refundMap.get(inv.id) || 0;
     inv.paidAmount = money(inv.paidAmount) - ref;
@@ -455,7 +589,13 @@ export async function doctorWiseIncome(ctx: ExecContext): Promise<ExecResult> {
     for (const item of items) {
       if (!item.doctorId) continue;
       docIds.add(item.doctorId);
-      const cur = byDoc.get(item.doctorId) || { patients: 0, services: 0, gross: 0, discount: 0, net: 0 };
+      const cur = byDoc.get(item.doctorId) || {
+        patients: 0,
+        services: 0,
+        gross: 0,
+        discount: 0,
+        net: 0,
+      };
       const fin = itemFinance(inv, item);
       cur.gross += fin.gross;
       cur.discount += fin.discount;
@@ -473,7 +613,9 @@ export async function doctorWiseIncome(ctx: ExecContext): Promise<ExecResult> {
     where: { tenantId: ctx.tenantId, id: { in: [...docIds] } },
     select: { id: true, departmentId: true },
   });
-  const deptMap = await deptNames(ctx.prisma, ctx.tenantId, [...new Set(docs.map((d) => d.departmentId).filter(Boolean))]);
+  const deptMap = await deptNames(ctx.prisma, ctx.tenantId, [
+    ...new Set(docs.map((d) => d.departmentId).filter(Boolean)),
+  ]);
   for (const d of docs) docDept.set(d.id, deptMap.get(d.departmentId) || "-");
 
   const rows = [...byDoc.entries()].map(([id, v]) => ({
@@ -504,18 +646,39 @@ export async function doctorWiseIncome(ctx: ExecContext): Promise<ExecResult> {
   };
 }
 
-export async function deptTestwiseRevenue(ctx: ExecContext): Promise<ExecResult> {
+export async function deptTestwiseRevenue(
+  ctx: ExecContext,
+): Promise<ExecResult> {
   const extra: any = {};
-  if (ctx.filters.departmentId) extra.items = { some: { departmentId: ctx.filters.departmentId } };
-  if (ctx.filters.serviceId) extra.items = { some: { serviceId: ctx.filters.serviceId } };
+  if (ctx.filters.departmentId)
+    extra.items = { some: { departmentId: ctx.filters.departmentId } };
+  if (ctx.filters.serviceId)
+    extra.items = { some: { serviceId: ctx.filters.serviceId } };
   const invoices = await fetchInvoices(ctx, extra);
 
-  const byKey = new Map<string, { departmentId: string; service: string; quantity: number; gross: number; discount: number; net: number }>();
+  const byKey = new Map<
+    string,
+    {
+      departmentId: string;
+      service: string;
+      quantity: number;
+      gross: number;
+      discount: number;
+      net: number;
+    }
+  >();
   const deptIds = new Set<string>();
   for (const inv of invoices) {
     for (const item of inv.items || []) {
       const key = `${item.departmentId || "-"}|${item.serviceName || item.serviceId || "-"}`;
-      const cur = byKey.get(key) || { departmentId: item.departmentId || "-", service: item.serviceName || "-", quantity: 0, gross: 0, discount: 0, net: 0 };
+      const cur = byKey.get(key) || {
+        departmentId: item.departmentId || "-",
+        service: item.serviceName || "-",
+        quantity: 0,
+        gross: 0,
+        discount: 0,
+        net: 0,
+      };
       const fin = itemFinance(inv, item);
       cur.quantity += money(item.quantity) || 1;
       cur.gross += fin.gross;
@@ -540,7 +703,12 @@ export async function deptTestwiseRevenue(ctx: ExecContext): Promise<ExecResult>
   const t = (k: string) => r2(sumOf(rows, k));
   return {
     rows: sorted,
-    totals: { quantity: rows.reduce((s, r) => s + r.quantity, 0), gross: t("gross"), discount: t("discount"), net: t("net") },
+    totals: {
+      quantity: rows.reduce((s, r) => s + r.quantity, 0),
+      gross: t("gross"),
+      discount: t("discount"),
+      net: t("net"),
+    },
     cards: [
       { label: "Services", value: rows.length },
       { label: "Net Revenue", value: t("net") },
@@ -550,11 +718,17 @@ export async function deptTestwiseRevenue(ctx: ExecContext): Promise<ExecResult>
 
 export async function doctorVsDept(ctx: ExecContext): Promise<ExecResult> {
   const extra: any = {};
-  if (ctx.filters.departmentId) extra.items = { some: { departmentId: ctx.filters.departmentId } };
-  if (ctx.filters.doctorId) extra.items = { some: { doctorId: ctx.filters.doctorId } };
+  if (ctx.filters.departmentId)
+    extra.items = { some: { departmentId: ctx.filters.departmentId } };
+  if (ctx.filters.doctorId)
+    extra.items = { some: { doctorId: ctx.filters.doctorId } };
   const invoices = await fetchInvoices(ctx, extra);
 
-  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  const refundMap = await refundByInvoice(
+    ctx.prisma,
+    ctx.tenantId,
+    invoices.map((i) => i.id),
+  );
   for (const inv of invoices) {
     const ref = refundMap.get(inv.id) || 0;
     inv.paidAmount = money(inv.paidAmount) - ref;
@@ -569,7 +743,16 @@ export async function doctorVsDept(ctx: ExecContext): Promise<ExecResult> {
     for (const item of inv.items || []) {
       if (!item.doctorId && !item.departmentId) continue;
       const key = `${item.doctorId || "none"}|${item.departmentId || "none"}`;
-      const cur = byKey.get(key) || { doctorId: item.doctorId, departmentId: item.departmentId, patients: 0, services: 0, gross: 0, discount: 0, net: 0, outstanding: 0 };
+      const cur = byKey.get(key) || {
+        doctorId: item.doctorId,
+        departmentId: item.departmentId,
+        patients: 0,
+        services: 0,
+        gross: 0,
+        discount: 0,
+        net: 0,
+        outstanding: 0,
+      };
       const fin = itemFinance(inv, item);
       cur.gross += fin.gross;
       cur.discount += fin.discount;
@@ -604,27 +787,49 @@ export async function doctorVsDept(ctx: ExecContext): Promise<ExecResult> {
   const t = (k: string) => r2(sumOf(rows, k));
   return {
     rows: sorted,
-    totals: { patients: rows.reduce((s, r) => s + r.patients, 0), services: t("services"), gross: t("gross"), discount: t("discount"), net: t("net"), outstanding: t("outstanding") },
-    cards: [{ label: "Net Revenue", value: t("net") }, { label: "Outstanding", value: t("outstanding") }],
+    totals: {
+      patients: rows.reduce((s, r) => s + r.patients, 0),
+      services: t("services"),
+      gross: t("gross"),
+      discount: t("discount"),
+      net: t("net"),
+      outstanding: t("outstanding"),
+    },
+    cards: [
+      { label: "Net Revenue", value: t("net") },
+      { label: "Outstanding", value: t("outstanding") },
+    ],
   };
 }
 
 export async function wardVsDept(ctx: ExecContext): Promise<ExecResult> {
   const extra: any = { admissionId: { not: null } };
-  if (ctx.filters.departmentId) extra.items = { some: { departmentId: ctx.filters.departmentId } };
+  if (ctx.filters.departmentId)
+    extra.items = { some: { departmentId: ctx.filters.departmentId } };
   const invoices = await fetchInvoices(ctx, extra);
 
-  const admissionIds = [...new Set(invoices.map((i) => i.admissionId).filter(Boolean))] as string[];
+  const admissionIds = [
+    ...new Set(invoices.map((i) => i.admissionId).filter(Boolean)),
+  ] as string[];
   const wardMap = await wardByAdmission(ctx.prisma, ctx.tenantId, admissionIds);
 
   const byKey = new Map<string, Record<string, any>>();
   const deptIds = new Set<string>();
   const patients = new Map<string, Set<string>>();
   for (const inv of invoices) {
-    const ward = inv.admissionId ? wardMap.get(inv.admissionId)?.ward || "-" : "-";
+    const ward = inv.admissionId
+      ? wardMap.get(inv.admissionId)?.ward || "-"
+      : "-";
     for (const item of inv.items || []) {
       const key = `${ward}|${item.departmentId || "none"}`;
-      const cur = byKey.get(key) || { ward, departmentId: item.departmentId, patients: 0, services: 0, revenue: 0, outstanding: 0 };
+      const cur = byKey.get(key) || {
+        ward,
+        departmentId: item.departmentId,
+        patients: 0,
+        services: 0,
+        revenue: 0,
+        outstanding: 0,
+      };
       const fin = itemFinance(inv, item);
       cur.revenue += fin.net;
       cur.outstanding += fin.outstanding;
@@ -650,8 +855,16 @@ export async function wardVsDept(ctx: ExecContext): Promise<ExecResult> {
   const t = (k: string) => r2(sumOf(rows, k));
   return {
     rows: sorted,
-    totals: { patients: rows.reduce((s, r) => s + r.patients, 0), services: t("services"), revenue: t("revenue"), outstanding: t("outstanding") },
-    cards: [{ label: "Revenue", value: t("revenue") }, { label: "Outstanding", value: t("outstanding") }],
+    totals: {
+      patients: rows.reduce((s, r) => s + r.patients, 0),
+      services: t("services"),
+      revenue: t("revenue"),
+      outstanding: t("outstanding"),
+    },
+    cards: [
+      { label: "Revenue", value: t("revenue") },
+      { label: "Outstanding", value: t("outstanding") },
+    ],
   };
 }
 
@@ -660,7 +873,9 @@ export async function deptVsClinical(ctx: ExecContext): Promise<ExecResult> {
   const byDept = new Map<string, { op: number; clinical: number }>();
   const deptIds = new Set<string>();
   for (const inv of invoices) {
-    const clinical = INVOICE_TYPES.IPD.includes(inv.type) || ["LAB", "RADIOLOGY", "PROCEDURE", "OT"].includes(inv.type);
+    const clinical =
+      INVOICE_TYPES.IPD.includes(inv.type) ||
+      ["LAB", "RADIOLOGY", "PROCEDURE", "OT"].includes(inv.type);
     const items = inv.items || [];
     const total = money(inv.totalAmount);
     const sub = money(inv.subtotal);
@@ -694,12 +909,21 @@ export async function deptVsClinical(ctx: ExecContext): Promise<ExecResult> {
   const t = (k: string) => r2(sumOf(rows, k));
   return {
     rows: sorted,
-    totals: { opRevenue: t("opRevenue"), clinicalRevenue: t("clinicalRevenue"), difference: t("difference") },
-    cards: [{ label: "Op Revenue", value: t("opRevenue") }, { label: "Clinical Revenue", value: t("clinicalRevenue") }],
+    totals: {
+      opRevenue: t("opRevenue"),
+      clinicalRevenue: t("clinicalRevenue"),
+      difference: t("difference"),
+    },
+    cards: [
+      { label: "Op Revenue", value: t("opRevenue") },
+      { label: "Clinical Revenue", value: t("clinicalRevenue") },
+    ],
   };
 }
 
-export async function accountRevenueTally(ctx: ExecContext): Promise<ExecResult> {
+export async function accountRevenueTally(
+  ctx: ExecContext,
+): Promise<ExecResult> {
   const entryWhere: any = { tenantId: ctx.tenantId };
   const r = applyRange("date", ctx.filters);
   if (r) entryWhere.date = r;
@@ -709,10 +933,16 @@ export async function accountRevenueTally(ctx: ExecContext): Promise<ExecResult>
   });
   const ids = entries.map((e) => e.id);
   if (!ids.length) {
-    return { rows: [], totals: { debit: 0, credit: 0, revenue: 0, adjustment: 0, balance: 0 } };
+    return {
+      rows: [],
+      totals: { debit: 0, credit: 0, revenue: 0, adjustment: 0, balance: 0 },
+    };
   }
 
-  const lineWhere: any = { tenantId: ctx.tenantId, journalEntryId: { in: ids } };
+  const lineWhere: any = {
+    tenantId: ctx.tenantId,
+    journalEntryId: { in: ids },
+  };
   if (ctx.filters.accountId) lineWhere.accountId = ctx.filters.accountId;
   const lines = await ctx.prisma.journalLine.findMany({
     where: lineWhere,
@@ -728,7 +958,15 @@ export async function accountRevenueTally(ctx: ExecContext): Promise<ExecResult>
   const byAcc = new Map<string, Record<string, any>>();
   for (const l of lines) {
     const acc = accMap.get(l.accountId);
-    const cur = byAcc.get(l.accountId) || { account: acc?.name || l.accountId, transactions: 0, debit: 0, credit: 0, revenue: 0, adjustment: 0, balance: 0 };
+    const cur = byAcc.get(l.accountId) || {
+      account: acc?.name || l.accountId,
+      transactions: 0,
+      debit: 0,
+      credit: 0,
+      revenue: 0,
+      adjustment: 0,
+      balance: 0,
+    };
     cur.transactions += 1;
     cur.debit += money(l.debit);
     cur.credit += money(l.credit);
@@ -750,12 +988,24 @@ export async function accountRevenueTally(ctx: ExecContext): Promise<ExecResult>
   const t = (k: string) => r2(sumOf(rows, k));
   return {
     rows: sorted,
-    totals: { transactions: rows.reduce((s, r) => s + r.transactions, 0), debit: t("debit"), credit: t("credit"), revenue: t("revenue"), adjustment: t("adjustment"), balance: r2(t("credit") - t("debit")) },
-    cards: [{ label: "Accounts", value: rows.length }, { label: "Revenue", value: t("revenue") }],
+    totals: {
+      transactions: rows.reduce((s, r) => s + r.transactions, 0),
+      debit: t("debit"),
+      credit: t("credit"),
+      revenue: t("revenue"),
+      adjustment: t("adjustment"),
+      balance: r2(t("credit") - t("debit")),
+    },
+    cards: [
+      { label: "Accounts", value: rows.length },
+      { label: "Revenue", value: t("revenue") },
+    ],
   };
 }
 
-export async function indoorTreatmentSummary(ctx: ExecContext): Promise<ExecResult> {
+export async function indoorTreatmentSummary(
+  ctx: ExecContext,
+): Promise<ExecResult> {
   const where: any = { tenantId: ctx.tenantId };
   const r = applyRange("admissionDate", ctx.filters);
   if (r) where.admissionDate = r;
@@ -781,29 +1031,55 @@ export async function indoorTreatmentSummary(ctx: ExecContext): Promise<ExecResu
         orderBy: { allocatedAt: "desc" },
         take: 1,
       },
-      invoices: { select: { id: true, totalAmount: true, paidAmount: true, dueAmount: true } },
+      invoices: {
+        select: {
+          id: true,
+          totalAmount: true,
+          paidAmount: true,
+          dueAmount: true,
+        },
+      },
     },
     orderBy: { admissionDate: "desc" },
   });
 
-  const allInvIds = admissions.flatMap((a) => (a.invoices || []).map((i: any) => i.id));
+  const allInvIds = admissions.flatMap((a) =>
+    (a.invoices || []).map((i: any) => i.id),
+  );
   const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, allInvIds);
 
-  const docIds = [...new Set(admissions.map((a) => a.admittingDoctorId).filter(Boolean))] as string[];
+  const docIds = [
+    ...new Set(admissions.map((a) => a.admittingDoctorId).filter(Boolean)),
+  ] as string[];
   const docMap = await doctorNames(ctx.prisma, ctx.tenantId, docIds);
 
   const rows = admissions.map((a) => {
-    const charges = a.invoices.reduce((s: number, i: any) => s + money(i.totalAmount), 0);
-    const payment = a.invoices.reduce((s: number, i: any) => s + money(i.paidAmount) - (refundMap.get(i.id) || 0), 0);
-    const outstanding = a.invoices.reduce((s: number, i: any) => s + money(i.dueAmount) + (refundMap.get(i.id) || 0), 0);
+    const charges = a.invoices.reduce(
+      (s: number, i: any) => s + money(i.totalAmount),
+      0,
+    );
+    const payment = a.invoices.reduce(
+      (s: number, i: any) =>
+        s + money(i.paidAmount) - (refundMap.get(i.id) || 0),
+      0,
+    );
+    const outstanding = a.invoices.reduce(
+      (s: number, i: any) =>
+        s + money(i.dueAmount) + (refundMap.get(i.id) || 0),
+      0,
+    );
     return {
       patient: fullName(a.patient),
       uhid: uhid(a.patient),
       admissionNumber: a.admissionNumber,
       admissionDate: a.admissionDate,
-      ward: a.bedAllocations?.[0]?.bed?.bedNumber ? `Bed ${a.bedAllocations[0].bed.bedNumber}` : "-",
+      ward: a.bedAllocations?.[0]?.bed?.bedNumber
+        ? `Bed ${a.bedAllocations[0].bed.bedNumber}`
+        : "-",
       bed: a.bedAllocations?.[0]?.bed?.bedNumber || "-",
-      doctor: a.admittingDoctorId ? docMap.get(a.admittingDoctorId) || "-" : "-",
+      doctor: a.admittingDoctorId
+        ? docMap.get(a.admittingDoctorId) || "-"
+        : "-",
       service: a.finalDiagnosis || a.provisionalDiagnosis || "-",
       charges: r2(charges),
       payment: r2(payment),
@@ -814,19 +1090,35 @@ export async function indoorTreatmentSummary(ctx: ExecContext): Promise<ExecResu
   const t = (k: string) => r2(sumOf(rows, k));
   return {
     rows,
-    totals: { charges: t("charges"), payment: t("payment"), outstanding: t("outstanding") },
-    cards: [{ label: "Admissions", value: rows.length }, { label: "Charges", value: t("charges") }, { label: "Outstanding", value: t("outstanding") }],
+    totals: {
+      charges: t("charges"),
+      payment: t("payment"),
+      outstanding: t("outstanding"),
+    },
+    cards: [
+      { label: "Admissions", value: rows.length },
+      { label: "Charges", value: t("charges") },
+      { label: "Outstanding", value: t("outstanding") },
+    ],
   };
 }
 
-export async function patientWiseRevenue(ctx: ExecContext): Promise<ExecResult> {
+export async function patientWiseRevenue(
+  ctx: ExecContext,
+): Promise<ExecResult> {
   const extra: any = {};
-  if (ctx.filters.departmentId) extra.items = { some: { departmentId: ctx.filters.departmentId } };
-  if (ctx.filters.doctorId) extra.items = { some: { doctorId: ctx.filters.doctorId } };
+  if (ctx.filters.departmentId)
+    extra.items = { some: { departmentId: ctx.filters.departmentId } };
+  if (ctx.filters.doctorId)
+    extra.items = { some: { doctorId: ctx.filters.doctorId } };
   if (ctx.filters.patientId) extra.patientId = ctx.filters.patientId;
   const invoices = await fetchInvoices(ctx, extra);
 
-  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  const refundMap = await refundByInvoice(
+    ctx.prisma,
+    ctx.tenantId,
+    invoices.map((i) => i.id),
+  );
   for (const inv of invoices) {
     const ref = refundMap.get(inv.id) || 0;
     inv.paidAmount = money(inv.paidAmount) - ref;
@@ -871,42 +1163,88 @@ export async function patientWiseRevenue(ctx: ExecContext): Promise<ExecResult> 
   const t = (k: string) => r2(sumOf(rows, k));
   return {
     rows: sorted,
-    totals: { gross: t("gross"), discount: t("discount"), net: t("net"), paid: t("paid"), outstanding: t("outstanding") },
-    cards: [{ label: "Patients", value: new Set(rows.map((r) => r.uhid)).size }, { label: "Net Revenue", value: t("net") }, { label: "Outstanding", value: t("outstanding") }],
+    totals: {
+      gross: t("gross"),
+      discount: t("discount"),
+      net: t("net"),
+      paid: t("paid"),
+      outstanding: t("outstanding"),
+    },
+    cards: [
+      { label: "Patients", value: new Set(rows.map((r) => r.uhid)).size },
+      { label: "Net Revenue", value: t("net") },
+      { label: "Outstanding", value: t("outstanding") },
+    ],
   };
 }
 
 export async function materializedView(ctx: ExecContext): Promise<ExecResult> {
   const r = applyRange("createdAt", ctx.filters);
-  const inRange = r ? { tenantId: ctx.tenantId, ...{ createdAt: r } } : { tenantId: ctx.tenantId };
-  const [patients, appointments, encounters, admissions, invoices, payments, labOrders, radiologyOrders, otCases, emergencyCases, beds, deposits] =
-    await Promise.all([
-      ctx.prisma.patient.count({ where: { ...inRange, deletedAt: null } }),
-      ctx.prisma.appointment.count({ where: inRange }),
-      ctx.prisma.encounter.count({ where: inRange }),
-      ctx.prisma.admission.count({ where: inRange }),
-      ctx.prisma.invoice.count({ where: { ...inRange, status: { not: "CANCELLED" } } }),
-      ctx.prisma.payment.count({ where: inRange }),
-      ctx.prisma.labOrder.count({ where: inRange }),
-      ctx.prisma.radiologyOrder.count({ where: inRange }),
-      ctx.prisma.oTCase.count({ where: inRange }),
-      ctx.prisma.emergencyCase.count({ where: inRange }),
-      ctx.prisma.bed.count({ where: { tenantId: ctx.tenantId } }),
-      ctx.prisma.deposit.count({ where: inRange }),
-    ]);
+  const inRange = r
+    ? { tenantId: ctx.tenantId, ...{ createdAt: r } }
+    : { tenantId: ctx.tenantId };
+  const [
+    patients,
+    appointments,
+    encounters,
+    admissions,
+    invoices,
+    payments,
+    labOrders,
+    radiologyOrders,
+    otCases,
+    emergencyCases,
+    beds,
+    deposits,
+  ] = await Promise.all([
+    ctx.prisma.patient.count({ where: { ...inRange, deletedAt: null } }),
+    ctx.prisma.appointment.count({ where: inRange }),
+    ctx.prisma.encounter.count({ where: inRange }),
+    ctx.prisma.admission.count({ where: inRange }),
+    ctx.prisma.invoice.count({
+      where: { ...inRange, status: { not: "CANCELLED" } },
+    }),
+    ctx.prisma.payment.count({ where: inRange }),
+    ctx.prisma.labOrder.count({ where: inRange }),
+    ctx.prisma.radiologyOrder.count({ where: inRange }),
+    ctx.prisma.oTCase.count({ where: inRange }),
+    ctx.prisma.emergencyCase.count({ where: inRange }),
+    ctx.prisma.bed.count({ where: { tenantId: ctx.tenantId } }),
+    ctx.prisma.deposit.count({ where: inRange }),
+  ]);
 
   const now = new Date().toISOString();
   const views = [
-    { name: "Patients", description: "Registered patient records", rows: patients },
-    { name: "Appointments", description: "Scheduled appointments", rows: appointments },
+    {
+      name: "Patients",
+      description: "Registered patient records",
+      rows: patients,
+    },
+    {
+      name: "Appointments",
+      description: "Scheduled appointments",
+      rows: appointments,
+    },
     { name: "Encounters", description: "Clinical visits", rows: encounters },
     { name: "Admissions", description: "IPD admissions", rows: admissions },
-    { name: "Invoices", description: "Billed invoices (non-cancelled)", rows: invoices },
+    {
+      name: "Invoices",
+      description: "Billed invoices (non-cancelled)",
+      rows: invoices,
+    },
     { name: "Payments", description: "Payment transactions", rows: payments },
     { name: "Lab Orders", description: "Laboratory orders", rows: labOrders },
-    { name: "Radiology Orders", description: "Imaging orders", rows: radiologyOrders },
+    {
+      name: "Radiology Orders",
+      description: "Imaging orders",
+      rows: radiologyOrders,
+    },
     { name: "OT Cases", description: "Operation theatre cases", rows: otCases },
-    { name: "Emergency Cases", description: "Emergency room cases", rows: emergencyCases },
+    {
+      name: "Emergency Cases",
+      description: "Emergency room cases",
+      rows: emergencyCases,
+    },
     { name: "Beds", description: "Registered beds", rows: beds },
     { name: "Deposits", description: "Deposit collections", rows: deposits },
   ];
@@ -930,7 +1268,11 @@ export async function materializedView(ctx: ExecContext): Promise<ExecResult> {
 }
 
 export async function bankDeposit(ctx: ExecContext): Promise<ExecResult> {
-  const where: any = { tenantId: ctx.tenantId, method: "BANK", status: { in: ["COMPLETED", "PARTIAL"] } };
+  const where: any = {
+    tenantId: ctx.tenantId,
+    method: "BANK",
+    status: { in: ["COMPLETED", "PARTIAL"] },
+  };
   const r = applyRange("paidAt", ctx.filters);
   if (r) where.paidAt = r;
   if (ctx.filters.userId) where.receivedBy = ctx.filters.userId;
@@ -943,7 +1285,9 @@ export async function bankDeposit(ctx: ExecContext): Promise<ExecResult> {
     orderBy: { paidAt: "desc" },
   });
 
-  const userIds = [...new Set(payments.map((p) => p.receivedBy).filter(Boolean))] as string[];
+  const userIds = [
+    ...new Set(payments.map((p) => p.receivedBy).filter(Boolean)),
+  ] as string[];
   const userMap = await userNames(ctx.prisma, ctx.tenantId, userIds);
 
   const rows = payments.map((p) => ({
@@ -961,24 +1305,38 @@ export async function bankDeposit(ctx: ExecContext): Promise<ExecResult> {
   return {
     rows,
     totals: { amount: r2(total) },
-    cards: [{ label: "Bank Deposits", value: r2(total) }, { label: "Transactions", value: rows.length }],
+    cards: [
+      { label: "Bank Deposits", value: r2(total) },
+      { label: "Transactions", value: rows.length },
+    ],
   };
 }
 
 export async function indoorIncome(ctx: ExecContext): Promise<ExecResult> {
-  const extra: any = { type: { in: ["IPD", "DISCHARGE"] }, admissionId: { not: null } };
-  if (ctx.filters.departmentId) extra.items = { some: { departmentId: ctx.filters.departmentId } };
-  if (ctx.filters.doctorId) extra.items = { some: { doctorId: ctx.filters.doctorId } };
+  const extra: any = {
+    type: { in: ["IPD", "DISCHARGE"] },
+    admissionId: { not: null },
+  };
+  if (ctx.filters.departmentId)
+    extra.items = { some: { departmentId: ctx.filters.departmentId } };
+  if (ctx.filters.doctorId)
+    extra.items = { some: { doctorId: ctx.filters.doctorId } };
   const invoices = await fetchInvoices(ctx, extra);
 
-  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  const refundMap = await refundByInvoice(
+    ctx.prisma,
+    ctx.tenantId,
+    invoices.map((i) => i.id),
+  );
   for (const inv of invoices) {
     const ref = refundMap.get(inv.id) || 0;
     inv.paidAmount = money(inv.paidAmount) - ref;
     inv.dueAmount = money(inv.dueAmount) + ref;
   }
 
-  const admissionIds = [...new Set(invoices.map((i) => i.admissionId).filter(Boolean))] as string[];
+  const admissionIds = [
+    ...new Set(invoices.map((i) => i.admissionId).filter(Boolean)),
+  ] as string[];
   const wardMap = await wardByAdmission(ctx.prisma, ctx.tenantId, admissionIds);
 
   const rows: Record<string, any>[] = [];
@@ -1013,17 +1371,28 @@ export async function indoorIncome(ctx: ExecContext): Promise<ExecResult> {
   return {
     rows: sortRows(rows, "amount"),
     totals: { amount: r2(total) },
-    cards: [{ label: "Indoor Income", value: r2(total) }, { label: "Services", value: rows.length }],
+    cards: [
+      { label: "Indoor Income", value: r2(total) },
+      { label: "Services", value: rows.length },
+    ],
   };
 }
 
 export async function outdoorIncome(ctx: ExecContext): Promise<ExecResult> {
-  const extra: any = { type: { in: ["OPD", "SPECIAL_OPD", "SERVICE", "PHARMACY", "AMBULANCE"] } };
-  if (ctx.filters.departmentId) extra.items = { some: { departmentId: ctx.filters.departmentId } };
-  if (ctx.filters.doctorId) extra.items = { some: { doctorId: ctx.filters.doctorId } };
+  const extra: any = {
+    type: { in: ["OPD", "SPECIAL_OPD", "SERVICE", "PHARMACY", "AMBULANCE"] },
+  };
+  if (ctx.filters.departmentId)
+    extra.items = { some: { departmentId: ctx.filters.departmentId } };
+  if (ctx.filters.doctorId)
+    extra.items = { some: { doctorId: ctx.filters.doctorId } };
   const invoices = await fetchInvoices(ctx, extra);
 
-  const refundMap = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  const refundMap = await refundByInvoice(
+    ctx.prisma,
+    ctx.tenantId,
+    invoices.map((i) => i.id),
+  );
   for (const inv of invoices) {
     const ref = refundMap.get(inv.id) || 0;
     inv.paidAmount = money(inv.paidAmount) - ref;
@@ -1061,12 +1430,20 @@ export async function outdoorIncome(ctx: ExecContext): Promise<ExecResult> {
   return {
     rows: sortRows(rows, "amount"),
     totals: { amount: r2(total) },
-    cards: [{ label: "Outdoor Income", value: r2(total) }, { label: "Services", value: rows.length }],
+    cards: [
+      { label: "Outdoor Income", value: r2(total) },
+      { label: "Services", value: rows.length },
+    ],
   };
 }
 
-export async function userWiseCollection(ctx: ExecContext): Promise<ExecResult> {
-  const where: any = { tenantId: ctx.tenantId, status: { in: ["COMPLETED", "PARTIAL"] } };
+export async function userWiseCollection(
+  ctx: ExecContext,
+): Promise<ExecResult> {
+  const where: any = {
+    tenantId: ctx.tenantId,
+    status: { in: ["COMPLETED", "PARTIAL"] },
+  };
   const r = applyRange("paidAt", ctx.filters);
   if (r) where.paidAt = r;
   if (ctx.filters.paymentMode) where.method = ctx.filters.paymentMode;
@@ -1083,17 +1460,39 @@ export async function userWiseCollection(ctx: ExecContext): Promise<ExecResult> 
     where: {
       tenantId: ctx.tenantId,
       status: "COMPLETED",
-      ...(ctx.filters.from || ctx.filters.to ? { refundedAt: { gte: ctx.filters.from, lte: ctx.filters.to } } : {}),
+      ...(ctx.filters.from || ctx.filters.to
+        ? { refundedAt: { gte: ctx.filters.from, lte: ctx.filters.to } }
+        : {}),
       ...(ctx.filters.patientId ? { patientId: ctx.filters.patientId } : {}),
     },
     select: { patientId: true, processedBy: true, amount: true },
   });
 
-  const keyOf = (userId: string | null, patientId: string) => `${userId || "none"}|${patientId}`;
-  const byKey = new Map<string, { userId: string | null; patientId: string; collection: number; refund: number; paymentNumber: string; paidAt: Date; method: string }>();
+  const keyOf = (userId: string | null, patientId: string) =>
+    `${userId || "none"}|${patientId}`;
+  const byKey = new Map<
+    string,
+    {
+      userId: string | null;
+      patientId: string;
+      collection: number;
+      refund: number;
+      paymentNumber: string;
+      paidAt: Date;
+      method: string;
+    }
+  >();
   for (const p of payments) {
     const k = keyOf(p.receivedBy, p.patientId);
-    const cur = byKey.get(k) || { userId: p.receivedBy, patientId: p.patientId, collection: 0, refund: 0, paymentNumber: p.paymentNumber, paidAt: p.paidAt, method: p.method };
+    const cur = byKey.get(k) || {
+      userId: p.receivedBy,
+      patientId: p.patientId,
+      collection: 0,
+      refund: 0,
+      paymentNumber: p.paymentNumber,
+      paidAt: p.paidAt,
+      method: p.method,
+    };
     cur.collection += money(p.amount);
     cur.paymentNumber = p.paymentNumber;
     cur.paidAt = p.paidAt;
@@ -1102,22 +1501,43 @@ export async function userWiseCollection(ctx: ExecContext): Promise<ExecResult> 
   }
   for (const rf of refunds) {
     const k = keyOf(rf.processedBy, rf.patientId);
-    const cur = byKey.get(k) || { userId: rf.processedBy, patientId: rf.patientId, collection: 0, refund: 0, paymentNumber: "-", paidAt: rf.refundedAt, method: "-" };
+    const cur = byKey.get(k) || {
+      userId: rf.processedBy,
+      patientId: rf.patientId,
+      collection: 0,
+      refund: 0,
+      paymentNumber: "-",
+      paidAt: rf.refundedAt,
+      method: "-",
+    };
     cur.refund += money(rf.amount);
     byKey.set(k, cur);
   }
 
-  const userIds = [...new Set([...byKey.values()].map((v) => v.userId).filter(Boolean))] as string[];
+  const userIds = [
+    ...new Set([...byKey.values()].map((v) => v.userId).filter(Boolean)),
+  ] as string[];
   const userMap = await userNames(ctx.prisma, ctx.tenantId, userIds);
   const patients = await ctx.prisma.patient.findMany({
-    where: { tenantId: ctx.tenantId, id: { in: [...new Set([...byKey.values()].map((v) => v.patientId))] } },
-    select: { id: true, firstName: true, middleName: true, lastName: true, mrn: true },
+    where: {
+      tenantId: ctx.tenantId,
+      id: { in: [...new Set([...byKey.values()].map((v) => v.patientId))] },
+    },
+    select: {
+      id: true,
+      firstName: true,
+      middleName: true,
+      lastName: true,
+      mrn: true,
+    },
   });
   const patientMap = new Map(patients.map((p) => [p.id, p]));
 
   const rows = [...byKey.values()].map((v) => ({
     receivedBy: v.userId ? userMap.get(v.userId) || "-" : "-",
-    patient: patientMap.get(v.patientId) ? fullName(patientMap.get(v.patientId)) : "-",
+    patient: patientMap.get(v.patientId)
+      ? fullName(patientMap.get(v.patientId))
+      : "-",
     paymentNumber: v.paymentNumber,
     paidAt: v.paidAt,
     method: v.method || "-",
@@ -1131,26 +1551,42 @@ export async function userWiseCollection(ctx: ExecContext): Promise<ExecResult> 
   return {
     rows: sorted,
     totals: { collection: t("collection"), refund: t("refund"), net: t("net") },
-    cards: [{ label: "Total Collection", value: t("collection") }, { label: "Net Collection", value: t("net") }],
+    cards: [
+      { label: "Total Collection", value: t("collection") },
+      { label: "Net Collection", value: t("net") },
+    ],
   };
 }
 
 export async function revenueStatement(ctx: ExecContext): Promise<ExecResult> {
-  const invWhere: any = { tenantId: ctx.tenantId, status: { not: "CANCELLED" } };
+  const invWhere: any = {
+    tenantId: ctx.tenantId,
+    status: { not: "CANCELLED" },
+  };
   const invR = applyRange("issuedDate", ctx.filters);
   if (invR) invWhere.issuedDate = invR;
   if (ctx.filters.patientId) invWhere.patientId = ctx.filters.patientId;
   const invoices = await ctx.prisma.invoice.findMany({
     where: invWhere,
     select: {
-      id: true, issuedDate: true, invoiceNumber: true, patientId: true, type: true,
-      subtotal: true, totalAmount: true, paidAmount: true, dueAmount: true,
+      id: true,
+      issuedDate: true,
+      invoiceNumber: true,
+      patientId: true,
+      type: true,
+      subtotal: true,
+      totalAmount: true,
+      paidAmount: true,
+      dueAmount: true,
       items: { select: { departmentId: true, doctorId: true } },
       patient: { select: PATIENT_SELECT.select },
     },
   });
 
-  const payWhere: any = { tenantId: ctx.tenantId, status: { in: ["COMPLETED", "PARTIAL"] } };
+  const payWhere: any = {
+    tenantId: ctx.tenantId,
+    status: { in: ["COMPLETED", "PARTIAL"] },
+  };
   const payR = applyRange("paidAt", ctx.filters);
   if (payR) payWhere.paidAt = payR;
   if (ctx.filters.patientId) payWhere.patientId = ctx.filters.patientId;
@@ -1231,7 +1667,10 @@ export async function revenueStatement(ctx: ExecContext): Promise<ExecResult> {
   rows.sort((a, b) => {
     const d = new Date(a.date).getTime() - new Date(b.date).getTime();
     if (d !== 0) return d;
-    const order = { PAYMENT: 0, INVOICE: 1, REFUND: 2 } as Record<string, number>;
+    const order = { PAYMENT: 0, INVOICE: 1, REFUND: 2 } as Record<
+      string,
+      number
+    >;
     return (order[a.transaction] ?? 3) - (order[b.transaction] ?? 3);
   });
 
@@ -1252,29 +1691,50 @@ export async function revenueStatement(ctx: ExecContext): Promise<ExecResult> {
     cards: [
       { label: "Invoice Credit", value: t("credit") },
       { label: "Collections", value: t("debit") },
-      { label: "Closing Balance", value: rows.length ? rows[rows.length - 1].balance : 0 },
+      {
+        label: "Closing Balance",
+        value: rows.length ? rows[rows.length - 1].balance : 0,
+      },
     ],
   };
 }
 
 export async function serviceWiseIncome(ctx: ExecContext): Promise<ExecResult> {
   const extra: any = {};
-  if (ctx.filters.departmentId) extra.items = { some: { departmentId: ctx.filters.departmentId } };
-  if (ctx.filters.serviceId) extra.items = { some: { serviceId: ctx.filters.serviceId } };
+  if (ctx.filters.departmentId)
+    extra.items = { some: { departmentId: ctx.filters.departmentId } };
+  if (ctx.filters.serviceId)
+    extra.items = { some: { serviceId: ctx.filters.serviceId } };
   const invoices = await fetchInvoices(ctx, extra);
-  const refunds = await refundByInvoice(ctx.prisma, ctx.tenantId, invoices.map((i) => i.id));
+  const refunds = await refundByInvoice(
+    ctx.prisma,
+    ctx.tenantId,
+    invoices.map((i) => i.id),
+  );
 
   const byKey = new Map<string, Record<string, any>>();
   const deptIds = new Set<string>();
   for (const inv of invoices) {
     const items = inv.items || [];
     const invRefund = refunds.get(inv.id) || 0;
-    const totalLine = items.reduce((s: number, i: any) => s + money(i.lineTotal), 0);
+    const totalLine = items.reduce(
+      (s: number, i: any) => s + money(i.lineTotal),
+      0,
+    );
     for (const item of items) {
       const key = item.serviceId || item.serviceName || "-";
-      const cur = byKey.get(key) || { service: item.serviceName || key, departmentId: item.departmentId, quantity: 0, gross: 0, discount: 0, refund: 0, net: 0 };
+      const cur = byKey.get(key) || {
+        service: item.serviceName || key,
+        departmentId: item.departmentId,
+        quantity: 0,
+        gross: 0,
+        discount: 0,
+        refund: 0,
+        net: 0,
+      };
       const fin = itemFinance(inv, item);
-      const refundShare = totalLine > 0 ? invRefund * (money(item.lineTotal) / totalLine) : 0;
+      const refundShare =
+        totalLine > 0 ? invRefund * (money(item.lineTotal) / totalLine) : 0;
       cur.quantity += money(item.quantity) || 1;
       cur.gross += fin.gross;
       cur.discount += fin.discount;
@@ -1300,8 +1760,17 @@ export async function serviceWiseIncome(ctx: ExecContext): Promise<ExecResult> {
   const t = (k: string) => r2(sumOf(rows, k));
   return {
     rows: sorted,
-    totals: { quantity: rows.reduce((s, r) => s + r.quantity, 0), gross: t("gross"), discount: t("discount"), refund: t("refund"), net: t("net") },
-    cards: [{ label: "Services", value: rows.length }, { label: "Net Income", value: t("net") }],
+    totals: {
+      quantity: rows.reduce((s, r) => s + r.quantity, 0),
+      gross: t("gross"),
+      discount: t("discount"),
+      refund: t("refund"),
+      net: t("net"),
+    },
+    cards: [
+      { label: "Services", value: rows.length },
+      { label: "Net Income", value: t("net") },
+    ],
   };
 }
 
@@ -1347,7 +1816,11 @@ export async function srlReport(ctx: ExecContext): Promise<ExecResult> {
     const inv = invMap.get(it.invoiceId);
     const total = inv ? money(inv.totalAmount) : 0;
     const share = total > 0 ? money(it.lineTotal) / total : 0;
-    paidByOrder.set(it.referenceId, (paidByOrder.get(it.referenceId) || 0) + (inv ? money(inv.paidAmount) * share : 0));
+    paidByOrder.set(
+      it.referenceId,
+      (paidByOrder.get(it.referenceId) || 0) +
+        (inv ? money(inv.paidAmount) * share : 0),
+    );
   }
 
   const rows: Record<string, any>[] = [];
@@ -1370,7 +1843,11 @@ export async function srlReport(ctx: ExecContext): Promise<ExecResult> {
   return {
     rows,
     totals: { amount: t("amount"), paid: t("paid") },
-    cards: [{ label: "Orders", value: orders.length }, { label: "Tests", value: rows.length }, { label: "Bill Amount", value: t("amount") }],
+    cards: [
+      { label: "Orders", value: orders.length },
+      { label: "Tests", value: rows.length },
+      { label: "Bill Amount", value: t("amount") },
+    ],
   };
 }
 
@@ -1384,11 +1861,13 @@ export async function operationReport(ctx: ExecContext): Promise<ExecResult> {
   }
   if (ctx.filters.doctorId) {
     where.AND = [
-      { OR: [
-        { surgeonId: ctx.filters.doctorId },
-        { assistantId: ctx.filters.doctorId },
-        { anesthetistId: ctx.filters.doctorId },
-      ] },
+      {
+        OR: [
+          { surgeonId: ctx.filters.doctorId },
+          { assistantId: ctx.filters.doctorId },
+          { anesthetistId: ctx.filters.doctorId },
+        ],
+      },
     ];
   }
   if (ctx.filters.status) where.status = ctx.filters.status;
@@ -1399,13 +1878,23 @@ export async function operationReport(ctx: ExecContext): Promise<ExecResult> {
     orderBy: { scheduledDate: "desc" },
   });
 
-  const docIds = [...new Set(cases.flatMap((c) => [c.surgeonId, c.assistantId, c.anesthetistId]).filter(Boolean))] as string[];
+  const docIds = [
+    ...new Set(
+      cases
+        .flatMap((c) => [c.surgeonId, c.assistantId, c.anesthetistId])
+        .filter(Boolean),
+    ),
+  ] as string[];
   const docMap = await doctorNames(ctx.prisma, ctx.tenantId, docIds);
 
   const otIds = cases.map((c) => c.id);
   const invItems = otIds.length
     ? await ctx.prisma.invoiceItem.findMany({
-        where: { tenantId: ctx.tenantId, referenceType: { in: ["OT", "OPERATION", "SURGERY"] }, referenceId: { in: otIds } },
+        where: {
+          tenantId: ctx.tenantId,
+          referenceType: { in: ["OT", "OPERATION", "SURGERY"] },
+          referenceId: { in: otIds },
+        },
         select: { referenceId: true, invoiceId: true, lineTotal: true },
       })
     : [];
@@ -1449,7 +1938,68 @@ export async function operationReport(ctx: ExecContext): Promise<ExecResult> {
   const t = (k: string) => r2(sumOf(rows, k));
   return {
     rows,
-    totals: { charges: t("charges"), billing: t("billing"), payment: t("payment") },
-    cards: [{ label: "Operations", value: rows.length }, { label: "Charges", value: t("charges") }],
+    totals: {
+      charges: t("charges"),
+      billing: t("billing"),
+      payment: t("payment"),
+    },
+    cards: [
+      { label: "Operations", value: rows.length },
+      { label: "Charges", value: t("charges") },
+    ],
+  };
+}
+
+export async function erRevenue(ctx: ExecContext): Promise<ExecResult> {
+  const where: any = {
+    tenantId: ctx.tenantId,
+    type: "EMERGENCY" as any,
+  };
+  const r = applyRange("issuedDate", ctx.filters);
+  if (r) where.issuedDate = r;
+  if (ctx.filters.status) where.status = ctx.filters.status;
+  const invoices = await ctx.prisma.invoice.findMany({
+    where,
+    include: { items: true, patient: PATIENT_SELECT },
+    orderBy: { issuedDate: "desc" },
+    take: 5000,
+  });
+
+  const statusOf = (inv: any) => {
+    if (inv.status === "CANCELLED") return "Cancelled";
+    if (Number(inv.dueAmount) <= 0) return "Paid";
+    if (Number(inv.paidAmount) > 0) return "Partial";
+    return inv.isCredit ? "Credit" : "Pending";
+  };
+
+  const rows = invoices.map((inv: any) => ({
+    date: inv.issuedDate,
+    invoiceNumber: inv.invoiceNumber,
+    patient: fullName(inv.patient),
+    uhid: inv.patient?.mrn || "-",
+    items: inv.items?.length ?? 0,
+    charges: Number(inv.subtotal) || 0,
+    discount: Number(inv.discountAmount) || 0,
+    tax: Number(inv.taxAmount) || 0,
+    amount: Number(inv.totalAmount) || 0,
+    paid: Number(inv.paidAmount) || 0,
+    due: Number(inv.dueAmount) || 0,
+    status: statusOf(inv),
+  }));
+
+  const t = (k: keyof (typeof rows)[number]) =>
+    rows.reduce((s: number, row: any) => s + (Number(row[k]) || 0), 0);
+
+  const billed = t("amount");
+  const collected = t("paid");
+  return {
+    rows,
+    totals: { amount: billed, paid: collected, due: t("due") },
+    cards: [
+      { label: "ER Invoices", value: rows.length },
+      { label: "Billed", value: billed },
+      { label: "Collected", value: collected },
+      { label: "Outstanding", value: billed - collected },
+    ],
   };
 }

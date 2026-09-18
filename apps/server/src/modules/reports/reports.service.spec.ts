@@ -60,9 +60,9 @@ describe("ReportsService", () => {
   });
 
   it("rejects an invalid to date", async () => {
-    await expect(
-      service.revenueByStatus("t1", { to: "nope" }),
-    ).rejects.toThrow(BadRequestException);
+    await expect(service.revenueByStatus("t1", { to: "nope" })).rejects.toThrow(
+      BadRequestException,
+    );
   });
 
   it("computes revenue, collected and outstanding", async () => {
@@ -85,7 +85,10 @@ describe("ReportsService", () => {
   });
 
   it("scopes the invoice query to the tenant and excludes cancelled", async () => {
-    await service.revenueByStatus("t1", { from: "2026-08-01", to: "2026-08-15" });
+    await service.revenueByStatus("t1", {
+      from: "2026-08-01",
+      to: "2026-08-15",
+    });
     const arg = prisma.invoice.findMany.mock.calls[0][0];
     const to = new Date("2026-08-15");
     to.setHours(23, 59, 59, 999);
@@ -182,8 +185,12 @@ describe("ReportsService", () => {
     const ids = tree.flatMap((c) => c.reports.map((r) => r.id));
     expect(ids).toContain("credit-sales");
     expect(ids).toContain("geographical-stats");
-    expect(tree.find((c) => c.id === "REVENUE")?.reports.length).toBeGreaterThan(20);
-    expect(tree.find((c) => c.id === "STATISTICS")?.reports.length).toBeGreaterThan(20);
+    expect(
+      tree.find((c) => c.id === "REVENUE")?.reports.length,
+    ).toBeGreaterThan(20);
+    expect(
+      tree.find((c) => c.id === "STATISTICS")?.reports.length,
+    ).toBeGreaterThan(20);
   });
 
   it("returns definitions for every report id in the tree", () => {
@@ -244,13 +251,22 @@ describe("ReportsService", () => {
         items: [],
       },
     ]);
-    const res = await service.generateAnalysis("t1", undefined, "credit-sales", {
-      from: "2026-08-01",
-      to: "2026-08-31",
-    });
+    const res = await service.generateAnalysis(
+      "t1",
+      undefined,
+      "credit-sales",
+      {
+        from: "2026-08-01",
+        to: "2026-08-31",
+      },
+    );
     expect(res.report.id).toBe("credit-sales");
     expect(res.count).toBe(2);
-    expect(res.rows[0]).toMatchObject({ invoiceNumber: "INV-1", gross: 100, net: 95 });
+    expect(res.rows[0]).toMatchObject({
+      invoiceNumber: "INV-1",
+      gross: 100,
+      net: 95,
+    });
     expect(res.totals.gross).toBe(300);
     expect(res.meta.hospital.name).toBe("Test Hospital");
     const invoiceArg = prisma.invoice.findMany.mock.calls[0][0];
@@ -259,46 +275,65 @@ describe("ReportsService", () => {
 
   it("rejects an invalid from date on generate", async () => {
     await expect(
-      service.generateAnalysis("t1", undefined, "credit-sales", { from: "not-a-date" }),
+      service.generateAnalysis("t1", undefined, "credit-sales", {
+        from: "not-a-date",
+      }),
     ).rejects.toThrow(BadRequestException);
   });
 
   it("rejects an out-of-range from date on generate", async () => {
     await expect(
-      service.generateAnalysis("t1", undefined, "credit-sales", { from: "0000-01-01" }),
+      service.generateAnalysis("t1", undefined, "credit-sales", {
+        from: "0000-01-01",
+      }),
     ).rejects.toThrow(BadRequestException);
     await expect(
-      service.generateAnalysis("t1", undefined, "credit-sales", { from: "9999-12-31" }),
+      service.generateAnalysis("t1", undefined, "credit-sales", {
+        from: "9999-12-31",
+      }),
     ).rejects.toThrow(BadRequestException);
   });
 
   it("rejects an out-of-range to date on generate", async () => {
     await expect(
-      service.generateAnalysis("t1", undefined, "credit-sales", { to: "9999-01-01" }),
+      service.generateAnalysis("t1", undefined, "credit-sales", {
+        to: "9999-01-01",
+      }),
     ).rejects.toThrow(BadRequestException);
   });
 
   it("rejects a to date before the from date", async () => {
     await expect(
-      service.generateAnalysis("t1", undefined, "credit-sales", { from: "2026-08-01", to: "2025-01-01" }),
+      service.generateAnalysis("t1", undefined, "credit-sales", {
+        from: "2026-08-01",
+        to: "2025-01-01",
+      }),
     ).rejects.toThrow(BadRequestException);
   });
 
   it("rejects an invalid month on generate", async () => {
     await expect(
-      service.generateAnalysis("t1", undefined, "credit-sales", { month: "13", year: "2026" }),
+      service.generateAnalysis("t1", undefined, "credit-sales", {
+        month: "13",
+        year: "2026",
+      }),
     ).rejects.toThrow(BadRequestException);
   });
 
   it("rejects an invalid year on generate", async () => {
     await expect(
-      service.generateAnalysis("t1", undefined, "credit-sales", { month: "3", year: "9999" }),
+      service.generateAnalysis("t1", undefined, "credit-sales", {
+        month: "3",
+        year: "9999",
+      }),
     ).rejects.toThrow(BadRequestException);
   });
 
   it("scopes the generated query to the selected department", async () => {
     prisma.invoice.findMany.mockResolvedValue([]);
-    await service.generateAnalysis("t1", undefined, "credit-sales", { department: "dept1" });
+    await service.generateAnalysis("t1", undefined, "credit-sales", {
+      department: "dept1",
+    });
     const arg = prisma.invoice.findMany.mock.calls[0][0];
     expect(arg.where.items.some.departmentId).toBe("dept1");
   });

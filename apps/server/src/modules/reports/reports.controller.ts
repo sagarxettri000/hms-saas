@@ -89,14 +89,27 @@ export class ReportsController {
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "All analysis report definitions" })
   analysisDefinitions(@Req() req: any) {
-    return { success: true, data: this.reportsService.getAnalysisDefinitions() };
+    return {
+      success: true,
+      data: this.reportsService.getAnalysisDefinitions(),
+    };
   }
 
   @Get("analysis/options")
   @Permissions(PermissionAction.VIEW)
-  @ApiOperation({ summary: "Filter option values for the universal filter engine" })
-  async analysisOptions(@Req() req: any, @Query("name") name: string, @Query("search") search?: string) {
-    const options = await this.reportsService.getAnalysisOptions(req.user.tenantId, name, search);
+  @ApiOperation({
+    summary: "Filter option values for the universal filter engine",
+  })
+  async analysisOptions(
+    @Req() req: any,
+    @Query("name") name: string,
+    @Query("search") search?: string,
+  ) {
+    const options = await this.reportsService.getAnalysisOptions(
+      req.user.tenantId,
+      name,
+      search,
+    );
     return { success: true, data: options };
   }
 
@@ -104,7 +117,10 @@ export class ReportsController {
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Single report definition" })
   analysisDefinition(@Param("reportId") reportId: string, @Req() req: any) {
-    return { success: true, data: this.reportsService.getAnalysisDefinition(reportId) };
+    return {
+      success: true,
+      data: this.reportsService.getAnalysisDefinition(reportId),
+    };
   }
 
   @Post("analysis/:reportId/generate")
@@ -142,7 +158,10 @@ export class ReportsController {
       format.toLowerCase(),
     );
     res.setHeader("Content-Type", out.contentType);
-    res.setHeader("Content-Disposition", `attachment; filename="${out.filename}"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${out.filename}"`,
+    );
     res.setHeader("X-Report-Filename", out.filename);
     return res.send(out.data);
   }

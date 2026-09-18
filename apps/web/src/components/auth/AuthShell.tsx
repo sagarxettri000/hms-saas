@@ -43,13 +43,6 @@ export default function AuthShell({ children, mode, wide, footer, heading }: Aut
           {heading && <h2 className="auth-heading">{heading}</h2>}
 
           {children}
-
-          <div className="auth-register-text">
-            Don&apos;t have an account yet?{' '}
-            <Link href="/register" className="auth-register-link">
-              Register for free
-            </Link>
-          </div>
         </div>
       </div>
 

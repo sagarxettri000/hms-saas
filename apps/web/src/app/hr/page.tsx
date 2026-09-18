@@ -5,23 +5,7 @@ import EntityPage from '@/components/EntityPage';
 import { api, unwrap } from '@/lib/api';
 import { formatDate } from '@/lib/hooks';
 
-type Tab = 'staff' | 'shifts' | 'rosters' | 'leaves' | 'departments' | 'attendance' | 'training';
-
-interface AttendanceRecord {
-  id: string;
-  staffName: string;
-  date: string;
-  clockIn: string;
-  clockOut: string | null;
-}
-
-interface TrainingRecord {
-  id: string;
-  program: string;
-  enrolledAt: string;
-  completedAt: string | null;
-  certificateDate: string;
-}
+type Tab = 'staff' | 'shifts' | 'rosters' | 'leaves' | 'departments';
 
 const ROLES = ['DOCTOR', 'NURSE', 'PHARMACIST', 'LAB_TECHNICIAN', 'RECEPTIONIST', 'HR_MANAGER', 'INVENTORY_MANAGER', 'RADIOLOGIST', 'RADIOLOGY_TECHNICIAN', 'ADMIN'];
 
@@ -38,19 +22,9 @@ const ROLE_COLORS: Record<string, string> = {
   RADIOLOGY_TECHNICIAN: '#c2410c',
 };
 
-const TRAINING_PROGRAMS = ['Basic Life Support', 'Fire Safety', 'Infection Control', 'Patient Rights', 'Data Privacy'];
-
 function fullName(u: any): string {
   if (!u) return '—';
   return [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || u.email || '—';
-}
-
-function hoursBetween(a: string, b: string): number {
-  return Math.round(((new Date(b).getTime() - new Date(a).getTime()) / 3600000) * 100) / 100;
-}
-
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 export default function HrPage() {
@@ -70,9 +44,6 @@ export default function HrPage() {
   const [leaves, setLeaves] = useState<any[]>([]);
   const [loadingLeaves, setLoadingLeaves] = useState(false);
   const [leaveBusy, setLeaveBusy] = useState<string | null>(null);
-
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
-  const [training, setTraining] = useState<TrainingRecord[]>([]);
 
   const loadStaff = async () => {
     setLoadingStaff(true);
@@ -107,50 +78,9 @@ export default function HrPage() {
     setLoadingLeaves(false);
   };
 
-  const loadAttendance = async () => {
-    try {
-      const data = unwrap(await api('/hr/attendance?limit=200'));
-      setAttendance(
-        Array.isArray(data)
-          ? data.map((r: any) => ({
-              id: r.id,
-              staffName: r.staffName,
-              date: r.date,
-              clockIn: r.clockIn,
-              clockOut: r.clockOut,
-            }))
-          : [],
-      );
-    } catch {
-      setAttendance([]);
-    }
-  };
-
-  const loadTraining = async () => {
-    try {
-      const data = unwrap(await api('/hr/training?limit=200'));
-      setTraining(
-        Array.isArray(data)
-          ? data.map((r: any) => ({
-              id: r.id,
-              program: r.program,
-              enrolledAt: r.enrolledAt,
-              completedAt: r.completedAt,
-              certificateDate: r.certificateDate,
-            }))
-          : [],
-      );
-    } catch {
-      setTraining([]);
-    }
-  };
-
   useEffect(() => {
-    loadAttendance();
-    loadTraining();
     loadDepts();
   }, []);
-
   useEffect(() => {
     if (tab === 'staff') loadStaff();
     if (tab === 'leaves') loadLeaves();
@@ -187,81 +117,6 @@ export default function HrPage() {
     setLeaveBusy(null);
   };
 
-  const clockIn = async () => {
-    const d = todayStr();
-    if (attendance.some((r) => r.date === d && !r.clockOut)) return;
-    try {
-      const rec = unwrap(
-        await api('/hr/attendance/clock-in', {
-          method: 'POST',
-          body: JSON.stringify({ staffName: localStorage.getItem('userName') || 'Current User' }),
-        }),
-      );
-      if (rec && rec.id) {
-        setAttendance((prev) => [
-          ...prev,
-          { id: rec.id, staffName: rec.staffName, date: rec.date, clockIn: rec.clockIn, clockOut: rec.clockOut },
-        ]);
-      }
-    } catch {}
-  };
-
-  const clockOut = async () => {
-    try {
-      const rec = unwrap(await api('/hr/attendance/clock-out', { method: 'POST' }));
-      if (rec && rec.id) {
-        setAttendance((prev) => prev.map((r) => (r.id === rec.id ? { ...r, clockOut: rec.clockOut } : r)));
-      }
-    } catch {}
-  };
-
-  const enroll = async (program: string) => {
-    if (training.some((t) => t.program === program)) return;
-    try {
-      const rec = unwrap(
-        await api('/hr/training', {
-          method: 'POST',
-          body: JSON.stringify({ program, staffName: localStorage.getItem('userName') || 'Current User' }),
-        }),
-      );
-      if (rec && rec.id) {
-        setTraining((prev) => [
-          ...prev,
-          {
-            id: rec.id,
-            program: rec.program,
-            enrolledAt: rec.enrolledAt,
-            completedAt: rec.completedAt,
-            certificateDate: rec.certificateDate,
-          },
-        ]);
-      }
-    } catch {}
-  };
-
-  const toggleComplete = async (id: string) => {
-    try {
-      const rec = unwrap(await api(`/hr/training/${id}/complete`, { method: 'PATCH' }));
-      if (rec && rec.id) {
-        setTraining((prev) => prev.map((r) => (r.id === rec.id ? { ...r, completedAt: rec.completedAt } : r)));
-      }
-    } catch {}
-  };
-
-  const setCertificateDate = async (id: string, value: string) => {
-    try {
-      const rec = unwrap(
-        await api(`/hr/training/${id}/certificate`, {
-          method: 'PATCH',
-          body: JSON.stringify({ certificateDate: value }),
-        }),
-      );
-      if (rec && rec.id) {
-        setTraining((prev) => prev.map((r) => (r.id === rec.id ? { ...r, certificateDate: rec.certificateDate } : r)));
-      }
-    } catch {}
-  };
-
   const q = search.trim().toLowerCase();
   const filteredStaff = staff.filter((s: any) => {
     const inDept = !deptFilter || s.departmentId === deptFilter || s.department?.id === deptFilter;
@@ -276,39 +131,12 @@ export default function HrPage() {
   const approvedLeaves = leaves.filter((l) => l.status === 'APPROVED').length;
   const rejectedLeaves = leaves.filter((l) => l.status === 'REJECTED').length;
 
-  const t = todayStr();
-  const todayRecords = attendance.filter((r) => r.date === t);
-  const openToday = todayRecords.find((r) => !r.clockOut);
-  const hoursToday = todayRecords.reduce(
-    (sum, r) => sum + (r.clockOut ? hoursBetween(r.clockIn, r.clockOut) : hoursBetween(r.clockIn, new Date().toISOString())),
-    0,
-  );
-  const weekRecords = attendance.filter((r) => {
-    const diff = new Date(t).getTime() - new Date(r.date).getTime();
-    return diff >= 0 && diff <= 6 * 86400000;
-  });
-  const avgHours = attendance.length
-    ? Math.round(
-        (attendance.reduce(
-          (sum, r) => sum + (r.clockOut ? hoursBetween(r.clockIn, r.clockOut) : hoursBetween(r.clockIn, new Date().toISOString())),
-          0,
-        ) /
-          attendance.length) *
-          10,
-      ) / 10
-    : 0;
-
-  const completedPrograms = TRAINING_PROGRAMS.filter((p) =>
-    training.some((tr) => tr.program === p && tr.completedAt),
-  ).length;
-  const compliancePct = Math.round((completedPrograms / TRAINING_PROGRAMS.length) * 100);
-
   return (
     <>
       <div className="page-header">
         <div>
           <h1>HR &amp; Staff</h1>
-          <p className="page-subtitle">Directory, scheduling, leave approvals, attendance and training</p>
+          <p className="page-subtitle">Directory, scheduling, leave approvals and departments</p>
         </div>
       </div>
 
@@ -318,7 +146,6 @@ export default function HrPage() {
         <button className={`tab ${tab === 'rosters' ? 'active' : ''}`} onClick={() => setTab('rosters')}>Rosters</button>
         <button className={`tab ${tab === 'leaves' ? 'active' : ''}`} onClick={() => setTab('leaves')}>Leaves</button>
         <button className={`tab ${tab === 'departments' ? 'active' : ''}`} onClick={() => setTab('departments')}>Departments</button>
-        <button className={`tab ${tab === 'training' ? 'active' : ''}`} onClick={() => setTab('training')}>Training</button>
       </div>
 
       {tab === 'staff' && (
@@ -594,138 +421,6 @@ export default function HrPage() {
         </>
       )}
 
-      {tab === 'attendance' && (
-        <>
-          <div className="stat-grid">
-            <div className="stat-card">
-              <div className="stat-label">Status Today</div>
-              <div className="stat-value" style={{ color: openToday ? 'var(--success)' : todayRecords.length ? 'var(--info)' : 'var(--text-muted)', fontSize: 22 }}>
-                {openToday ? 'On Shift' : todayRecords.length ? 'Clocked Out' : 'Not Started'}
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Hours Today</div>
-              <div className="stat-value">{hoursToday.toFixed(1)}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Sessions This Week</div>
-              <div className="stat-value" style={{ color: 'var(--primary)' }}>{weekRecords.length}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Avg Hours / Session</div>
-              <div className="stat-value" style={{ color: 'var(--info)' }}>{avgHours.toFixed(1)}</div>
-            </div>
-          </div>
-
-          <div className="toolbar" style={{ justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{attendance.length} total records</span>
-            <span style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-sm" onClick={clockIn} disabled={!!openToday}>{openToday ? 'Clocked In' : 'Clock In'}</button>
-              <button className="btn btn-sm btn-secondary" onClick={clockOut} disabled={!openToday}>Clock Out</button>
-            </span>
-          </div>
-
-          {attendance.length === 0 ? (
-            <div className="empty">No attendance records yet. Clock in to start tracking.</div>
-          ) : (
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Clock In</th>
-                    <th>Clock Out</th>
-                    <th>Hours</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...attendance].reverse().map((r) => {
-                    const hrs = r.clockOut ? hoursBetween(r.clockIn, r.clockOut) : null;
-                    return (
-                      <tr key={r.id}>
-                        <td><strong>{formatDate(r.date)}</strong></td>
-                        <td>{new Date(r.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                        <td>{r.clockOut ? new Date(r.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                        <td>{hrs !== null ? hrs.toFixed(2) : openToday?.id === r.id ? 'Running' : '—'}</td>
-                        <td>
-                          <span className={`badge ${!r.clockOut ? 'badge-green' : hrs !== null && hrs >= 8 ? 'badge-blue' : 'badge-gray'}`}>
-                            {!r.clockOut ? 'ON SHIFT' : hrs !== null && hrs >= 8 ? 'FULL DAY' : 'COMPLETED'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
-
-      {tab === 'training' && (
-        <>
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <strong>Compliance Programs Completed</strong>
-              <span style={{ fontWeight: 700, color: compliancePct === 100 ? 'var(--success)' : 'var(--text-muted)' }}>{compliancePct}%</span>
-            </div>
-            <div className="bar-track">
-              <div className="bar-fill" style={{ width: `${compliancePct}%`, background: compliancePct === 100 ? 'var(--success)' : 'var(--primary)' }} />
-            </div>
-            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)' }}>{completedPrograms} of {TRAINING_PROGRAMS.length} programs completed</div>
-          </div>
-
-          <div className="toolbar" style={{ justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{training.filter((x) => x.completedAt).length} completed · {training.length} enrollments</span>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
-            {TRAINING_PROGRAMS.map((program) => {
-              const recs = training.filter((tr) => tr.program === program);
-              const doneCount = recs.filter((r) => r.completedAt).length;
-              const enrolled = recs.length > 0;
-              const pct = enrolled ? Math.round((doneCount / recs.length) * 100) : 0;
-              return (
-                <div className="card" key={program}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <strong>{program}</strong>
-                    <span className={`badge ${doneCount > 0 ? 'badge-green' : enrolled ? 'badge-yellow' : 'badge-gray'}`}>
-                      {doneCount > 0 ? 'COMPLETED' : enrolled ? 'ENROLLED' : 'NOT ENROLLED'}
-                    </span>
-                  </div>
-                  <div className="bar-track" style={{ marginBottom: 10 }}>
-                    <div className="bar-fill" style={{ width: `${pct}%` }} />
-                  </div>
-                  {!enrolled ? (
-                    <button className="btn btn-sm" onClick={() => enroll(program)}>Enroll</button>
-                  ) : (
-                    <>
-                      {recs.map((rec) => (
-                        <div key={rec.id} style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: recs[0] !== rec ? 10 : 0 }}>
-                          <label className="checkbox-row">
-                            <input type="checkbox" checked={!!rec.completedAt} onChange={() => toggleComplete(rec.id)} />
-                            <span>Completed{rec.completedAt ? ` on ${formatDate(rec.completedAt)}` : ''}</span>
-                          </label>
-                          <div className="field" style={{ marginTop: 8 }}>
-                            <label className="label">Certificate Date</label>
-                            <input
-                              className="input"
-                              type="date"
-                              value={rec.certificateDate}
-                              onChange={(e) => setCertificateDate(rec.id, e.target.value)}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
     </>
   );
 }

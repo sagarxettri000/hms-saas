@@ -30,6 +30,7 @@ const revenueExecutors: Record<string, Executor> = {
   "service-wise-income": revenue.serviceWiseIncome,
   "srl-report": revenue.srlReport,
   "operation-report": revenue.operationReport,
+  "er-revenue": revenue.erRevenue,
 };
 
 const statisticsExecutors: Record<string, Executor> = {

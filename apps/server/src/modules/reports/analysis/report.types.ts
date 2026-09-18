@@ -158,7 +158,9 @@ export interface GeneratedReport {
   rows: Record<string, any>[];
   totals: Record<string, number>;
   cards: ReportCard[];
-  chart: (ReportChart & { labels: string[]; seriesData: Record<string, number[]> }) | null;
+  chart:
+    | (ReportChart & { labels: string[]; seriesData: Record<string, number[]> })
+    | null;
   count: number;
   views?: { name: string; description: string; rows: number }[];
 }

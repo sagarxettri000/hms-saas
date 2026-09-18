@@ -26,6 +26,10 @@ const CLINICAL_WIDE_NO_NURSE = CLINICAL_WIDE.filter((r) => r !== 'NURSE');
 const CLINICAL_WIDE_NO_RECEPTION = CLINICAL_WIDE.filter((r) => r !== 'RECEPTIONIST');
 const CLINICAL_NO_DOCTOR_NO_RECEPTION = CLINICAL_NO_DOCTOR.filter((r) => r !== 'RECEPTIONIST');
 const CLINICAL_NO_DOCTOR_NURSE_NO_RECEPTION = CLINICAL_NO_DOCTOR_NURSE.filter((r) => r !== 'RECEPTIONIST');
+// Dedicated Emergency-department workspace: only ER staff (plus admins) see
+// the Emergency sidebar section. Everyone else keeps the generic Clinical
+// "Emergency" case-list link with the ER-only surfaces excluded.
+const EMERGENCY_ONLY = ['EMERGENCY_STAFF'];
 const FINANCE = ['RECEPTIONIST', 'RECEPTION_SUPERVISOR', 'FINANCE_MANAGER'];
 const LAB = ['LAB_TECHNICIAN', 'PATHOLOGIST'];
 const RAD = ['RADIOLOGIST', 'RADIOLOGY_TECHNICIAN'];
@@ -57,6 +61,11 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { label: 'Doctors', href: '/doctors', icon: '✚', roles: [...CLINICAL_WIDE_NO_NURSE] },
       { label: 'Encounters', href: '/encounters', icon: '✎', roles: [...CLINICAL, ...ADMIN, ...SUPER, 'DEPARTMENT_HEAD'] },
       { label: 'Emergency', href: '/emergency', icon: '⚠', roles: [...CLINICAL_WIDE] },
+      { label: 'ER Dashboard', href: '/emergency?tab=dashboard', icon: '⚡', roles: [...EMERGENCY_ONLY] },
+      { label: 'Register Patient', href: '/emergency?tab=register', icon: '✚', roles: [...EMERGENCY_ONLY] },
+      { label: 'ER Beds', href: '/emergency?tab=beds', icon: '⊞', roles: [...EMERGENCY_ONLY] },
+      { label: 'ER Billing', href: '/emergency?tab=billing', icon: '₨', roles: [...EMERGENCY_ONLY] },
+      { label: 'ER Reports', href: '/emergency?tab=reports', icon: '▦', roles: [...EMERGENCY_ONLY] },
       { label: 'Nursing', href: '/nursing', icon: '♡', roles: ['NURSE', 'OT_NURSE', 'WARD_INCHARGE', 'ICU_STAFF', ...ADMIN, ...SUPER], flag: 'ipd_nursing' },
       { label: 'Adverse Events', href: '/adverse-events', icon: '✖', roles: [...CLINICAL, ...ADMIN, ...SUPER, ...QUALITY] },
       { label: 'Theatre (OT)', href: '/ot', icon: '⌁', roles: [...CLINICAL_WIDE, ...OT], flag: 'ot_management' },

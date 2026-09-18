@@ -7,6 +7,7 @@ import { formatMoney, formatDateTime } from '@/lib/hooks';
 import PaymentModal from '@/components/PaymentModal';
 import ReceiptModal from '@/components/ReceiptModal';
 import AsyncSearchSelect from '@/components/AsyncSearchSelect';
+import * as bedOrder from '../../lib/bedOrder';
 
 // Dedicated Emergency-department workspace. Visible only to EMERGENCY_STAFF
 // (plus admins) via the sidebar; the ER billing surfaces here read the
@@ -422,7 +423,7 @@ function AdmitModal({ erCase, erWardId, onClose, onDone }: {
         <label style={{ display: 'block', margin: '10px 0' }}>Emergency bed
           <select className="input" value={bedId} onChange={(e) => setBedId(e.target.value)}>
             <option value="">— No bed (hold in ER) —</option>
-            {beds.map((b) => (
+            {beds.slice().sort(bedOrder.compareBeds).map((b) => (
               <option key={b.id} value={b.id}>
                 {b.bedNumber}{b.room?.name ? ` · ${b.room.name}` : ''}{b.ward?.name ? ` · ${b.ward.name}` : ''}
               </option>

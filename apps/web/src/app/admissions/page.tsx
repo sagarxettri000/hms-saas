@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import DischargeModal from '@/components/DischargeModal';
+import { compareBeds } from '../../lib/bedOrder';
 import { api } from '@/lib/api';
 import { GENDERS } from '@/lib/options';
 import type { ApiResponse, Row } from '@/lib/types';
@@ -414,6 +415,7 @@ export default function AdmissionsPage() {
                     <option value="">-- Assign later --</option>
                     {beds
                       .filter((b: any) => b.status === 'AVAILABLE')
+                      .sort(compareBeds)
                       .map((b: any) => (
                         <option key={b.id} value={b.id}>
                           {b.bedNumber}{b.ward?.name ? ` · ${b.ward.name}` : ''}

@@ -349,12 +349,37 @@ function DeallocateModal({ bed, onClose, onDone }: { bed: any; onClose: () => vo
   );
 }
 
-function CreateBedModal({ onClose, onDone, wards, rooms }: { onClose: () => void; onDone: () => void; wards: any[]; rooms: any[] }) {
+function CreateBedModal({ onClose, onDone, wards, rooms, beds }: { onClose: () => void; onDone: () => void; wards: any[]; rooms: any[]; beds: any[] }) {
   const [values, setValues] = useState({ bedNumber: '', wardId: '', roomId: '', bedType: 'GENERAL', ratePerDay: 0 });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const filteredRooms = values.wardId ? rooms.filter((r: any) => r.wardId === values.wardId) : rooms;
+
+  function wardPrefix(w: any): string {
+    if (w?.code) return w.code;
+    return (w?.name || 'BED')
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((p: string) => p[0].toUpperCase())
+      .join('')
+      .slice(0, 4);
+  }
+
+  const ward = values.wardId ? wards.find((w: any) => w.id === values.wardId) : undefined;
+  const wardBeds = values.wardId ? beds.filter((b: any) => b.wardId === values.wardId && b.status !== 'INACTIVE') : [];
+  const nextNumber = wardBeds.reduce((max, b: any) => {
+    const m = /-(\d+)$/.exec(String(b.bedNumber || ''));
+    const n = m ? parseInt(m[1], 10) : 0;
+    return Math.max(max, n);
+  }, 0) + 1;
+  const suggestedNumber = ward ? `${wardPrefix(ward)}-${nextNumber}` : '';
+
+  useEffect(() => {
+    if (values.wardId && !values.bedNumber && suggestedNumber) {
+      setValues((v) => ({ ...v, bedNumber: suggestedNumber }));
+    }
+  }, [values.wardId, suggestedNumber]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1280,7 +1305,7 @@ export default function BedManagementPage() {
       {showAllocate && <AllocateModal bed={showAllocate} onClose={() => setShowAllocate(null)} onDone={() => { setShowAllocate(null); refreshAll(); }} />}
       {showTransfer && <TransferModal bed={showTransfer} onClose={() => setShowTransfer(null)} onDone={() => { setShowTransfer(null); refreshAll(); }} />}
       {showDeallocate && <DeallocateModal bed={showDeallocate} onClose={() => setShowDeallocate(null)} onDone={() => { setShowDeallocate(null); refreshAll(); }} />}
-      {showCreateBed && <CreateBedModal onClose={() => setShowCreateBed(false)} onDone={() => { setShowCreateBed(false); refreshAll(); }} wards={wards} rooms={rooms} />}
+      {showCreateBed && <CreateBedModal onClose={() => setShowCreateBed(false)} onDone={() => { setShowCreateBed(false); refreshAll(); }} wards={wards} rooms={rooms} beds={beds} />}
       {showCreateWard && <CreateWardModal onClose={() => setShowCreateWard(false)} onDone={() => { setShowCreateWard(false); refreshAll(); }} />}
       {showMaintenance && <CreateMaintenanceModal onClose={() => setShowMaintenance(false)} onDone={() => { setShowMaintenance(false); refreshAll(); }} wards={wards} beds={beds} />}
       {showBedDetail && <BedDetailModal bedId={showBedDetail} onClose={() => setShowBedDetail(null)} />}

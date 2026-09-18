@@ -17,12 +17,9 @@ function isRole(value: any): value is UserRole {
   return ROLE_VALUES.has(value);
 }
 
-function isUserStatus(value: any): value is
-  | "ACTIVE"
-  | "INACTIVE"
-  | "SUSPENDED"
-  | "LOCKED"
-  | "PENDING" {
+function isUserStatus(
+  value: any,
+): value is "ACTIVE" | "INACTIVE" | "SUSPENDED" | "LOCKED" | "PENDING" {
   return ["ACTIVE", "INACTIVE", "SUSPENDED", "LOCKED", "PENDING"].includes(
     value,
   );
@@ -128,8 +125,7 @@ export class UsersService {
       throw new BadRequestException("First name is required");
     if (!dto.lastName || !String(dto.lastName).trim())
       throw new BadRequestException("Last name is required");
-    if (!isRole(dto.role))
-      throw new BadRequestException("Invalid user role");
+    if (!isRole(dto.role)) throw new BadRequestException("Invalid user role");
     this.assertCanManageRoles(actorRole || "", dto.role);
 
     const existing = await this.prisma.user.findUnique({
@@ -173,9 +169,7 @@ export class UsersService {
             employmentStatus: "ACTIVE",
           },
         })
-        .catch((err) =>
-          this.logger.warn("staffProfile create failed", err),
-        );
+        .catch((err) => this.logger.warn("staffProfile create failed", err));
 
       // Create doctor profile if role is DOCTOR
       if (dto.role === "DOCTOR") {
@@ -195,7 +189,10 @@ export class UsersService {
     }
 
     const { passwordHash: _ph, ...safeUser } = user;
-    return { ...safeUser, temporaryPassword: dto.password ? undefined : password };
+    return {
+      ...safeUser,
+      temporaryPassword: dto.password ? undefined : password,
+    };
   }
 
   async invite(tenantId: string, dto: InviteUserDto, actorRole?: string) {
@@ -297,7 +294,12 @@ export class UsersService {
     return safeUser;
   }
 
-  async update(id: string, dto: UpdateUserDto, tenantId?: string, actorRole?: string) {
+  async update(
+    id: string,
+    dto: UpdateUserDto,
+    tenantId?: string,
+    actorRole?: string,
+  ) {
     const user = await this.findScoped(id, tenantId);
     if (!user) throw new NotFoundException("User not found");
 
@@ -338,9 +340,7 @@ export class UsersService {
 
     if (dto.password) {
       if (String(dto.password).length < 8) {
-        throw new BadRequestException(
-          "Password must be at least 8 characters",
-        );
+        throw new BadRequestException("Password must be at least 8 characters");
       }
       data.passwordHash = await bcrypt.hash(String(dto.password), 12);
       data.mustChangePassword = false;

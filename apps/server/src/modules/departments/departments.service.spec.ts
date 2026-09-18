@@ -1,24 +1,43 @@
-import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 import { DepartmentsService } from "./departments.service";
 
 function makeService(prisma: any, audit?: any) {
-  return new DepartmentsService(prisma, audit ?? { log: jest.fn().mockResolvedValue(undefined) });
+  return new DepartmentsService(
+    prisma,
+    audit ?? { log: jest.fn().mockResolvedValue(undefined) },
+  );
 }
 
 function deptPrisma(department: any, overrides: any = {}) {
   return {
     department: {
       findFirst: jest.fn(async ({ where }: any) =>
-        where.tenantId === "t1" && where.id === (where.id ?? "d1") ? department : null,
+        where.tenantId === "t1" && where.id === (where.id ?? "d1")
+          ? department
+          : null,
       ),
       findUnique: jest.fn().mockResolvedValue(null),
-      update: jest.fn().mockImplementation(({ data }: any) => ({ id: "d1", ...department, ...data })),
+      update: jest.fn().mockImplementation(({ data }: any) => ({
+        id: "d1",
+        ...department,
+        ...data,
+      })),
       ...(overrides.department || {}),
     },
     user: { count: jest.fn().mockResolvedValue(0), ...(overrides.user || {}) },
     ward: { count: jest.fn().mockResolvedValue(0), ...(overrides.ward || {}) },
-    appointment: { count: jest.fn().mockResolvedValue(0), ...(overrides.appointment || {}) },
-    billingService: { count: jest.fn().mockResolvedValue(0), ...(overrides.billingService || {}) },
+    appointment: {
+      count: jest.fn().mockResolvedValue(0),
+      ...(overrides.appointment || {}),
+    },
+    billingService: {
+      count: jest.fn().mockResolvedValue(0),
+      ...(overrides.billingService || {}),
+    },
     bed: { count: jest.fn().mockResolvedValue(0), ...(overrides.bed || {}) },
     ...(overrides.root || {}),
   };
@@ -41,7 +60,9 @@ describe("DepartmentsService.update (department edit)", () => {
       department: { findFirst: jest.fn().mockResolvedValue(null) },
     });
     const service = makeService(prisma);
-    await expect(service.update("t1", "d1", { name: "X" }, "u1")).rejects.toThrow(NotFoundException);
+    await expect(
+      service.update("t1", "d1", { name: "X" }, "u1"),
+    ).rejects.toThrow(NotFoundException);
     expect(prisma.department.update).not.toHaveBeenCalled();
   });
 
@@ -49,15 +70,27 @@ describe("DepartmentsService.update (department edit)", () => {
     const audit = { log: jest.fn().mockResolvedValue(undefined) };
     const prisma = deptPrisma(baseDept);
     const service = makeService(prisma, audit);
-    const result = await service.update("t1", "d1", { name: "Imaging Centre" }, "u1");
+    const result = await service.update(
+      "t1",
+      "d1",
+      { name: "Imaging Centre" },
+      "u1",
+    );
 
     expect(result.id).toBe("d1");
     expect(result.code).toBe("RAD");
     expect(prisma.department.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "d1" }, data: { name: "Imaging Centre" } }),
+      expect.objectContaining({
+        where: { id: "d1" },
+        data: { name: "Imaging Centre" },
+      }),
     );
     expect(audit.log).toHaveBeenCalledWith(
-      "t1", "u1", "Department", "d1", "UPDATE",
+      "t1",
+      "u1",
+      "Department",
+      "d1",
+      "UPDATE",
       expect.objectContaining({
         previous: expect.objectContaining({ name: "Radiology" }),
         changes: { name: "Imaging Centre" },
@@ -72,7 +105,9 @@ describe("DepartmentsService.update (department edit)", () => {
       },
     });
     const service = makeService(prisma);
-    await expect(service.update("t1", "d1", { code: "lab" }, "u1")).rejects.toThrow(ConflictException);
+    await expect(
+      service.update("t1", "d1", { code: "lab" }, "u1"),
+    ).rejects.toThrow(ConflictException);
     expect(prisma.department.update).not.toHaveBeenCalled();
   });
 
@@ -88,12 +123,16 @@ describe("DepartmentsService.update (department edit)", () => {
 
   it("rejects empty name", async () => {
     const service = makeService(deptPrisma(baseDept));
-    await expect(service.update("t1", "d1", { name: "   " }, "u1")).rejects.toThrow(BadRequestException);
+    await expect(
+      service.update("t1", "d1", { name: "   " }, "u1"),
+    ).rejects.toThrow(BadRequestException);
   });
 
   it("rejects self-parent and descendant cycles", async () => {
     const service = makeService(deptPrisma(baseDept));
-    await expect(service.update("t1", "d1", { parentId: "d1" }, "u1")).rejects.toThrow(/own parent/);
+    await expect(
+      service.update("t1", "d1", { parentId: "d1" }, "u1"),
+    ).rejects.toThrow(/own parent/);
   });
 
   it("rejects a parent that is a descendant of the department (cycle)", async () => {
@@ -101,30 +140,34 @@ describe("DepartmentsService.update (department edit)", () => {
       department: {
         findFirst: jest.fn().mockResolvedValue(baseDept),
         // First findUnique (parent lookup) returns a child whose parentId points back to d1
-        findUnique: jest.fn()
+        findUnique: jest
+          .fn()
           .mockResolvedValueOnce({ id: "child", parentId: "d1" })
           .mockResolvedValue(null),
         update: jest.fn(),
       },
     });
     const service = makeService(prisma);
-    await expect(service.update("t1", "d1", { parentId: "child" }, "u1")).rejects.toThrow(/descendant/);
+    await expect(
+      service.update("t1", "d1", { parentId: "child" }, "u1"),
+    ).rejects.toThrow(/descendant/);
     expect(prisma.department.update).not.toHaveBeenCalled();
   });
 
   it("404s when the new parent is in another tenant", async () => {
     const prisma = deptPrisma(baseDept, {
       department: {
-        findFirst: jest.fn()
+        findFirst: jest
+          .fn()
           .mockResolvedValueOnce(baseDept) // the department itself
           .mockResolvedValueOnce(null), // parent lookup scoped to tenant
         update: jest.fn(),
       },
     });
     const service = makeService(prisma);
-    await expect(service.update("t1", "d1", { parentId: "p-other-tenant" }, "u1")).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(
+      service.update("t1", "d1", { parentId: "p-other-tenant" }, "u1"),
+    ).rejects.toThrow(NotFoundException);
   });
 
   it("blocks deactivation while dependent active records exist", async () => {
@@ -133,9 +176,9 @@ describe("DepartmentsService.update (department edit)", () => {
       appointment: { count: jest.fn().mockResolvedValue(2) },
     });
     const service = makeService(prisma);
-    await expect(service.update("t1", "d1", { isActive: false }, "u1")).rejects.toThrow(
-      ConflictException,
-    );
+    await expect(
+      service.update("t1", "d1", { isActive: false }, "u1"),
+    ).rejects.toThrow(ConflictException);
     expect(prisma.department.update).not.toHaveBeenCalled();
   });
 
@@ -148,7 +191,9 @@ describe("DepartmentsService.update (department edit)", () => {
 
   it("rejects an update with no actual changes", async () => {
     const service = makeService(deptPrisma(baseDept));
-    await expect(service.update("t1", "d1", {}, "u1")).rejects.toThrow(/No changes/);
+    await expect(service.update("t1", "d1", {}, "u1")).rejects.toThrow(
+      /No changes/,
+    );
   });
 });
 
@@ -192,23 +237,35 @@ describe("DepartmentsService.updateWard (ward edit)", () => {
       ward: { findFirst: jest.fn().mockResolvedValue(null) },
     });
     const service = makeService(prisma);
-    await expect(service.updateWard("t1", "w1", { name: "X" }, "u1")).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(
+      service.updateWard("t1", "w1", { name: "X" }, "u1"),
+    ).rejects.toThrow(NotFoundException);
   });
 
   it("updates name/location and returns the ward with its department", async () => {
     const audit = { log: jest.fn().mockResolvedValue(undefined) };
     const prisma = wardPrisma(baseWard);
     const service = makeService(prisma, audit);
-    const result = await service.updateWard("t1", "w1", { name: "Gen Ward", location: "Block B" }, "u1");
+    const result = await service.updateWard(
+      "t1",
+      "w1",
+      { name: "Gen Ward", location: "Block B" },
+      "u1",
+    );
 
     expect(result.id).toBe("w1");
     expect(result.department).toEqual({ id: "d1", name: "Radiology" });
     expect(audit.log).toHaveBeenCalledWith(
-      "t1", "u1", "Ward", "w1", "UPDATE",
+      "t1",
+      "u1",
+      "Ward",
+      "w1",
+      "UPDATE",
       expect.objectContaining({
-        previous: expect.objectContaining({ name: "General Ward", location: "Block A" }),
+        previous: expect.objectContaining({
+          name: "General Ward",
+          location: "Block A",
+        }),
         changes: { name: "Gen Ward", location: "Block B" },
       }),
     );
@@ -230,7 +287,9 @@ describe("DepartmentsService.updateWard (ward edit)", () => {
     const service = makeService(prisma);
     await service.updateWard("t1", "w1", { departmentId: null }, "u1");
     expect(prisma.ward.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ departmentId: null }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ departmentId: null }),
+      }),
     );
   });
 
@@ -239,22 +298,29 @@ describe("DepartmentsService.updateWard (ward edit)", () => {
       bed: { count: jest.fn().mockResolvedValue(4) },
     });
     const service = makeService(prisma);
-    await expect(service.updateWard("t1", "w1", { isActive: false }, "u1")).rejects.toThrow(
-      /occupied/,
-    );
+    await expect(
+      service.updateWard("t1", "w1", { isActive: false }, "u1"),
+    ).rejects.toThrow(/occupied/);
     expect(prisma.ward.update).not.toHaveBeenCalled();
   });
 
   it("allows deactivation when beds are free", async () => {
     const prisma = wardPrisma(baseWard);
     const service = makeService(prisma);
-    const result = await service.updateWard("t1", "w1", { isActive: false }, "u1");
+    const result = await service.updateWard(
+      "t1",
+      "w1",
+      { isActive: false },
+      "u1",
+    );
     expect(result.isActive).toBe(false);
   });
 
   it("rejects an empty update", async () => {
     const service = makeService(wardPrisma(baseWard));
-    await expect(service.updateWard("t1", "w1", {}, "u1")).rejects.toThrow(/No changes/);
+    await expect(service.updateWard("t1", "w1", {}, "u1")).rejects.toThrow(
+      /No changes/,
+    );
   });
 });
 
@@ -264,7 +330,9 @@ describe("DepartmentsService.findOne", () => {
       department: { findFirst: jest.fn().mockResolvedValue(null) },
     });
     const service = makeService(prisma);
-    await expect(service.findOne("t1", "d1")).rejects.toThrow(NotFoundException);
+    await expect(service.findOne("t1", "d1")).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it("returns the department with counts for the edit form", async () => {

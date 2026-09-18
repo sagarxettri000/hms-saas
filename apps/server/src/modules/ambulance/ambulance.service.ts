@@ -119,7 +119,10 @@ export class AmbulanceService {
   async deleteVehicle(tenantId: string, id: string) {
     await this.findVehicleById(tenantId, id);
     const linked = await this.prisma.ambulanceCall.count({
-      where: { vehicleId: id, status: { in: ["DISPATCHED", "EN_ROUTE", "ARRIVED"] } },
+      where: {
+        vehicleId: id,
+        status: { in: ["DISPATCHED", "EN_ROUTE", "ARRIVED"] },
+      },
     });
     if (linked > 0)
       throw new BadRequestException(
@@ -178,7 +181,9 @@ export class AmbulanceService {
 
   async createCall(tenantId: string, dto: CreateCallDto) {
     if (!dto.patientName?.trim() || !dto.location?.trim())
-      throw new BadRequestException("Patient name and pickup location are required");
+      throw new BadRequestException(
+        "Patient name and pickup location are required",
+      );
     return this.prisma.ambulanceCall.create({
       data: {
         tenantId,
@@ -221,10 +226,7 @@ export class AmbulanceService {
         status: "DISPATCHED",
         dispatchedAt: new Date(),
         vehicleId: vehicle.id,
-        history: [
-          ...history,
-          { status: "DISPATCHED", at },
-        ] as any,
+        history: [...history, { status: "DISPATCHED", at }] as any,
       },
       include: {
         vehicle: { select: { id: true, callSign: true } },
@@ -286,7 +288,9 @@ export class AmbulanceService {
   async cancelCall(tenantId: string, id: string) {
     const call = await this.findCallById(tenantId, id);
     if (!["PENDING", "DISPATCHED", "EN_ROUTE"].includes(call.status))
-      throw new BadRequestException(`A ${call.status} call cannot be cancelled`);
+      throw new BadRequestException(
+        `A ${call.status} call cannot be cancelled`,
+      );
 
     const at = new Date().toISOString();
     const history = Array.isArray(call.history ?? null)

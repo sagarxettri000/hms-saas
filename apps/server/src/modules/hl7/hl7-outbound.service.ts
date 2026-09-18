@@ -3,7 +3,11 @@ import * as net from "net";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { buildAtnaXml, ATNA_CODES } from "../../common/audit/atna";
-import { buildRadiologyOruReport, frameMllp, MLLP_EOB } from "./hl7-outbound-builder";
+import {
+  buildRadiologyOruReport,
+  frameMllp,
+  MLLP_EOB,
+} from "./hl7-outbound-builder";
 
 export interface Hl7OutboundConfig {
   enabled: boolean;
@@ -46,7 +50,12 @@ export class Hl7OutboundService {
   async setConfig(tenantId: string, config: Hl7OutboundConfig) {
     await this.prisma.integrationSetting.upsert({
       where: { tenantId_provider: { tenantId, provider: CONFIG_PROVIDER } },
-      create: { tenantId, provider: CONFIG_PROVIDER, config: config as any, enabled: config.enabled ?? false },
+      create: {
+        tenantId,
+        provider: CONFIG_PROVIDER,
+        config: config as any,
+        enabled: config.enabled ?? false,
+      },
       update: { config: config as any, enabled: config.enabled ?? false },
     });
     return { saved: true, config };
@@ -60,7 +69,17 @@ export class Hl7OutboundService {
   ): Promise<OutboundSendResult> {
     const order = await this.prisma.radiologyOrder.findFirst({
       where: { id: orderId, tenantId },
-      include: { patient: { select: { mrn: true, firstName: true, lastName: true, dateOfBirth: true, gender: true } } },
+      include: {
+        patient: {
+          select: {
+            mrn: true,
+            firstName: true,
+            lastName: true,
+            dateOfBirth: true,
+            gender: true,
+          },
+        },
+      },
     });
     if (!order) return { orderId, sent: false, error: "Order not found" };
 
@@ -86,20 +105,29 @@ export class Hl7OutboundService {
       orderId: order.id,
       sent: acked,
       ack: acked ? ack : undefined,
-      ...(!acked ? { error: `Non-AA acknowledgement: ${ack.slice(0, 80)}` } : {}),
+      ...(!acked
+        ? { error: `Non-AA acknowledgement: ${ack.slice(0, 80)}` }
+        : {}),
     };
-    if (!acked) this.logger.warn(`Outbound ORU not acknowledged for order ${order.id}`);
+    if (!acked)
+      this.logger.warn(`Outbound ORU not acknowledged for order ${order.id}`);
     else this.logger.debug(`Outbound ORU acknowledged for order ${order.id}`);
     this.recordAtnaExport(tenantId, userId, order, config, acked);
     return result;
   }
 
   /** Fire-and-forget variant for report finalization hooks. */
-  async sendRadiologyReportQuiet(tenantId: string, orderId: string, userId?: string): Promise<void> {
+  async sendRadiologyReportQuiet(
+    tenantId: string,
+    orderId: string,
+    userId?: string,
+  ): Promise<void> {
     try {
       await this.sendRadiologyReport(tenantId, orderId, userId);
     } catch (err) {
-      this.logger.warn(`Outbound ORU failed silently: ${(err as Error).message}`);
+      this.logger.warn(
+        `Outbound ORU failed silently: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -135,7 +163,8 @@ export class Hl7OutboundService {
             id: order.orderNumber,
             role: ATNA_CODES.ROLE_PROCEDURE,
             roleLabel: "Procedure",
-            description: `HL7 ORU^R01 ${order.accessionNumber ? `(accession ${order.accessionNumber})` : ""}`.trim(),
+            description:
+              `HL7 ORU^R01 ${order.accessionNumber ? `(accession ${order.accessionNumber})` : ""}`.trim(),
           },
         ],
       });
@@ -143,11 +172,18 @@ export class Hl7OutboundService {
         atna: { xml },
       });
     } catch (err) {
-      this.logger.warn(`ATNA HL7 outbound audit failed: ${(err as Error).message}`);
+      this.logger.warn(
+        `ATNA HL7 outbound audit failed: ${(err as Error).message}`,
+      );
     }
   }
 
-  private sendMllp(host: string, port: number, message: string, timeoutMs = 10000): Promise<string> {
+  private sendMllp(
+    host: string,
+    port: number,
+    message: string,
+    timeoutMs = 10000,
+  ): Promise<string> {
     return new Promise((resolve, reject) => {
       const socket = net.connect({ host, port });
       let received = Buffer.alloc(0);
@@ -178,7 +214,10 @@ export class Hl7OutboundService {
         const eob = received.indexOf(MLLP_EOB);
         if (eob >= 0) {
           clearTimeout(timer);
-          const ack = received.subarray(1, eob - 1).toString("utf8").trim();
+          const ack = received
+            .subarray(1, eob - 1)
+            .toString("utf8")
+            .trim();
           done(() => resolve(ack));
         }
       });

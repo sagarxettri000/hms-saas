@@ -204,6 +204,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, PermissionAction[]> = {
     PermissionAction.EDIT,
     PermissionAction.PRINT,
     PermissionAction.VERIFY,
+    PermissionAction.SETTLE,
   ],
   [UserRole.AMBULANCE_STAFF]: [
     PermissionAction.VIEW,

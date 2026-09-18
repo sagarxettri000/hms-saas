@@ -204,9 +204,7 @@ export class ProcurementService {
         requestNumber,
         departmentId: dto.departmentId,
         priority: dto.priority || "NORMAL",
-        neededBy: dto.neededBy
-          ? this.normalizeDate(dto.neededBy)
-          : undefined,
+        neededBy: dto.neededBy ? this.normalizeDate(dto.neededBy) : undefined,
         justification: dto.justification,
         notes: dto.notes,
         requestedBy: userId,
@@ -257,7 +255,12 @@ export class ProcurementService {
       new Set(rows.map((r) => r.departmentId).filter(Boolean)),
     ) as string[];
     const userIds = Array.from(
-      new Set(rows.map((r) => [r.requestedBy, r.approvedBy]).flat().filter(Boolean)),
+      new Set(
+        rows
+          .map((r) => [r.requestedBy, r.approvedBy])
+          .flat()
+          .filter(Boolean),
+      ),
     ) as string[];
 
     const [departments, users] = await Promise.all([
@@ -295,7 +298,9 @@ export class ProcurementService {
     });
     if (!pr) throw new NotFoundException("Purchase request not found");
     if (pr.status === "APPROVED" || pr.status === "CONVERTED")
-      throw new BadRequestException("Purchase request is already approved/converted");
+      throw new BadRequestException(
+        "Purchase request is already approved/converted",
+      );
     const updated = await this.prisma.purchaseRequest.update({
       where: { id },
       data: {
@@ -323,7 +328,9 @@ export class ProcurementService {
     });
     if (!pr) throw new NotFoundException("Purchase request not found");
     if (pr.status === "APPROVED" || pr.status === "CONVERTED")
-      throw new BadRequestException("Approved/converted requests cannot be rejected");
+      throw new BadRequestException(
+        "Approved/converted requests cannot be rejected",
+      );
     const updated = await this.prisma.purchaseRequest.update({
       where: { id },
       data: {
@@ -370,7 +377,9 @@ export class ProcurementService {
     });
     if (!pr) throw new NotFoundException("Purchase request not found");
     if (pr.status !== "APPROVED")
-      throw new BadRequestException("Only approved purchase requests can be converted to a purchase order");
+      throw new BadRequestException(
+        "Only approved purchase requests can be converted to a purchase order",
+      );
     if (!pr.items || pr.items.length === 0)
       throw new BadRequestException("Purchase request has no items");
 
@@ -444,7 +453,12 @@ export class ProcurementService {
             }),
           },
         },
-        include: { items: true, supplier: true, store: true, purchaseRequest: true },
+        include: {
+          items: true,
+          supplier: true,
+          store: true,
+          purchaseRequest: true,
+        },
       });
 
       await tx.purchaseRequest.update({
@@ -455,14 +469,10 @@ export class ProcurementService {
       return created;
     });
 
-    await this.audit.log(
-      tenantId,
-      userId,
-      "PurchaseOrder",
-      po.id,
-      "CONVERT",
-      { poNumber, sourceRequest: pr.requestNumber },
-    );
+    await this.audit.log(tenantId, userId, "PurchaseOrder", po.id, "CONVERT", {
+      poNumber,
+      sourceRequest: pr.requestNumber,
+    });
 
     return po;
   }
@@ -501,7 +511,8 @@ export class ProcurementService {
         validityDays: dto.validityDays,
         paymentTerms: dto.paymentTerms,
         paymentMethod: dto.paymentMethod as any,
-        discountPercent: dto.discountPercent != null ? dto.discountPercent : undefined,
+        discountPercent:
+          dto.discountPercent != null ? dto.discountPercent : undefined,
         taxPercent: dto.taxPercent != null ? dto.taxPercent : undefined,
         tdsPercent: dto.tdsPercent != null ? dto.tdsPercent : undefined,
         subtotal: header.subtotal,
@@ -562,14 +573,10 @@ export class ProcurementService {
       include: { items: true, supplier: true, store: true },
     });
 
-    await this.audit.log(
-      tenantId,
-      userId,
-      "PurchaseOrder",
-      po.id,
-      "CREATE",
-      { poNumber, grandTotal: header.grandTotal },
-    );
+    await this.audit.log(tenantId, userId, "PurchaseOrder", po.id, "CREATE", {
+      poNumber,
+      grandTotal: header.grandTotal,
+    });
 
     return po;
   }
@@ -619,7 +626,8 @@ export class ProcurementService {
             : undefined,
           quantity: Number(item.quantity) || 0,
           unitPrice: Number(item.unitPrice) || 0,
-          discountPercent: item.discountPercent != null ? Number(item.discountPercent) : 0,
+          discountPercent:
+            item.discountPercent != null ? Number(item.discountPercent) : 0,
           taxPercent: item.taxPercent != null ? Number(item.taxPercent) : 0,
         };
       }),
@@ -629,12 +637,16 @@ export class ProcurementService {
     const revision = (po.revision ?? 1) + 1;
     const header: any = { updatedBy: userId, revision };
     if (dto.supplierId !== undefined) header.supplierId = dto.supplierId;
-    if (dto.expectedDate !== undefined) header.expectedDate = this.normalizeDate(dto.expectedDate);
-    if (dto.deliveryAddress !== undefined) header.deliveryAddress = dto.deliveryAddress;
+    if (dto.expectedDate !== undefined)
+      header.expectedDate = this.normalizeDate(dto.expectedDate);
+    if (dto.deliveryAddress !== undefined)
+      header.deliveryAddress = dto.deliveryAddress;
     if (dto.currency !== undefined) header.currency = dto.currency;
     if (dto.paymentTerms !== undefined) header.paymentTerms = dto.paymentTerms;
-    if (dto.paymentMethod !== undefined) header.paymentMethod = dto.paymentMethod;
-    if (dto.discountPercent !== undefined) header.discountPercent = dto.discountPercent;
+    if (dto.paymentMethod !== undefined)
+      header.paymentMethod = dto.paymentMethod;
+    if (dto.discountPercent !== undefined)
+      header.discountPercent = dto.discountPercent;
     if (dto.taxPercent !== undefined) header.taxPercent = dto.taxPercent;
     if (dto.tdsPercent !== undefined) header.tdsPercent = dto.tdsPercent;
     if (dto.freight !== undefined) header.freight = dto.freight;
@@ -660,12 +672,18 @@ export class ProcurementService {
           quantity: Number(item.quantity) || 0,
           unit: item.unit,
           unitPrice: Number(item.unitPrice) || 0,
-          discountPercent: item.discountPercent != null ? Number(item.discountPercent) : 0,
+          discountPercent:
+            item.discountPercent != null ? Number(item.discountPercent) : 0,
           discountAmount: 0,
           taxPercent: item.taxPercent != null ? Number(item.taxPercent) : 0,
           taxAmount: 0,
           otherCharges: Number(item.otherCharges) || 0,
-          lineTotal: this.round2(Math.max(0, (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0))),
+          lineTotal: this.round2(
+            Math.max(
+              0,
+              (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0),
+            ),
+          ),
           expectedDelivery: item.expectedDelivery
             ? this.normalizeDate(item.expectedDelivery)
             : undefined,
@@ -694,14 +712,11 @@ export class ProcurementService {
       return fresh;
     });
 
-    await this.audit.log(
-      tenantId,
-      userId,
-      "PurchaseOrder",
-      id,
-      "UPDATE",
-      { revision, poNumber: po.poNumber, itemCount: items.length },
-    );
+    await this.audit.log(tenantId, userId, "PurchaseOrder", id, "UPDATE", {
+      revision,
+      poNumber: po.poNumber,
+      itemCount: items.length,
+    });
 
     return this.findPurchaseOrderById(tenantId, id);
   }
@@ -767,18 +782,30 @@ export class ProcurementService {
     const userIds = Array.from(
       new Set(
         [po.createdBy, po.updatedBy, po.approvedBy, po.vendorAcceptedBy]
-          .concat(po.purchaseRequest ? [po.purchaseRequest.requestedBy, po.purchaseRequest.approvedBy] : [])
+          .concat(
+            po.purchaseRequest
+              ? [po.purchaseRequest.requestedBy, po.purchaseRequest.approvedBy]
+              : [],
+          )
           .filter(Boolean),
       ),
     ) as string[];
 
-    const deptIds = po.purchaseRequest?.departmentId ? [po.purchaseRequest.departmentId] : [];
+    const deptIds = po.purchaseRequest?.departmentId
+      ? [po.purchaseRequest.departmentId]
+      : [];
 
     const [users, departments] = await Promise.all([
       userIds.length
         ? this.prisma.user.findMany({
             where: { id: { in: userIds } },
-            select: { id: true, firstName: true, middleName: true, lastName: true, role: true },
+            select: {
+              id: true,
+              firstName: true,
+              middleName: true,
+              lastName: true,
+              role: true,
+            },
           })
         : Promise.resolve([]),
       deptIds.length
@@ -795,7 +822,8 @@ export class ProcurementService {
     const purchaseRequest = po.purchaseRequest
       ? {
           ...po.purchaseRequest,
-          department: deptMap.get(po.purchaseRequest.departmentId as string) || null,
+          department:
+            deptMap.get(po.purchaseRequest.departmentId as string) || null,
           requestedBy: po.purchaseRequest.requestedBy
             ? userMap.get(po.purchaseRequest.requestedBy) || null
             : null,
@@ -840,7 +868,10 @@ export class ProcurementService {
     if (!allowed.has(status))
       throw new BadRequestException(`Invalid PO status: ${status}`);
 
-    if (status === "CANCELLED" && ["RECEIVED", "PARTIAL_RECEIVED"].includes(po.status))
+    if (
+      status === "CANCELLED" &&
+      ["RECEIVED", "PARTIAL_RECEIVED"].includes(po.status)
+    )
       throw new BadRequestException(
         "An order that has been (partially) received cannot be cancelled",
       );
@@ -856,14 +887,10 @@ export class ProcurementService {
       data,
     });
 
-    await this.audit.log(
-      tenantId,
-      userId,
-      "PurchaseOrder",
-      po.id,
-      "STATUS",
-      { from: po.status, to: status },
-    );
+    await this.audit.log(tenantId, userId, "PurchaseOrder", po.id, "STATUS", {
+      from: po.status,
+      to: status,
+    });
 
     return updated;
   }
@@ -888,21 +915,20 @@ export class ProcurementService {
       },
     });
 
-    await this.audit.log(
-      tenantId,
-      userId,
-      "PurchaseOrder",
-      po.id,
-      "APPROVE",
-      { event: "vendor-acceptance" },
-    );
+    await this.audit.log(tenantId, userId, "PurchaseOrder", po.id, "APPROVE", {
+      event: "vendor-acceptance",
+    });
 
     return updated;
   }
 
   // ---------- Purchase Order PDF ----------
 
-  async generatePurchaseOrderPdf(tenantId: string, id: string, userId?: string) {
+  async generatePurchaseOrderPdf(
+    tenantId: string,
+    id: string,
+    userId?: string,
+  ) {
     const order = await this.findPurchaseOrderById(tenantId, id);
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -919,18 +945,16 @@ export class ProcurementService {
           .join(" ")
       : undefined;
 
-    await this.audit.log(
-      tenantId,
-      userId,
-      "PurchaseOrder",
-      order.id,
-      "PRINT",
-      { action: "PDF", format: "purchase-order" },
-    );
+    await this.audit.log(tenantId, userId, "PurchaseOrder", order.id, "PRINT", {
+      action: "PDF",
+      format: "purchase-order",
+    });
 
     const buffer = buildPurchaseOrderPdf(
       order as any,
-      (tenant as any) ? { ...(tenant as any), logoUrl: (tenant as any).logoUrl || undefined } : null,
+      (tenant as any)
+        ? { ...(tenant as any), logoUrl: (tenant as any).logoUrl || undefined }
+        : null,
       generatedBy,
     );
     return { buffer, filename: `${order.poNumber}.pdf` };
@@ -969,144 +993,146 @@ export class ProcurementService {
       "grnNumber",
     );
 
-    return this.prisma.$transaction(async (tx) => {
-      const receipt = await tx.goodsReceipt.create({
-        data: {
-          tenantId,
-          grnNumber,
-          purchaseOrderId: dto.purchaseOrderId,
-          supplierId: dto.supplierId,
-          storeId: dto.storeId,
-          invoiceNumber: dto.invoiceNumber,
-          remarks: dto.remarks,
-          receivedBy: userId,
-          items: {
-            create: dto.items.map((item) => ({
-              itemName: item.itemName,
-              medicineId: item.medicineId,
-              quantity: item.quantity,
-              unit: item.unit,
-              unitPrice: item.unitPrice,
-              batchNumber: item.batchNumber,
-              expiryDate: item.expiryDate
-                ? this.normalizeDate(item.expiryDate)
-                : undefined,
-              receivedStock: item.quantity,
-            })),
-          },
-        },
-        include: { items: true },
-      });
-
-      // Stock in: upsert inventory items and record RECEIPT transactions
-      if (dto.storeId) {
-        for (const item of dto.items) {
-          const existing = await tx.inventoryItem.findFirst({
-            where: {
-              tenantId,
-              storeId: dto.storeId,
-              ...(item.medicineId
-                ? { medicineId: item.medicineId }
-                : { name: item.itemName }),
-            },
-          });
-
-          let inventory: any;
-          if (existing) {
-            inventory = await tx.inventoryItem.update({
-              where: { id: existing.id },
-              data: {
-                currentStock: { increment: item.quantity },
-                ...(item.batchNumber
-                  ? { batchNumber: item.batchNumber }
-                  : {}),
-                ...(item.expiryDate
-                  ? { expiryDate: this.normalizeDate(item.expiryDate) }
-                  : {}),
-              },
-            });
-          } else {
-            inventory = await tx.inventoryItem.create({
-              data: {
-                tenantId,
-                storeId: dto.storeId,
+    return this.prisma
+      .$transaction(async (tx) => {
+        const receipt = await tx.goodsReceipt.create({
+          data: {
+            tenantId,
+            grnNumber,
+            purchaseOrderId: dto.purchaseOrderId,
+            supplierId: dto.supplierId,
+            storeId: dto.storeId,
+            invoiceNumber: dto.invoiceNumber,
+            remarks: dto.remarks,
+            receivedBy: userId,
+            items: {
+              create: dto.items.map((item) => ({
+                itemName: item.itemName,
                 medicineId: item.medicineId,
-                name: item.itemName,
-                itemType: item.medicineId ? "MEDICINE" : "OTHER",
+                quantity: item.quantity,
                 unit: item.unit,
-                currentStock: item.quantity,
+                unitPrice: item.unitPrice,
                 batchNumber: item.batchNumber,
                 expiryDate: item.expiryDate
                   ? this.normalizeDate(item.expiryDate)
                   : undefined,
-                purchaseRate: item.unitPrice || 0,
+                receivedStock: item.quantity,
+              })),
+            },
+          },
+          include: { items: true },
+        });
+
+        // Stock in: upsert inventory items and record RECEIPT transactions
+        if (dto.storeId) {
+          for (const item of dto.items) {
+            const existing = await tx.inventoryItem.findFirst({
+              where: {
+                tenantId,
+                storeId: dto.storeId,
+                ...(item.medicineId
+                  ? { medicineId: item.medicineId }
+                  : { name: item.itemName }),
+              },
+            });
+
+            let inventory: any;
+            if (existing) {
+              inventory = await tx.inventoryItem.update({
+                where: { id: existing.id },
+                data: {
+                  currentStock: { increment: item.quantity },
+                  ...(item.batchNumber
+                    ? { batchNumber: item.batchNumber }
+                    : {}),
+                  ...(item.expiryDate
+                    ? { expiryDate: this.normalizeDate(item.expiryDate) }
+                    : {}),
+                },
+              });
+            } else {
+              inventory = await tx.inventoryItem.create({
+                data: {
+                  tenantId,
+                  storeId: dto.storeId,
+                  medicineId: item.medicineId,
+                  name: item.itemName,
+                  itemType: item.medicineId ? "MEDICINE" : "OTHER",
+                  unit: item.unit,
+                  currentStock: item.quantity,
+                  batchNumber: item.batchNumber,
+                  expiryDate: item.expiryDate
+                    ? this.normalizeDate(item.expiryDate)
+                    : undefined,
+                  purchaseRate: item.unitPrice || 0,
+                },
+              });
+            }
+
+            await tx.inventoryTransaction.create({
+              data: {
+                tenantId,
+                itemId: inventory.id,
+                storeId: dto.storeId,
+                type: "RECEIPT",
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                totalValue: item.quantity * item.unitPrice,
+                batchNumber: item.batchNumber,
+                expiryDate: item.expiryDate
+                  ? this.normalizeDate(item.expiryDate)
+                  : undefined,
+                referenceType: "GoodsReceipt",
+                referenceId: receipt.id,
+                createdBy: userId,
               },
             });
           }
+        }
 
-          await tx.inventoryTransaction.create({
-            data: {
-              tenantId,
-              itemId: inventory.id,
-              storeId: dto.storeId,
-              type: "RECEIPT",
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              totalValue: item.quantity * item.unitPrice,
-              batchNumber: item.batchNumber,
-              expiryDate: item.expiryDate
-                ? this.normalizeDate(item.expiryDate)
-                : undefined,
-              referenceType: "GoodsReceipt",
-              referenceId: receipt.id,
-              createdBy: userId,
-            },
+        // Track received quantities and move the PO forward
+        if (dto.purchaseOrderId) {
+          for (const item of dto.items) {
+            await tx.purchaseOrderItem
+              .updateMany({
+                where: {
+                  purchaseOrderId: dto.purchaseOrderId,
+                  itemName: item.itemName,
+                },
+                data: { receivedQuantity: { increment: item.quantity } },
+              })
+              .catch((err) =>
+                this.logger.warn(
+                  "purchaseOrderItem receivedQuantity update failed",
+                  err,
+                ),
+              );
+          }
+          const poItems = await tx.purchaseOrderItem.findMany({
+            where: { purchaseOrderId: dto.purchaseOrderId },
+          });
+          const fullyReceived =
+            poItems.length > 0 &&
+            poItems.every(
+              (i) => Number(i.receivedQuantity) >= Number(i.quantity),
+            );
+          await tx.purchaseOrder.update({
+            where: { id: dto.purchaseOrderId },
+            data: { status: fullyReceived ? "RECEIVED" : "PARTIAL_RECEIVED" },
           });
         }
-      }
 
-      // Track received quantities and move the PO forward
-      if (dto.purchaseOrderId) {
-        for (const item of dto.items) {
-          await tx.purchaseOrderItem
-            .updateMany({
-              where: {
-                purchaseOrderId: dto.purchaseOrderId,
-                itemName: item.itemName,
-              },
-              data: { receivedQuantity: { increment: item.quantity } },
-            })
-            .catch((err) =>
-              this.logger.warn(
-                "purchaseOrderItem receivedQuantity update failed",
-                err,
-              ),
-            );
-        }
-        const poItems = await tx.purchaseOrderItem.findMany({
-          where: { purchaseOrderId: dto.purchaseOrderId },
-        });
-        const fullyReceived =
-          poItems.length > 0 &&
-          poItems.every(
-            (i) => Number(i.receivedQuantity) >= Number(i.quantity),
-          );
-        await tx.purchaseOrder.update({
-          where: { id: dto.purchaseOrderId },
-          data: { status: fullyReceived ? "RECEIVED" : "PARTIAL_RECEIVED" },
-        });
-      }
-
-      return receipt;
-    }).then((receipt: any) => {
-      this.audit
-        .log(tenantId, userId, "GoodsReceipt", receipt.id, "CREATE", {
-          grnNumber: receipt.grnNumber,
-          purchaseOrderId: dto.purchaseOrderId || undefined,
-        })
-        .catch((err) => this.logger.warn("audit log failed", err));
-      return receipt;
-    });
+        return receipt;
+      })
+      .then((receipt: any) => {
+        this.audit
+          .log(tenantId, userId, "GoodsReceipt", receipt.id, "CREATE", {
+            grnNumber: receipt.grnNumber,
+            purchaseOrderId: dto.purchaseOrderId || undefined,
+          })
+          .catch((err) => this.logger.warn("audit log failed", err));
+        return receipt;
+      });
   }
 
   async findGoodsReceipts(
@@ -1157,7 +1183,9 @@ export class ProcurementService {
       supplier: r.supplierId
         ? { id: r.supplierId, name: supplierMap.get(r.supplierId) }
         : null,
-      store: r.storeId ? { id: r.storeId, name: storeMap.get(r.storeId) } : null,
+      store: r.storeId
+        ? { id: r.storeId, name: storeMap.get(r.storeId) }
+        : null,
     }));
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
@@ -1190,7 +1218,9 @@ export class ProcurementService {
     const discountAmount = this.round2((gross * discountPercent) / 100);
     const taxableAmount = this.round2(gross - discountAmount);
     const taxAmount = this.round2((taxableAmount * taxPercent) / 100);
-    const otherCharges = item.otherCharges ? this.round2(Number(item.otherCharges)) : 0;
+    const otherCharges = item.otherCharges
+      ? this.round2(Number(item.otherCharges))
+      : 0;
     const lineTotal = this.round2(taxableAmount + taxAmount + otherCharges);
 
     return {
@@ -1223,11 +1253,20 @@ export class ProcurementService {
       (taxableAmount * (dto.tdsPercent ? Number(dto.tdsPercent) : 0)) / 100,
     );
     const freightAmount = dto.freight ? this.round2(Number(dto.freight)) : 0;
-    const insuranceAmount = dto.insurance ? this.round2(Number(dto.insurance)) : 0;
-    const otherCharges = dto.otherCharges ? this.round2(Number(dto.otherCharges)) : 0;
+    const insuranceAmount = dto.insurance
+      ? this.round2(Number(dto.insurance))
+      : 0;
+    const otherCharges = dto.otherCharges
+      ? this.round2(Number(dto.otherCharges))
+      : 0;
 
     const grandTotal = this.round2(
-      taxableAmount + taxAmount - tdsAmount + freightAmount + insuranceAmount + otherCharges,
+      taxableAmount +
+        taxAmount -
+        tdsAmount +
+        freightAmount +
+        insuranceAmount +
+        otherCharges,
     );
 
     return {

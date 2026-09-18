@@ -43,7 +43,9 @@ export class DoctorShareService {
     if (shareType === "FIXED" && value < 0)
       throw new BadRequestException("Fixed share value cannot be negative");
     if (shareType !== "FIXED" && (value < 0 || value > 100))
-      throw new BadRequestException("Percentage share must be between 0 and 100");
+      throw new BadRequestException(
+        "Percentage share must be between 0 and 100",
+      );
     return value;
   }
 
@@ -204,7 +206,12 @@ export class DoctorShareService {
   async updateTransactionStatus(
     tenantId: string,
     id: string,
-    body: { status: string; paymentMethod?: string; paymentReference?: string; notes?: string },
+    body: {
+      status: string;
+      paymentMethod?: string;
+      paymentReference?: string;
+      notes?: string;
+    },
     userId?: string,
   ) {
     const txn = await this.prisma.doctorShareTransaction.findFirst({
@@ -250,16 +257,30 @@ export class DoctorShareService {
     });
 
     if (to === "PAID") {
-      await this.logAudit(tenantId, userId, "SETTLE", "DoctorShareTransaction", id, {
-        amount: Number(txn.doctorShare),
-        paymentMethod: data.paymentMethod,
-        paymentReference: data.paymentReference,
-      });
+      await this.logAudit(
+        tenantId,
+        userId,
+        "SETTLE",
+        "DoctorShareTransaction",
+        id,
+        {
+          amount: Number(txn.doctorShare),
+          paymentMethod: data.paymentMethod,
+          paymentReference: data.paymentReference,
+        },
+      );
     } else {
-      await this.logAudit(tenantId, userId, "UPDATE", "DoctorShareTransaction", id, {
-        from,
-        to,
-      });
+      await this.logAudit(
+        tenantId,
+        userId,
+        "UPDATE",
+        "DoctorShareTransaction",
+        id,
+        {
+          from,
+          to,
+        },
+      );
     }
 
     return updated;

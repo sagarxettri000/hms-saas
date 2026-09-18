@@ -40,7 +40,13 @@ export class DicomService {
     private readonly storage: StorageService,
   ) {}
 
-  async upload({ tenantId, userId, files, patientId, radiologyOrderId }: UploadDicomParams) {
+  async upload({
+    tenantId,
+    userId,
+    files,
+    patientId,
+    radiologyOrderId,
+  }: UploadDicomParams) {
     if (!files?.length) {
       throw new BadRequestException("At least one DICOM file is required");
     }
@@ -53,7 +59,7 @@ export class DicomService {
       if (!order) throw new NotFoundException("Radiology order not found");
     }
 
-    let targetPatientId = patientId;
+    const targetPatientId = patientId;
     if (patientId) {
       const patient = await this.prisma.patient.findFirst({
         where: { id: patientId, tenantId, deletedAt: null },
@@ -67,14 +73,21 @@ export class DicomService {
       const metadata = extractDicomMetadata(file.buffer);
 
       const studyInstanceUid =
-        metadata.study.studyInstanceUid || `urn:study:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        metadata.study.studyInstanceUid ||
+        `urn:study:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const seriesInstanceUid =
-        metadata.series.seriesInstanceUid || `urn:series:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        metadata.series.seriesInstanceUid ||
+        `urn:series:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const sopInstanceUid =
-        metadata.instance.sopInstanceUid || `urn:sop:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        metadata.instance.sopInstanceUid ||
+        `urn:sop:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
       const key = `${tenantId}/dicom/${studyInstanceUid}/${seriesInstanceUid}/${sopInstanceUid}.dcm`;
-      const stored = await this.storage.put(key, file.buffer, "application/dicom");
+      const stored = await this.storage.put(
+        key,
+        file.buffer,
+        "application/dicom",
+      );
 
       const study = await this.prisma.dicomStudy.upsert({
         where: { tenantId_studyInstanceUid: { tenantId, studyInstanceUid } },
@@ -172,7 +185,10 @@ export class DicomService {
       // Auto-link the study to an existing radiology order by accession number.
       if (!radiologyOrderId && metadata.study.accessionNumber) {
         const matched = await this.prisma.radiologyOrder.findFirst({
-          where: { tenantId, accessionNumber: metadata.study.accessionNumber as string },
+          where: {
+            tenantId,
+            accessionNumber: metadata.study.accessionNumber as string,
+          },
           select: { id: true },
         });
         if (matched) {
@@ -221,7 +237,8 @@ export class DicomService {
     const where: Prisma.DicomStudyWhereInput = { tenantId };
 
     if (params.patientId) where.patientId = params.patientId;
-    if (params.radiologyOrderId) where.radiologyOrderId = params.radiologyOrderId;
+    if (params.radiologyOrderId)
+      where.radiologyOrderId = params.radiologyOrderId;
     if (params.accessionNumber) where.accessionNumber = params.accessionNumber;
     if (params.modality) where.modality = params.modality;
 
@@ -239,7 +256,9 @@ export class DicomService {
       this.prisma.dicomStudy.findMany({
         where,
         include: {
-          patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+          patient: {
+            select: { id: true, firstName: true, lastName: true, mrn: true },
+          },
           series: {
             select: {
               id: true,
@@ -273,7 +292,9 @@ export class DicomService {
     const study = await this.prisma.dicomStudy.findFirst({
       where: { id: studyId, tenantId },
       include: {
-        patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+        patient: {
+          select: { id: true, firstName: true, lastName: true, mrn: true },
+        },
         series: {
           include: {
             instances: {
@@ -299,7 +320,12 @@ export class DicomService {
     return study;
   }
 
-  async associateStudy(tenantId: string, studyId: string, orderId: string, userId?: string) {
+  async associateStudy(
+    tenantId: string,
+    studyId: string,
+    orderId: string,
+    userId?: string,
+  ) {
     const study = await this.prisma.dicomStudy.findFirst({
       where: { id: studyId, tenantId },
       select: { id: true, radiologyOrderId: true },
@@ -317,21 +343,30 @@ export class DicomService {
       data: { radiologyOrderId: order.id },
     });
     await this.prisma.radiologyOrder.updateMany({
-      where: { id: order.id, tenantId, status: { in: ["ORDERED", "SCHEDULED", "IN_PROGRESS"] } },
+      where: {
+        id: order.id,
+        tenantId,
+        status: { in: ["ORDERED", "SCHEDULED", "IN_PROGRESS"] },
+      },
       data: { status: "IMAGES_UPLOADED" },
     });
 
     if (userId) {
-      await this.prisma.auditLog.create({
-        data: {
-          tenantId,
-          userId,
-          entity: "DicomStudy",
-          entityId: studyId,
-          action: "UPDATE" as any,
-          metadata: { action: "STUDY_ASSOCIATED", radiologyOrderId: order.id },
-        },
-      }).catch(() => {});
+      await this.prisma.auditLog
+        .create({
+          data: {
+            tenantId,
+            userId,
+            entity: "DicomStudy",
+            entityId: studyId,
+            action: "UPDATE" as any,
+            metadata: {
+              action: "STUDY_ASSOCIATED",
+              radiologyOrderId: order.id,
+            },
+          },
+        })
+        .catch(() => {});
     }
 
     return { studyId: study.id, radiologyOrderId: order.id };
@@ -350,16 +385,18 @@ export class DicomService {
     });
 
     if (userId) {
-      await this.prisma.auditLog.create({
-        data: {
-          tenantId,
-          userId,
-          entity: "DicomStudy",
-          entityId: studyId,
-          action: "UPDATE" as any,
-          metadata: { action: "STUDY_UNASSOCIATED" },
-        },
-      }).catch(() => {});
+      await this.prisma.auditLog
+        .create({
+          data: {
+            tenantId,
+            userId,
+            entity: "DicomStudy",
+            entityId: studyId,
+            action: "UPDATE" as any,
+            metadata: { action: "STUDY_UNASSOCIATED" },
+          },
+        })
+        .catch(() => {});
     }
 
     return { studyId: study.id, radiologyOrderId: null };
@@ -368,7 +405,11 @@ export class DicomService {
   async createOrderFromStudy(
     tenantId: string,
     studyId: string,
-    dto: { bodyPart?: string; clinicalHistory?: string; referringDoctorId?: string },
+    dto: {
+      bodyPart?: string;
+      clinicalHistory?: string;
+      referringDoctorId?: string;
+    },
     userId?: string,
   ) {
     const study = await this.prisma.dicomStudy.findFirst({
@@ -389,7 +430,9 @@ export class DicomService {
       );
     }
     if (study.radiologyOrderId) {
-      throw new BadRequestException("This study is already linked to a radiology order");
+      throw new BadRequestException(
+        "This study is already linked to a radiology order",
+      );
     }
 
     const modalityMap: Record<string, string> = {
@@ -412,7 +455,9 @@ export class DicomService {
       orderBy: { createdAt: "desc" },
       select: { orderNumber: true },
     });
-    const seq = latest ? parseInt(latest.orderNumber.split("-").pop() ?? "0", 10) + 1 : 1;
+    const seq = latest
+      ? parseInt(latest.orderNumber.split("-").pop() ?? "0", 10) + 1
+      : 1;
     const orderNumber = `RAD-${ymd}-${String(seq).padStart(4, "0")}`;
 
     const order = await this.prisma.radiologyOrder.create({
@@ -434,16 +479,18 @@ export class DicomService {
     });
 
     if (userId) {
-      await this.prisma.auditLog.create({
-        data: {
-          tenantId,
-          userId,
-          entity: "RadiologyOrder",
-          entityId: order.id,
-          action: "CREATE" as any,
-          metadata: { source: "DICOM_STUDY", studyId: study.id },
-        },
-      }).catch(() => {});
+      await this.prisma.auditLog
+        .create({
+          data: {
+            tenantId,
+            userId,
+            entity: "RadiologyOrder",
+            entityId: order.id,
+            action: "CREATE" as any,
+            metadata: { source: "DICOM_STUDY", studyId: study.id },
+          },
+        })
+        .catch(() => {});
     }
 
     return order;
@@ -505,10 +552,23 @@ export class DicomService {
     });
   }
 
-  async createNode(tenantId: string, data: { name: string; aeTitle: string; hostname: string; port?: number; isLocal?: boolean; tls?: boolean }) {
-    if (!data.name?.trim()) throw new BadRequestException("Node name is required");
-    if (!data.aeTitle?.trim()) throw new BadRequestException("AE title is required");
-    if (!data.hostname?.trim()) throw new BadRequestException("Hostname is required");
+  async createNode(
+    tenantId: string,
+    data: {
+      name: string;
+      aeTitle: string;
+      hostname: string;
+      port?: number;
+      isLocal?: boolean;
+      tls?: boolean;
+    },
+  ) {
+    if (!data.name?.trim())
+      throw new BadRequestException("Node name is required");
+    if (!data.aeTitle?.trim())
+      throw new BadRequestException("AE title is required");
+    if (!data.hostname?.trim())
+      throw new BadRequestException("Hostname is required");
 
     return this.prisma.dicomNode.create({
       data: {
@@ -526,7 +586,14 @@ export class DicomService {
   async updateNode(
     tenantId: string,
     nodeId: string,
-    data: { name?: string; aeTitle?: string; hostname?: string; port?: number; isLocal?: boolean; tls?: boolean },
+    data: {
+      name?: string;
+      aeTitle?: string;
+      hostname?: string;
+      port?: number;
+      isLocal?: boolean;
+      tls?: boolean;
+    },
   ) {
     const existing = await this.prisma.dicomNode.findFirst({
       where: { id: nodeId, tenantId },
@@ -539,7 +606,9 @@ export class DicomService {
       data: {
         ...(data.name !== undefined ? { name: data.name.trim() } : {}),
         ...(data.aeTitle !== undefined ? { aeTitle: data.aeTitle.trim() } : {}),
-        ...(data.hostname !== undefined ? { hostname: data.hostname.trim() } : {}),
+        ...(data.hostname !== undefined
+          ? { hostname: data.hostname.trim() }
+          : {}),
         ...(data.port !== undefined ? { port: Number(data.port) } : {}),
         ...(data.isLocal !== undefined ? { isLocal: data.isLocal } : {}),
         ...(data.tls !== undefined ? { tls: data.tls } : {}),

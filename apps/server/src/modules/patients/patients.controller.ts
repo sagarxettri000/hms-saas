@@ -56,10 +56,7 @@ export class PatientsController {
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Search and list patients" })
   async findAll(@Query() query: PatientSearchParams, @Req() req: any) {
-    const result = await this.patientsService.findAll(
-      req.user.tenantId,
-      query,
-    );
+    const result = await this.patientsService.findAll(req.user.tenantId, query);
     result.data = this.patientsService.maskPatientPhi(
       req.user.role,
       result.data,
@@ -78,10 +75,7 @@ export class PatientsController {
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Global patient search" })
   async search(@Query() query: PatientSearchParams, @Req() req: any) {
-    const result = await this.patientsService.findAll(
-      req.user.tenantId,
-      query,
-    );
+    const result = await this.patientsService.findAll(req.user.tenantId, query);
     result.data = this.patientsService.maskPatientPhi(
       req.user.role,
       result.data,
@@ -103,7 +97,9 @@ export class PatientsController {
     const patient = await this.patientsService.findById(req.user.tenantId, id);
     // Apply the same PHI masking used by findAll/search so restricted roles
     // (e.g. RECEPTIONIST) cannot read identity documents via the detail route.
-    const masked = this.patientsService.maskPatientPhi(req.user.role, [patient]);
+    const masked = this.patientsService.maskPatientPhi(req.user.role, [
+      patient,
+    ]);
     return masked[0];
   }
 

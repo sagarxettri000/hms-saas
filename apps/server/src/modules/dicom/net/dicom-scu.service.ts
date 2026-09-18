@@ -53,8 +53,14 @@ export class DicomScuService {
   ) {}
 
   /** Send all instances of a study to a remote AE node. */
-  async sendStudyToNode(tenantId: string, nodeId: string, studyId: string): Promise<StoreResult[]> {
-    const node = await this.prisma.dicomNode.findFirst({ where: { id: nodeId, tenantId } });
+  async sendStudyToNode(
+    tenantId: string,
+    nodeId: string,
+    studyId: string,
+  ): Promise<StoreResult[]> {
+    const node = await this.prisma.dicomNode.findFirst({
+      where: { id: nodeId, tenantId },
+    });
     if (!node) throw new NotFoundException("DICOM node not found");
 
     const instances = await this.prisma.dicomInstance.findMany({
@@ -67,9 +73,14 @@ export class DicomScuService {
       orderBy: { instanceNumber: "asc" as const },
     });
 
-    if (!instances.length) throw new NotFoundException("No instances found for study");
+    if (!instances.length)
+      throw new NotFoundException("No instances found for study");
 
-    const payloads: Array<{ sopClassUid: string; sopInstanceUid: string; p10: Buffer }> = [];
+    const payloads: Array<{
+      sopClassUid: string;
+      sopInstanceUid: string;
+      p10: Buffer;
+    }> = [];
     for (const inst of instances) {
       const { data } = await this.storage.get(inst.storageKey);
       const sopClass = (await p10SopClass(data)) || fallbackSopClass;
@@ -80,16 +91,37 @@ export class DicomScuService {
       });
     }
 
-    const results = await this.store(node.hostname, node.port, node.aeTitle, payloads, node.tls ?? false);
+    const results = await this.store(
+      node.hostname,
+      node.port,
+      node.aeTitle,
+      payloads,
+      node.tls ?? false,
+    );
     return results;
   }
 
   /** C-ECHO SCU against a configured node. */
-  async echoNode(tenantId: string, nodeId: string): Promise<{ connected: boolean; latencyMs: number; status?: number; error?: string }> {
-    const node = await this.prisma.dicomNode.findFirst({ where: { id: nodeId, tenantId } });
+  async echoNode(
+    tenantId: string,
+    nodeId: string,
+  ): Promise<{
+    connected: boolean;
+    latencyMs: number;
+    status?: number;
+    error?: string;
+  }> {
+    const node = await this.prisma.dicomNode.findFirst({
+      where: { id: nodeId, tenantId },
+    });
     if (!node) throw new NotFoundException("DICOM node not found");
     try {
-      const result = await this.echo(node.hostname, node.port, node.aeTitle, node.tls ?? false);
+      const result = await this.echo(
+        node.hostname,
+        node.port,
+        node.aeTitle,
+        node.tls ?? false,
+      );
       return { connected: true, ...result };
     } catch (err) {
       return { connected: false, latencyMs: 0, error: (err as Error).message };
@@ -112,13 +144,17 @@ export class DicomScuService {
       useTls,
     );
     try {
-      const status = await this.sendCommandExpectResponse(conn, "1.2.840.10008.1.1", {
-        commandField: COMMAND_FIELD.C_ECHO_RQ,
-        messageId: 1,
-        affectedSopClassUid: "1.2.840.10008.1.1",
-        priority: 0,
-        commandDataSetType: 0x0101,
-      });
+      const status = await this.sendCommandExpectResponse(
+        conn,
+        "1.2.840.10008.1.1",
+        {
+          commandField: COMMAND_FIELD.C_ECHO_RQ,
+          messageId: 1,
+          affectedSopClassUid: "1.2.840.10008.1.1",
+          priority: 0,
+          commandDataSetType: 0x0101,
+        },
+      );
       return { latencyMs: Date.now() - start, status };
     } finally {
       this.cleanup(conn);
@@ -130,10 +166,16 @@ export class DicomScuService {
     host: string,
     port: number,
     calledAe: string,
-    instances: Array<{ sopClassUid: string; sopInstanceUid: string; p10: Buffer }>,
+    instances: Array<{
+      sopClassUid: string;
+      sopInstanceUid: string;
+      p10: Buffer;
+    }>,
     useTls = false,
   ): Promise<StoreResult[]> {
-    this.logger.log(`C-STORE SCU: ${instances.length} instance(s) -> ${calledAe}@${host}:${port}${useTls ? " (TLS)" : ""}`);
+    this.logger.log(
+      `C-STORE SCU: ${instances.length} instance(s) -> ${calledAe}@${host}:${port}${useTls ? " (TLS)" : ""}`,
+    );
     const conn = await this.connect(
       host,
       port,
@@ -146,7 +188,7 @@ export class DicomScuService {
     try {
       for (let i = 0; i < instances.length; i++) {
         const inst = instances[i];
-        const contextId = conn.contextByAbstract.get(inst.sopClassUid) || (i + 1);
+        const contextId = conn.contextByAbstract.get(inst.sopClassUid) || i + 1;
         const status = await new Promise<number>(async (resolve) => {
           const timer = setTimeout(() => {
             this.logger.warn(`C-STORE timeout for ${inst.sopInstanceUid}`);
@@ -158,9 +200,12 @@ export class DicomScuService {
               const attrs = this.parseCommandSet(ev.data);
               if (attrs.get(EL_COMMAND_FIELD) === COMMAND_FIELD.C_STORE_RSP) {
                 clearTimeout(timer);
-                const respondedToMsgId: number | undefined = attrs.get(EL_MESSAGE_ID_RESPONDING);
+                const respondedToMsgId: number | undefined = attrs.get(
+                  EL_MESSAGE_ID_RESPONDING,
+                );
                 const pendingResolve = conn.pending.get(respondedToMsgId ?? -1);
-                if (pendingResolve) pendingResolve(attrs.get(EL_STATUS) ?? STATUS.FAILURE);
+                if (pendingResolve)
+                  pendingResolve(attrs.get(EL_STATUS) ?? STATUS.FAILURE);
               }
             }
           });
@@ -186,7 +231,11 @@ export class DicomScuService {
           this.sendDatasetFragments(conn, contextId, dataset);
         });
 
-        results.push({ sopInstanceUid: inst.sopInstanceUid, contextId, status });
+        results.push({
+          sopInstanceUid: inst.sopInstanceUid,
+          contextId,
+          status,
+        });
       }
     } finally {
       this.cleanup(conn);
@@ -201,7 +250,10 @@ export class DicomScuService {
     host: string,
     port: number,
     calledAe: string,
-    contexts: Array<{ abstractSyntaxUid: string; transferSyntaxUids?: string[] }>,
+    contexts: Array<{
+      abstractSyntaxUid: string;
+      transferSyntaxUids?: string[];
+    }>,
     useTls = false,
   ): Promise<ConnectionState> {
     return new Promise((resolve, reject) => {
@@ -228,7 +280,9 @@ export class DicomScuService {
       socket.on("close", () => {
         if (!settled) {
           settled = true;
-          reject(new Error("DICOM connection closed before association established"));
+          reject(
+            new Error("DICOM connection closed before association established"),
+          );
         }
       });
 
@@ -240,10 +294,16 @@ export class DicomScuService {
         state.recvBuffer = Buffer.concat([state.recvBuffer, chunk]);
         while (state.recvBuffer.length >= 6) {
           const header = parsePduHeader(state.recvBuffer, 0);
-          if (state.recvBuffer.length < header.dataOffset + header.length) break;
-          const pdu = state.recvBuffer.subarray(0, header.dataOffset + header.length);
+          if (state.recvBuffer.length < header.dataOffset + header.length)
+            break;
+          const pdu = state.recvBuffer.subarray(
+            0,
+            header.dataOffset + header.length,
+          );
           handleIncoming(header, pdu, state);
-          state.recvBuffer = state.recvBuffer.subarray(header.dataOffset + header.length);
+          state.recvBuffer = state.recvBuffer.subarray(
+            header.dataOffset + header.length,
+          );
         }
       });
 
@@ -279,7 +339,10 @@ export class DicomScuService {
           }
         } else if (header.type === PDU_TYPE.A_RELEASE_RP) {
           socket.destroy();
-        } else if (header.type === PDU_TYPE.A_ABORT_RQ || header.type === PDU_TYPE.A_P_ABORT) {
+        } else if (
+          header.type === PDU_TYPE.A_ABORT_RQ ||
+          header.type === PDU_TYPE.A_P_ABORT
+        ) {
           socket.destroy();
         }
       };
@@ -310,7 +373,10 @@ export class DicomScuService {
         resolve(s);
       });
 
-      const pdu = buildCommandSetPData(cmd as Parameters<typeof buildCommandSetPData>[0], contextId);
+      const pdu = buildCommandSetPData(
+        cmd as Parameters<typeof buildCommandSetPData>[0],
+        contextId,
+      );
       conn.send(pdu);
     });
   }
@@ -327,8 +393,16 @@ export class DicomScuService {
     return cmdMap;
   }
 
-  private sendDatasetFragments(conn: ConnectionState, contextId: number, data: Buffer) {
-    const pdvs: Array<{ contextId: number; controlHeader: number; data: Buffer }> = [];
+  private sendDatasetFragments(
+    conn: ConnectionState,
+    contextId: number,
+    data: Buffer,
+  ) {
+    const pdvs: Array<{
+      contextId: number;
+      controlHeader: number;
+      data: Buffer;
+    }> = [];
     let offset = 0;
     while (offset < data.length) {
       const size = Math.min(MAX_PDV, data.length - offset);
@@ -340,7 +414,8 @@ export class DicomScuService {
         data: Buffer.from(chunk),
       });
     }
-    if (!pdvs.length) pdvs.push({ contextId, controlHeader: 0x03, data: Buffer.alloc(0) });
+    if (!pdvs.length)
+      pdvs.push({ contextId, controlHeader: 0x03, data: Buffer.alloc(0) });
     conn.send(buildPDataTf(pdvs));
   }
 
@@ -359,7 +434,12 @@ interface ConnectionState {
   send: (pdu: Buffer) => void;
 }
 
-function parseAc(pdu: Buffer, offset: number, length: number, byAbstract: Map<string, number>) {
+function parseAc(
+  pdu: Buffer,
+  offset: number,
+  length: number,
+  byAbstract: Map<string, number>,
+) {
   // scan for presentation context result items (0x21)
   let pos = offset + 4 + 16 + 32 + 16 + 32;
   const end = offset + length;
@@ -410,10 +490,18 @@ function buildAssociateRq(
       : [TRANSFER_SYNTAXES.IMPLICIT_VR_LE, TRANSFER_SYNTAXES.EXPLICIT_VR_LE];
     const abstractUid = Buffer.from(ctx.abstractSyntaxUid, "latin1");
     const inner: Buffer[] = [];
-    inner.push(Buffer.concat([Buffer.from([0x30, 0x00]), u16(abstractUid.length), abstractUid]));
+    inner.push(
+      Buffer.concat([
+        Buffer.from([0x30, 0x00]),
+        u16(abstractUid.length),
+        abstractUid,
+      ]),
+    );
     for (const ts of tsList) {
       const tsUid = Buffer.from(ts, "latin1");
-      inner.push(Buffer.concat([Buffer.from([0x40, 0x00]), u16(tsUid.length), tsUid]));
+      inner.push(
+        Buffer.concat([Buffer.from([0x40, 0x00]), u16(tsUid.length), tsUid]),
+      );
     }
     const innerLen = inner.reduce((s, b) => s + b.length, 0);
     sub.push(
@@ -486,7 +574,9 @@ export function buildTlsConnectOptions(
     rejectUnauthorized: false,
   };
   if (env.DICOM_TLS_CA) {
-    options.ca = env.DICOM_TLS_CA.split(",").map((s) => s.trim()).filter(Boolean);
+    options.ca = env.DICOM_TLS_CA.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
     options.rejectUnauthorized = true;
   }
   return options;
@@ -504,7 +594,9 @@ export function openDicomSocket(
 ): { socket: net.Socket; readyEvent: "connect" | "secureConnect" } {
   if (useTls) {
     return {
-      socket: tls.connect(buildTlsConnectOptions(host, port)) as unknown as net.Socket,
+      socket: tls.connect(
+        buildTlsConnectOptions(host, port),
+      ) as unknown as net.Socket,
       readyEvent: "secureConnect",
     };
   }

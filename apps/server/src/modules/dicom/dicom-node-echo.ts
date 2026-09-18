@@ -5,7 +5,11 @@ export interface EchoResult {
   latencyMs: number | null;
 }
 
-export function isTcpReachable(hostname: string, port: number, timeoutMs = 4000): Promise<EchoResult> {
+export function isTcpReachable(
+  hostname: string,
+  port: number,
+  timeoutMs = 4000,
+): Promise<EchoResult> {
   return new Promise((resolve) => {
     const start = Date.now();
     const socket = new net.Socket();

@@ -62,7 +62,12 @@ export class DepartmentsController {
     @Body() dto: UpdateDepartmentDto,
     @Req() req: any,
   ) {
-    return this.departmentsService.update(req.user.tenantId, id, dto, req.user.id);
+    return this.departmentsService.update(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user.id,
+    );
   }
 
   @Delete(":id")
@@ -102,7 +107,12 @@ export class DepartmentsController {
     @Body() dto: UpdateWardDto,
     @Req() req: any,
   ) {
-    return this.departmentsService.updateWard(req.user.tenantId, id, dto, req.user.id);
+    return this.departmentsService.updateWard(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user.id,
+    );
   }
 
   // Rooms

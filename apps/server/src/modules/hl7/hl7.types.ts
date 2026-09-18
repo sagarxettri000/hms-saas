@@ -6,7 +6,11 @@ export interface Hl7Segment {
   name: string;
   fields: Hl7Field[];
   field(index: number): string[][];
-  component(index: number, repIndex?: number, compIndex?: number): string | undefined;
+  component(
+    index: number,
+    repIndex?: number,
+    compIndex?: number,
+  ): string | undefined;
   text(index: number): string | undefined;
 }
 
@@ -25,14 +29,14 @@ export interface ParsedHl7Message {
 }
 
 export type Hl7ActionType =
-  | 'PATIENT_UPSERTED'
-  | 'RADIOLOGY_ORDER_CREATED'
-  | 'RADIOLOGY_ORDER_SCHEDULED'
-  | 'RADIOLOGY_ORDER_REPORTED'
-  | 'LAB_ORDER_REPORTED'
-  | 'APPOINTMENT_SCHEDULED'
-  | 'IGNORED'
-  | 'ERROR';
+  | "PATIENT_UPSERTED"
+  | "RADIOLOGY_ORDER_CREATED"
+  | "RADIOLOGY_ORDER_SCHEDULED"
+  | "RADIOLOGY_ORDER_REPORTED"
+  | "LAB_ORDER_REPORTED"
+  | "APPOINTMENT_SCHEDULED"
+  | "IGNORED"
+  | "ERROR";
 
 export interface Hl7Action {
   type: Hl7ActionType;
@@ -73,7 +77,7 @@ export interface Hl7IngestJobData {
   raw: string;
   options: Hl7ProcessOptions;
   attempt: number;
-  source: 'http' | 'mllp';
+  source: "http" | "mllp";
 }
 
 export interface Hl7JobResult {

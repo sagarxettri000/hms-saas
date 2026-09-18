@@ -46,7 +46,9 @@ export class TenantsController {
 
   @Get()
   @Permissions(PermissionAction.VIEW)
-  @ApiOperation({ summary: "List tenants (super admin: all; others: own tenant)" })
+  @ApiOperation({
+    summary: "List tenants (super admin: all; others: own tenant)",
+  })
   findAll(
     @Req() req: any,
     @Query()
@@ -57,8 +59,9 @@ export class TenantsController {
       status?: string;
     },
   ) {
-    const scopeTenantId =
-      this.isSuperAdmin(req.user) ? undefined : req.user?.tenantId;
+    const scopeTenantId = this.isSuperAdmin(req.user)
+      ? undefined
+      : req.user?.tenantId;
     return this.tenantsService.findAll(query, scopeTenantId);
   }
 
@@ -85,7 +88,10 @@ export class TenantsController {
     @Body() dto: Partial<CreateTenantDto>,
   ) {
     const payload = dto as Record<string, unknown>;
-    if (payload.requireTwoFactor !== undefined && !this.isSuperAdmin(req.user)) {
+    if (
+      payload.requireTwoFactor !== undefined &&
+      !this.isSuperAdmin(req.user)
+    ) {
       throw new ForbiddenException(
         "Only platform administrators can change the two-factor authentication policy.",
       );
@@ -96,8 +102,15 @@ export class TenantsController {
   @Patch(":id/status")
   @Permissions(PermissionAction.EDIT)
   @ApiOperation({ summary: "Update tenant status (active/suspended/archived)" })
-  updateStatus(@Req() req: any, @Param("id") id: string, @Body() body: { status: string }) {
-    return this.tenantsService.updateStatus(this.resolveTenantId(req, id), body.status);
+  updateStatus(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: { status: string },
+  ) {
+    return this.tenantsService.updateStatus(
+      this.resolveTenantId(req, id),
+      body.status,
+    );
   }
 
   @Patch(":id/archive")
@@ -110,7 +123,11 @@ export class TenantsController {
   @Post(":id/branches")
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Create a branch for a tenant" })
-  createBranch(@Req() req: any, @Param("id") id: string, @Body() dto: CreateBranchDto) {
+  createBranch(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() dto: CreateBranchDto,
+  ) {
     return this.tenantsService.createBranch(this.resolveTenantId(req, id), dto);
   }
 
@@ -135,6 +152,8 @@ export class TenantsController {
   private resolveTenantId(req: any, requestedId: string): string {
     // Only the platform super admin may operate on an arbitrary tenant id.
     // Hospital admins/owners are always bound to their own tenant.
-    return this.isSuperAdmin(req.user) ? requestedId : req.user?.tenantId ?? "";
+    return this.isSuperAdmin(req.user)
+      ? requestedId
+      : (req.user?.tenantId ?? "");
   }
 }

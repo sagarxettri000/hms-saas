@@ -41,10 +41,17 @@ export class S3StorageDriver implements StorageDriver {
       (config.get<string>("STORAGE_ENDPOINT") || "").replace(/\/$/, "") ||
       `https://${this.bucket}.s3.${this.region}.amazonaws.com`;
     this.accessKeyId = config.get<string>("STORAGE_ACCESS_KEY_ID") || "";
-    this.secretAccessKey = config.get<string>("STORAGE_SECRET_ACCESS_KEY") || "";
+    this.secretAccessKey =
+      config.get<string>("STORAGE_SECRET_ACCESS_KEY") || "";
   }
 
-  private sign(method: string, path: string, payloadHash: string, date: Date, contentType?: string) {
+  private sign(
+    method: string,
+    path: string,
+    payloadHash: string,
+    date: Date,
+    contentType?: string,
+  ) {
     const amzDate = iso8601(date);
     const dateStamp = amzDate.slice(0, 8);
     const host = new URL(this.endpoint).host;
@@ -83,7 +90,10 @@ export class S3StorageDriver implements StorageDriver {
       sha256Hex(canonicalRequest),
     ].join("\n");
 
-    const kDate = hmac(Buffer.from(`AWS4${this.secretAccessKey}`, "utf8"), dateStamp);
+    const kDate = hmac(
+      Buffer.from(`AWS4${this.secretAccessKey}`, "utf8"),
+      dateStamp,
+    );
     const kRegion = hmac(kDate, this.region);
     const kService = hmac(kRegion, "s3");
     const kSigning = hmac(kService, "aws4_request");
@@ -133,7 +143,11 @@ export class S3StorageDriver implements StorageDriver {
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`Storage get failed: ${res.status}`);
     const data = Buffer.from(await res.arrayBuffer());
-    return { data, contentType: res.headers.get("content-type") || "application/octet-stream" };
+    return {
+      data,
+      contentType:
+        res.headers.get("content-type") || "application/octet-stream",
+    };
   }
 
   async delete(key: string) {
@@ -173,8 +187,16 @@ export class S3StorageDriver implements StorageDriver {
       payloadHash,
     ].join("\n");
     const credentialScope = `${dateStamp}/${this.region}/s3/aws4_request`;
-    const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credentialScope, sha256Hex(canonicalRequest)].join("\n");
-    const kDate = hmac(Buffer.from(`AWS4${this.secretAccessKey}`, "utf8"), dateStamp);
+    const stringToSign = [
+      "AWS4-HMAC-SHA256",
+      amzDate,
+      credentialScope,
+      sha256Hex(canonicalRequest),
+    ].join("\n");
+    const kDate = hmac(
+      Buffer.from(`AWS4${this.secretAccessKey}`, "utf8"),
+      dateStamp,
+    );
     const kRegion = hmac(kDate, this.region);
     const kService = hmac(kRegion, "s3");
     const kSigning = hmac(kService, "aws4_request");

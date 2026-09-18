@@ -93,7 +93,10 @@ export class AppointmentsService {
         },
         OR: [
           { startTime: { lt: endTime }, endTime: { gt: dto.startTime } },
-          { startTime: { lte: dto.startTime }, endTime: { gte: dto.startTime } },
+          {
+            startTime: { lte: dto.startTime },
+            endTime: { gte: dto.startTime },
+          },
         ],
       },
     });
@@ -172,14 +175,16 @@ export class AppointmentsService {
       appointment.id,
     );
 
-    this.notifications.create(tenantId, {
-      userId: doctor.userId,
-      title: "New Appointment Booked",
-      body: `Patient ${appointment.patient?.firstName || ""} ${appointment.patient?.lastName || ""} has an appointment on ${date.toISOString().split("T")[0]} at ${dto.startTime}`,
-      type: "APPOINTMENT_BOOKED",
-      referenceType: "Appointment",
-      referenceId: appointment.id,
-    }).catch(() => {});
+    this.notifications
+      .create(tenantId, {
+        userId: doctor.userId,
+        title: "New Appointment Booked",
+        body: `Patient ${appointment.patient?.firstName || ""} ${appointment.patient?.lastName || ""} has an appointment on ${date.toISOString().split("T")[0]} at ${dto.startTime}`,
+        type: "APPOINTMENT_BOOKED",
+        referenceType: "Appointment",
+        referenceId: appointment.id,
+      })
+      .catch(() => {});
 
     return appointment;
   }
@@ -421,14 +426,16 @@ export class AppointmentsService {
     });
 
     if (status === "CHECKED_IN" && appointment.doctorUserId) {
-      this.notifications.create(tenantId, {
-        userId: appointment.doctorUserId,
-        title: "Patient Checked In",
-        body: `Patient has arrived for their appointment (Token #${appointment.tokenNumber})`,
-        type: "APPOINTMENT_CHECKED_IN",
-        referenceType: "Appointment",
-        referenceId: id,
-      }).catch(() => {});
+      this.notifications
+        .create(tenantId, {
+          userId: appointment.doctorUserId,
+          title: "Patient Checked In",
+          body: `Patient has arrived for their appointment (Token #${appointment.tokenNumber})`,
+          type: "APPOINTMENT_CHECKED_IN",
+          referenceType: "Appointment",
+          referenceId: id,
+        })
+        .catch(() => {});
     }
 
     return result;
@@ -446,7 +453,12 @@ export class AppointmentsService {
     if (!appointment) throw new NotFoundException("Appointment not found");
 
     const { status, ...rest } = dto;
-    const { tenantId: _t, patientId: _p, doctorId: _doc, ...allowed } = rest as any;
+    const {
+      tenantId: _t,
+      patientId: _p,
+      doctorId: _doc,
+      ...allowed
+    } = rest as any;
 
     const result = await this.prisma.appointment.update({
       where: { id },
@@ -532,14 +544,16 @@ export class AppointmentsService {
     });
 
     if (appointment.doctorUserId) {
-      this.notifications.create(tenantId, {
-        userId: appointment.doctorUserId,
-        title: "Appointment Cancelled",
-        body: `Appointment has been cancelled. Reason: ${reason || "N/A"}`,
-        type: "APPOINTMENT_CANCELLED",
-        referenceType: "Appointment",
-        referenceId: id,
-      }).catch(() => {});
+      this.notifications
+        .create(tenantId, {
+          userId: appointment.doctorUserId,
+          title: "Appointment Cancelled",
+          body: `Appointment has been cancelled. Reason: ${reason || "N/A"}`,
+          type: "APPOINTMENT_CANCELLED",
+          referenceType: "Appointment",
+          referenceId: id,
+        })
+        .catch(() => {});
     }
 
     return result;

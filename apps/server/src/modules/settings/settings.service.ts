@@ -72,9 +72,7 @@ export class SettingsService {
       }),
     ]);
 
-    const effective = new Map(
-      tenantFlags.map((f) => [f.flag.key, f.enabled]),
-    );
+    const effective = new Map(tenantFlags.map((f) => [f.flag.key, f.enabled]));
 
     return flags.map((f) => ({
       key: f.key,

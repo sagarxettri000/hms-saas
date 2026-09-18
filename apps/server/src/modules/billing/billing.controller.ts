@@ -133,7 +133,11 @@ export class BillingController {
   @Permissions(PermissionAction.EDIT)
   @ApiOperation({ summary: "Log receipt reprint" })
   reprintInvoice(@Param("id") id: string, @Req() req: any) {
-    return this.billingService.reprintInvoice(req.user.tenantId, id, req.user.id);
+    return this.billingService.reprintInvoice(
+      req.user.tenantId,
+      id,
+      req.user.id,
+    );
   }
 
   @Get("invoices/:id/pdf")
@@ -145,7 +149,9 @@ export class BillingController {
     @Res() res: any,
   ) {
     const { buffer, filename } = await this.billingService.generateInvoicePdf(
-      req.user.tenantId, id, req.user.id,
+      req.user.tenantId,
+      id,
+      req.user.id,
     );
     res.set({
       "Content-Type": "application/pdf",
@@ -164,7 +170,10 @@ export class BillingController {
     @Res() res: any,
   ) {
     const { buffer, filename } = await this.billingService.generateReceiptPdf(
-      req.user.tenantId, id, paymentId, req.user.id,
+      req.user.tenantId,
+      id,
+      paymentId,
+      req.user.id,
     );
     res.set({
       "Content-Type": "application/pdf",
@@ -232,10 +241,22 @@ export class BillingController {
   @ApiOperation({ summary: "Refund deposit balance" })
   refundDeposit(
     @Param("id") id: string,
-    @Body() body: { amount: number; reason: string; refundMethod?: string; referenceNumber?: string; notes?: string },
+    @Body()
+    body: {
+      amount: number;
+      reason: string;
+      refundMethod?: string;
+      referenceNumber?: string;
+      notes?: string;
+    },
     @Req() req: any,
   ) {
-    return this.billingService.refundDeposit(req.user.tenantId, id, body, req.user.id);
+    return this.billingService.refundDeposit(
+      req.user.tenantId,
+      id,
+      body,
+      req.user.id,
+    );
   }
 
   @Get("deposits")
@@ -356,7 +377,11 @@ export class BillingController {
   @Permissions(PermissionAction.CONFIGURE)
   @ApiOperation({ summary: "Create billing scheme" })
   createBillingScheme(@Body() body: any, @Req() req: any) {
-    return this.billingService.createBillingScheme(req.user.tenantId, body, req.user.id);
+    return this.billingService.createBillingScheme(
+      req.user.tenantId,
+      body,
+      req.user.id,
+    );
   }
 
   @Get("schemes/:id")
@@ -374,14 +399,23 @@ export class BillingController {
     @Body() body: any,
     @Req() req: any,
   ) {
-    return this.billingService.updateBillingScheme(req.user.tenantId, id, body, req.user.id);
+    return this.billingService.updateBillingScheme(
+      req.user.tenantId,
+      id,
+      body,
+      req.user.id,
+    );
   }
 
   @Delete("schemes/:id")
   @Permissions(PermissionAction.CONFIGURE)
   @ApiOperation({ summary: "Delete billing scheme" })
   removeBillingScheme(@Param("id") id: string, @Req() req: any) {
-    return this.billingService.removeBillingScheme(req.user.tenantId, id, req.user.id);
+    return this.billingService.removeBillingScheme(
+      req.user.tenantId,
+      id,
+      req.user.id,
+    );
   }
 
   // ---------- Billing Settings ----------
@@ -532,14 +566,23 @@ export class BillingController {
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Get or create draft discharge bill for admission" })
   getDraftBill(@Param("admissionId") admissionId: string, @Req() req: any) {
-    return this.dischargeBillingService.getDraftBill(req.user.tenantId, admissionId);
+    return this.dischargeBillingService.getDraftBill(
+      req.user.tenantId,
+      admissionId,
+    );
   }
 
   @Post("discharge/bills")
   @Permissions(PermissionAction.CREATE)
-  @ApiOperation({ summary: "Create discharge bill draft with auto-collected charges" })
+  @ApiOperation({
+    summary: "Create discharge bill draft with auto-collected charges",
+  })
   createDischargeBill(@Body() dto: any, @Req() req: any) {
-    return this.dischargeBillingService.createDraftBill(req.user.tenantId, dto, req.user.id);
+    return this.dischargeBillingService.createDraftBill(
+      req.user.tenantId,
+      dto,
+      req.user.id,
+    );
   }
 
   @Get("discharge/bills/:id")
@@ -553,41 +596,88 @@ export class BillingController {
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Add manual charge to draft bill" })
   addManualCharge(@Param("id") id: string, @Body() dto: any, @Req() req: any) {
-    return this.dischargeBillingService.addManualCharge(req.user.tenantId, id, dto, req.user.id);
+    return this.dischargeBillingService.addManualCharge(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user.id,
+    );
   }
 
   @Delete("discharge/bills/:id/charges/:detailId")
   @Permissions(PermissionAction.EDIT)
   @ApiOperation({ summary: "Remove charge from draft bill" })
-  removeCharge(@Param("id") id: string, @Param("detailId") detailId: string, @Req() req: any) {
-    return this.dischargeBillingService.removeCharge(req.user.tenantId, id, detailId, req.user.id);
+  removeCharge(
+    @Param("id") id: string,
+    @Param("detailId") detailId: string,
+    @Req() req: any,
+  ) {
+    return this.dischargeBillingService.removeCharge(
+      req.user.tenantId,
+      id,
+      detailId,
+      req.user.id,
+    );
   }
 
   @Patch("discharge/bills/:id/discount")
   @Permissions(PermissionAction.DISCOUNT)
   @ApiOperation({ summary: "Apply discount to draft discharge bill" })
-  applyDischargeDiscount(@Param("id") id: string, @Body() body: { amount: number; reason: string }, @Req() req: any) {
-    return this.dischargeBillingService.applyDiscount(req.user.tenantId, id, body, req.user.id);
+  applyDischargeDiscount(
+    @Param("id") id: string,
+    @Body() body: { amount: number; reason: string },
+    @Req() req: any,
+  ) {
+    return this.dischargeBillingService.applyDiscount(
+      req.user.tenantId,
+      id,
+      body,
+      req.user.id,
+    );
   }
 
   @Post("discharge/bills/:id/finalize")
   @Permissions(PermissionAction.APPROVE)
-  @ApiOperation({ summary: "Finalize discharge bill (server-side calculation, lock)" })
+  @ApiOperation({
+    summary: "Finalize discharge bill (server-side calculation, lock)",
+  })
   finalizeDischargeBill(@Param("id") id: string, @Req() req: any) {
-    return this.dischargeBillingService.finalizeBill(req.user.tenantId, id, req.user.id);
+    return this.dischargeBillingService.finalizeBill(
+      req.user.tenantId,
+      id,
+      req.user.id,
+    );
   }
 
   @Patch("discharge/bills/:id/cancel")
   @Permissions(PermissionAction.EDIT)
   @ApiOperation({ summary: "Cancel draft discharge bill" })
-  cancelDischargeBill(@Param("id") id: string, @Body() body: { reason: string }, @Req() req: any) {
-    return this.dischargeBillingService.cancelBill(req.user.tenantId, id, body.reason, req.user.id);
+  cancelDischargeBill(
+    @Param("id") id: string,
+    @Body() body: { reason: string },
+    @Req() req: any,
+  ) {
+    return this.dischargeBillingService.cancelBill(
+      req.user.tenantId,
+      id,
+      body.reason,
+      req.user.id,
+    );
   }
 
   @Post("discharge/bills/:id/payments")
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Record payment against discharge bill" })
-  recordDischargePayment(@Param("id") id: string, @Body() dto: any, @Req() req: any) {
-    return this.dischargeBillingService.recordPayment(req.user.tenantId, id, dto, req.user.id);
+  recordDischargePayment(
+    @Param("id") id: string,
+    @Body() dto: any,
+    @Req() req: any,
+  ) {
+    return this.dischargeBillingService.recordPayment(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user.id,
+    );
   }
 }

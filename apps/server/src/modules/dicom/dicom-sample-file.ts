@@ -27,7 +27,9 @@ const SECONDARY_CAPTURE = "1.2.840.10008.5.1.4.1.1.7";
 const IMPLICIT_LE = "1.2.840.10008.1.2";
 
 function padEven(buf: Buffer): Buffer {
-  return buf.length % 2 === 0 ? buf : Buffer.concat([buf, Buffer.alloc(1, 0x20)]);
+  return buf.length % 2 === 0
+    ? buf
+    : Buffer.concat([buf, Buffer.alloc(1, 0x20)]);
 }
 
 function padNullEven(buf: Buffer): Buffer {
@@ -47,7 +49,12 @@ function implicitTag(group: number, element: number, value: Buffer): Buffer {
   return Buffer.concat([tag, len, value]);
 }
 
-function explicitTag(group: number, element: number, vr: string, value: Buffer): Buffer {
+function explicitTag(
+  group: number,
+  element: number,
+  vr: string,
+  value: Buffer,
+): Buffer {
   const tag = Buffer.alloc(4);
   tag.writeUInt16LE(group, 0);
   tag.writeUInt16LE(element, 2);
@@ -73,11 +80,26 @@ export function buildDicomP10File(opts: SampleDicomOptions = {}): Buffer {
   };
 
   const metaElements: Buffer[] = [];
-  metaElements.push(explicitTag(0x0002, 0x0001, "OB", Buffer.from([0x00, 0x01])));
-  metaElements.push(explicitTag(0x0002, 0x0002, "UI", padNullEven(ascii(SECONDARY_CAPTURE))));
-  metaElements.push(explicitTag(0x0002, 0x0003, "UI", padNullEven(ascii(o.sopInstanceUid!))));
-  metaElements.push(explicitTag(0x0002, 0x0010, "UI", padNullEven(ascii(IMPLICIT_LE))));
-  metaElements.push(explicitTag(0x0002, 0x0012, "UI", padNullEven(ascii("1.2.826.0.1.3680043.9.9999.1"))));
+  metaElements.push(
+    explicitTag(0x0002, 0x0001, "OB", Buffer.from([0x00, 0x01])),
+  );
+  metaElements.push(
+    explicitTag(0x0002, 0x0002, "UI", padNullEven(ascii(SECONDARY_CAPTURE))),
+  );
+  metaElements.push(
+    explicitTag(0x0002, 0x0003, "UI", padNullEven(ascii(o.sopInstanceUid!))),
+  );
+  metaElements.push(
+    explicitTag(0x0002, 0x0010, "UI", padNullEven(ascii(IMPLICIT_LE))),
+  );
+  metaElements.push(
+    explicitTag(
+      0x0002,
+      0x0012,
+      "UI",
+      padNullEven(ascii("1.2.826.0.1.3680043.9.9999.1")),
+    ),
+  );
 
   const metaBody = Buffer.concat(metaElements);
   const groupLength = Buffer.alloc(4);
@@ -129,7 +151,13 @@ export function parseSampleFile(file: Buffer) {
   const dataSet = dicomParser.parseDicom(file);
   return {
     dataSet,
-    text: (group: number, element: number) => dataSet.string(`x${group.toString(16).padStart(4, "0")}${element.toString(16).padStart(4, "0")}`),
-    uInt16: (group: number, element: number) => dataSet.uint16(`x${group.toString(16).padStart(4, "0")}${element.toString(16).padStart(4, "0")}`),
+    text: (group: number, element: number) =>
+      dataSet.string(
+        `x${group.toString(16).padStart(4, "0")}${element.toString(16).padStart(4, "0")}`,
+      ),
+    uInt16: (group: number, element: number) =>
+      dataSet.uint16(
+        `x${group.toString(16).padStart(4, "0")}${element.toString(16).padStart(4, "0")}`,
+      ),
   };
 }

@@ -36,7 +36,10 @@ export class QualityChecklistsController {
   @Patch("toggle")
   @Permissions(PermissionAction.EDIT)
   @ApiOperation({ summary: "Toggle a checklist item checked state" })
-  setItem(@Body() body: { category?: string; item?: string; checked?: boolean }, @Req() req: any) {
+  setItem(
+    @Body() body: { category?: string; item?: string; checked?: boolean },
+    @Req() req: any,
+  ) {
     return this.service.setItem(req.user.tenantId, body, req.user.id);
   }
 }

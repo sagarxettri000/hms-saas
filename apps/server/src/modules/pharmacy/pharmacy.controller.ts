@@ -57,7 +57,10 @@ export class PharmacyController {
   @Post("medicines/import")
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Import medicines from CSV rows" })
-  importMedicines(@Body() body: { rows: CreateMedicineDto[] }, @Req() req: any) {
+  importMedicines(
+    @Body() body: { rows: CreateMedicineDto[] },
+    @Req() req: any,
+  ) {
     return this.pharmacyService.importMedicines(req.user.tenantId, body.rows);
   }
 
@@ -182,11 +185,7 @@ export class PharmacyController {
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Dispense medicines to patient (stock + billing)" })
   dispense(@Body() dto: DispenseDto, @Req() req: any) {
-    return this.pharmacyService.dispense(
-      req.user.tenantId,
-      dto,
-      req.user.id,
-    );
+    return this.pharmacyService.dispense(req.user.tenantId, dto, req.user.id);
   }
 
   @Get("sales")
@@ -257,8 +256,10 @@ export class PharmacyController {
     @Req() req: any,
   ) {
     const value = {
-      vatNumber: typeof body?.vatNumber === "string" ? body.vatNumber.trim() : undefined,
-      panNumber: typeof body?.panNumber === "string" ? body.panNumber.trim() : undefined,
+      vatNumber:
+        typeof body?.vatNumber === "string" ? body.vatNumber.trim() : undefined,
+      panNumber:
+        typeof body?.panNumber === "string" ? body.panNumber.trim() : undefined,
     };
     return this.pharmacyService.setBillingSettings(
       req.user.tenantId,

@@ -6,9 +6,13 @@ import {
 import { BillingService } from "./billing.service";
 
 function makeService(prisma: any): BillingService {
-  return new BillingService(prisma, { create: jest.fn().mockResolvedValue({}) } as any, {
-    getBillingSettings: jest.fn().mockResolvedValue({}),
-  } as any);
+  return new BillingService(
+    prisma,
+    { create: jest.fn().mockResolvedValue({}) } as any,
+    {
+      getBillingSettings: jest.fn().mockResolvedValue({}),
+    } as any,
+  );
 }
 
 describe("BillingService", () => {
@@ -349,9 +353,7 @@ describe("BillingService", () => {
     it("applies scheme discount to the total", async () => {
       const prisma = {
         patient: {
-          findFirst: jest
-            .fn()
-            .mockResolvedValue({ id: "p1", tenantId: "t1" }),
+          findFirst: jest.fn().mockResolvedValue({ id: "p1", tenantId: "t1" }),
         },
         billingService: {
           findMany: jest.fn().mockResolvedValue([]),
@@ -383,13 +385,15 @@ describe("BillingService", () => {
         }),
       };
       const service = makeService(prisma as any);
-      jest.spyOn(service as any, "generateInvoiceNumber").mockResolvedValue(
-        "INV-0001",
-      );
-      jest.spyOn(service as any, "addCreditBalance").mockResolvedValue(undefined);
-      jest.spyOn(service as any, "recordFinancialTransaction").mockResolvedValue(
-        undefined,
-      );
+      jest
+        .spyOn(service as any, "generateInvoiceNumber")
+        .mockResolvedValue("INV-0001");
+      jest
+        .spyOn(service as any, "addCreditBalance")
+        .mockResolvedValue(undefined);
+      jest
+        .spyOn(service as any, "recordFinancialTransaction")
+        .mockResolvedValue(undefined);
       jest.spyOn(service as any, "getBillingSettings").mockResolvedValue({
         taxConfig: { defaultTaxPercent: 0 },
         rounding: { enabled: false },
@@ -429,7 +433,9 @@ describe("BillingService", () => {
       $transaction: jest.fn().mockImplementation(async (fn) => {
         const tx = {
           deposit: { update: jest.fn().mockResolvedValue(undefined) },
-          depositTransaction: { create: jest.fn().mockResolvedValue(undefined) },
+          depositTransaction: {
+            create: jest.fn().mockResolvedValue(undefined),
+          },
           refund: {
             create: jest
               .fn()
@@ -441,9 +447,9 @@ describe("BillingService", () => {
     };
     const service = makeService(prisma as any);
     jest.spyOn(service as any, "generateNumber").mockResolvedValue("REF-0001");
-    jest.spyOn(service as any, "recordFinancialTransaction").mockResolvedValue(
-      undefined,
-    );
+    jest
+      .spyOn(service as any, "recordFinancialTransaction")
+      .mockResolvedValue(undefined);
 
     beforeEach(() => jest.clearAllMocks());
 
@@ -489,9 +495,7 @@ describe("BillingService", () => {
           findFirst: jest
             .fn()
             .mockResolvedValue({ id: "i1", invoiceNumber: "INV-1" }),
-          update: jest
-            .fn()
-            .mockResolvedValue({ id: "i1", printCount: 3 }),
+          update: jest.fn().mockResolvedValue({ id: "i1", printCount: 3 }),
         },
       };
       const service = makeService(prisma as any);
@@ -508,7 +512,10 @@ describe("BillingService", () => {
 
     it("throws when the invoice is not found", async () => {
       const prisma = {
-        invoice: { findFirst: jest.fn().mockResolvedValue(null), update: jest.fn() },
+        invoice: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          update: jest.fn(),
+        },
       };
       const service = makeService(prisma as any);
       await expect(service.reprintInvoice("t1", "i1")).rejects.toThrow(
@@ -548,7 +555,12 @@ describe("BillingService", () => {
       });
       jest.spyOn(service as any, "logAudit").mockResolvedValue(undefined);
 
-      const result = await service.applyDiscount("t1", "i1", { amount: 100, reason: "loyalty" }, "u1");
+      const result = await service.applyDiscount(
+        "t1",
+        "i1",
+        { amount: 100, reason: "loyalty" },
+        "u1",
+      );
       expect(result.discountStatus).toBe("APPROVED");
       expect(result.totalAmount).toBe(900);
     });
@@ -561,7 +573,12 @@ describe("BillingService", () => {
       });
       jest.spyOn(service as any, "logAudit").mockResolvedValue(undefined);
 
-      const result = await service.applyDiscount("t1", "i1", { amount: 300, reason: "big" }, "u1");
+      const result = await service.applyDiscount(
+        "t1",
+        "i1",
+        { amount: 300, reason: "big" },
+        "u1",
+      );
       expect(result.discountStatus).toBe("PENDING_APPROVAL");
       expect(result.discountAmount).toBe(300);
       expect((result as any).message).toContain("requires approval");
@@ -604,7 +621,12 @@ describe("BillingService", () => {
       const service = makeService(prisma as any);
       jest.spyOn(service as any, "logAudit").mockResolvedValue(undefined);
 
-      const result = await service.approveDiscount("t1", "i1", { approve: true }, "approver");
+      const result = await service.approveDiscount(
+        "t1",
+        "i1",
+        { approve: true },
+        "approver",
+      );
       expect(result.discountStatus).toBe("APPROVED");
       expect(result.totalAmount).toBe(700);
       expect(result.dueAmount).toBe(700);
@@ -632,7 +654,12 @@ describe("BillingService", () => {
       const service = makeService(prisma as any);
       jest.spyOn(service as any, "logAudit").mockResolvedValue(undefined);
 
-      const result = await service.approveDiscount("t1", "i1", { approve: false, reason: "not allowed" }, "approver");
+      const result = await service.approveDiscount(
+        "t1",
+        "i1",
+        { approve: false, reason: "not allowed" },
+        "approver",
+      );
       expect(result.discountStatus).toBe("REJECTED");
       expect(result.discountRejectReason).toBe("not allowed");
     });
@@ -683,10 +710,20 @@ describe("BillingService", () => {
     it("applies a deposit and settles the invoice", async () => {
       const { prisma, tx } = makePrisma();
       const service = makeService(prisma as any);
-      jest.spyOn(service as any, "generateNumber").mockResolvedValue("PAY-0001");
-      jest.spyOn(service as any, "recordFinancialTransaction").mockResolvedValue(undefined);
+      jest
+        .spyOn(service as any, "generateNumber")
+        .mockResolvedValue("PAY-0001");
+      jest
+        .spyOn(service as any, "recordFinancialTransaction")
+        .mockResolvedValue(undefined);
 
-      const payment = await service.applyDepositToInvoice("t1", "d1", "i1", 100, "u1");
+      const payment = await service.applyDepositToInvoice(
+        "t1",
+        "d1",
+        "i1",
+        100,
+        "u1",
+      );
       expect(payment.paymentType).toBe("DEPOSIT");
       expect(payment.amount).toBe(100);
       expect(tx.deposit.updateMany).toHaveBeenCalledWith(
@@ -700,7 +737,9 @@ describe("BillingService", () => {
       const { prisma, tx } = makePrisma();
       tx.deposit.updateMany.mockResolvedValue({ count: 0 });
       const service = makeService(prisma as any);
-      jest.spyOn(service as any, "generateNumber").mockResolvedValue("PAY-0001");
+      jest
+        .spyOn(service as any, "generateNumber")
+        .mockResolvedValue("PAY-0001");
 
       await expect(
         service.applyDepositToInvoice("t1", "d1", "i1", 100, "u1"),
@@ -737,9 +776,9 @@ describe("BillingService", () => {
     function makePrisma(hasClosing: boolean) {
       const prisma = {
         invoice: {
-          findMany: jest.fn().mockResolvedValue([
-            { totalAmount: 1000, status: "PAID" },
-          ]),
+          findMany: jest
+            .fn()
+            .mockResolvedValue([{ totalAmount: 1000, status: "PAID" }]),
         },
         payment: {
           findMany: jest
@@ -762,9 +801,11 @@ describe("BillingService", () => {
             .mockResolvedValue(
               hasClosing ? { id: "c1", status: "CLOSED" } : null,
             ),
-          upsert: jest
-            .fn()
-            .mockImplementation(({ create, update }) => ({ ...create, ...update, id: "c1" })),
+          upsert: jest.fn().mockImplementation(({ create, update }) => ({
+            ...create,
+            ...update,
+            id: "c1",
+          })),
         },
       };
       return prisma;
@@ -773,7 +814,9 @@ describe("BillingService", () => {
     it("closes a day for the first time", async () => {
       const prisma = makePrisma(false);
       const service = makeService(prisma as any);
-      (service as any).normalizeDate = jest.fn((d: string) => new Date(d || "2026-08-15"));
+      (service as any).normalizeDate = jest.fn(
+        (d: string) => new Date(d || "2026-08-15"),
+      );
       jest.spyOn(service as any, "logAudit").mockResolvedValue(undefined);
 
       const result = await service.closeDay("t1", { actualCash: 550 }, "u1");
@@ -785,7 +828,9 @@ describe("BillingService", () => {
     it("rejects re-closing without reconcile flag", async () => {
       const prisma = makePrisma(true);
       const service = makeService(prisma as any);
-      (service as any).normalizeDate = jest.fn((d: string) => new Date(d || "2026-08-15"));
+      (service as any).normalizeDate = jest.fn(
+        (d: string) => new Date(d || "2026-08-15"),
+      );
 
       await expect(
         service.closeDay("t1", { actualCash: 600 }, "u1"),
@@ -795,10 +840,16 @@ describe("BillingService", () => {
     it("allows reconciliation with the reconcile flag", async () => {
       const prisma = makePrisma(true);
       const service = makeService(prisma as any);
-      (service as any).normalizeDate = jest.fn((d: string) => new Date(d || "2026-08-15"));
+      (service as any).normalizeDate = jest.fn(
+        (d: string) => new Date(d || "2026-08-15"),
+      );
       jest.spyOn(service as any, "logAudit").mockResolvedValue(undefined);
 
-      const result = await service.closeDay("t1", { actualCash: 600, reconcile: true }, "u1");
+      const result = await service.closeDay(
+        "t1",
+        { actualCash: 600, reconcile: true },
+        "u1",
+      );
       expect(result.isReconciliation).toBe(true);
       expect(result.difference).toBe(50);
     });
@@ -806,7 +857,9 @@ describe("BillingService", () => {
     it("requires actual cash for reconciliation", async () => {
       const prisma = makePrisma(true);
       const service = makeService(prisma as any);
-      (service as any).normalizeDate = jest.fn((d: string) => new Date(d || "2026-08-15"));
+      (service as any).normalizeDate = jest.fn(
+        (d: string) => new Date(d || "2026-08-15"),
+      );
 
       await expect(
         service.closeDay("t1", { reconcile: true }, "u1"),
@@ -820,10 +873,20 @@ describe("BillingService", () => {
     it("gives non-pharmacy documents only hospital values, never Pharmacy ones", async () => {
       const prisma = {} as any;
       const pharmacy = {
-        getBillingSettings: jest.fn().mockResolvedValue({ panNumber: "PH-PAN", vatNumber: "PH-VAT" }),
+        getBillingSettings: jest
+          .fn()
+          .mockResolvedValue({ panNumber: "PH-PAN", vatNumber: "PH-VAT" }),
       };
-      const service = new BillingService(prisma, { create: jest.fn() } as any, pharmacy as any);
-      const block = await (service as any).taxRegistrationBlock("t1", "OPD", hospital);
+      const service = new BillingService(
+        prisma,
+        { create: jest.fn() } as any,
+        pharmacy as any,
+      );
+      const block = await (service as any).taxRegistrationBlock(
+        "t1",
+        "OPD",
+        hospital,
+      );
       expect(block).toEqual({ panNumber: "HOSP-PAN", vatNumber: "HOSP-VAT" });
       expect(pharmacy.getBillingSettings).not.toHaveBeenCalled();
     });
@@ -831,21 +894,37 @@ describe("BillingService", () => {
     it("uses Pharmacy-scoped values for pharmacy documents", async () => {
       const prisma = {} as any;
       const pharmacy = {
-        getBillingSettings: jest.fn().mockResolvedValue({ panNumber: "PH-PAN", vatNumber: "PH-VAT" }),
+        getBillingSettings: jest
+          .fn()
+          .mockResolvedValue({ panNumber: "PH-PAN", vatNumber: "PH-VAT" }),
       };
-      const service = new BillingService(prisma, { create: jest.fn() } as any, pharmacy as any);
-      const block = await (service as any).taxRegistrationBlock("t1", "PHARMACY", hospital);
+      const service = new BillingService(
+        prisma,
+        { create: jest.fn() } as any,
+        pharmacy as any,
+      );
+      const block = await (service as any).taxRegistrationBlock(
+        "t1",
+        "PHARMACY",
+        hospital,
+      );
       expect(block).toEqual({ panNumber: "PH-PAN", vatNumber: "PH-VAT" });
     });
 
     it("falls back to hospital values when Pharmacy numbers are unset", async () => {
       const prisma = {} as any;
       const pharmacy = { getBillingSettings: jest.fn().mockResolvedValue({}) };
-      const service = new BillingService(prisma, { create: jest.fn() } as any, pharmacy as any);
-      const block = await (service as any).taxRegistrationBlock("t1", "PHARMACY", hospital);
+      const service = new BillingService(
+        prisma,
+        { create: jest.fn() } as any,
+        pharmacy as any,
+      );
+      const block = await (service as any).taxRegistrationBlock(
+        "t1",
+        "PHARMACY",
+        hospital,
+      );
       expect(block).toEqual({ panNumber: "HOSP-PAN", vatNumber: "HOSP-VAT" });
     });
   });
 });
-
-

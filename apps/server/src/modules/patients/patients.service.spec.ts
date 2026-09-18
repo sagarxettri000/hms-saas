@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException, BadRequestException } from "@nestjs/common";
+import {
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
 import { PatientsService, CreatePatientDto } from "./patients.service";
 
 function makeService(prisma: any): PatientsService {
@@ -26,7 +30,9 @@ describe("PatientsService", () => {
       jest.clearAllMocks();
       // mock findDuplicates to return empty
       jest.spyOn(service as any, "findDuplicates").mockResolvedValue([]);
-      jest.spyOn(service as any, "generateMrn").mockResolvedValue("NBM-202501-0001");
+      jest
+        .spyOn(service as any, "generateMrn")
+        .mockResolvedValue("NBM-202501-0001");
       jest.spyOn(service as any, "generateUid").mockReturnValue("UID-TEST123");
       jest.spyOn(service as any, "logAudit").mockResolvedValue(undefined);
     });
@@ -38,14 +44,22 @@ describe("PatientsService", () => {
         dateOfBirth: new Date("1990-01-01"),
         gender: "MALE",
       };
-      const result = await service.create("tenant-1", dto, "user-1") as any;
+      const result = (await service.create("tenant-1", dto, "user-1")) as any;
       expect(result.firstName).toBe("John");
       expect(result.lastName).toBe("Doe");
       expect(result.mrn).toBe("NBM-202501-0001");
     });
 
     it("detects duplicate by mobile", async () => {
-      jest.spyOn(service as any, "findDuplicates").mockResolvedValue([{ id: "p1", mrn: "NBM-001", firstName: "John", lastName: "Doe", mobile: "9876543210" }]);
+      jest.spyOn(service as any, "findDuplicates").mockResolvedValue([
+        {
+          id: "p1",
+          mrn: "NBM-001",
+          firstName: "John",
+          lastName: "Doe",
+          mobile: "9876543210",
+        },
+      ]);
       const dto: CreatePatientDto = {
         firstName: "John",
         lastName: "Doe",
@@ -57,7 +71,15 @@ describe("PatientsService", () => {
     });
 
     it("detects duplicate by nationalId", async () => {
-      jest.spyOn(service as any, "findDuplicates").mockResolvedValue([{ id: "p1", mrn: "NBM-001", firstName: "Jane", lastName: "Doe", nationalId: "NAT123" }]);
+      jest.spyOn(service as any, "findDuplicates").mockResolvedValue([
+        {
+          id: "p1",
+          mrn: "NBM-001",
+          firstName: "Jane",
+          lastName: "Doe",
+          nationalId: "NAT123",
+        },
+      ]);
       const dto: CreatePatientDto = {
         firstName: "Jane",
         lastName: "Doe",
@@ -77,7 +99,10 @@ describe("PatientsService", () => {
       await service.create("tenant-1", dto, "user-1");
       expect(prisma.patientAllergy.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ allergen: "Penicillin", severity: "HIGH" }),
+          data: expect.objectContaining({
+            allergen: "Penicillin",
+            severity: "HIGH",
+          }),
         }),
       );
       expect(prisma.patientCondition.create).toHaveBeenCalledWith(
@@ -92,7 +117,13 @@ describe("PatientsService", () => {
     const prisma = {
       patient: {
         findMany: jest.fn().mockResolvedValue([
-          { id: "p1", firstName: "John", lastName: "Doe", mrn: "NBM-001", _count: { appointments: 2 } },
+          {
+            id: "p1",
+            firstName: "John",
+            lastName: "Doe",
+            mrn: "NBM-001",
+            _count: { appointments: 2 },
+          },
         ]),
         count: jest.fn().mockResolvedValue(1),
       },
@@ -117,7 +148,9 @@ describe("PatientsService", () => {
         expect.objectContaining({
           where: expect.objectContaining({
             OR: expect.arrayContaining([
-              expect.objectContaining({ firstName: { contains: "John", mode: "insensitive" } }),
+              expect.objectContaining({
+                firstName: { contains: "John", mode: "insensitive" },
+              }),
             ]),
           }),
         }),
@@ -147,7 +180,12 @@ describe("PatientsService", () => {
     });
 
     it("returns patient with relations", async () => {
-      const mockPatient = { id: "p1", firstName: "John", allergies: [], conditions: [] };
+      const mockPatient = {
+        id: "p1",
+        firstName: "John",
+        allergies: [],
+        conditions: [],
+      };
       prisma.patient.findFirst.mockResolvedValue(mockPatient);
       const result = await service.findById("tenant-1", "p1");
       expect(result).toEqual(mockPatient);
@@ -155,7 +193,9 @@ describe("PatientsService", () => {
 
     it("throws NotFoundException for non-existent patient", async () => {
       prisma.patient.findFirst.mockResolvedValue(null);
-      await expect(service.findById("tenant-1", "nonexistent")).rejects.toThrow(NotFoundException);
+      await expect(service.findById("tenant-1", "nonexistent")).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -179,19 +219,34 @@ describe("PatientsService", () => {
     });
 
     it("updates patient fields", async () => {
-      const result = await service.update("tenant-1", "p1", { firstName: "Updated" }, "user-1");
+      const result = await service.update(
+        "tenant-1",
+        "p1",
+        { firstName: "Updated" },
+        "user-1",
+      );
       expect(result.firstName).toBe("Updated");
       expect(prisma.patient.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: "p1" },
-          data: expect.objectContaining({ firstName: "Updated", updatedBy: "user-1" }),
+          data: expect.objectContaining({
+            firstName: "Updated",
+            updatedBy: "user-1",
+          }),
         }),
       );
     });
 
     it("replaces allergies when provided", async () => {
-      await service.update("tenant-1", "p1", { allergies: [{ allergen: "Latex" }] }, "user-1");
-      expect(prisma.patientAllergy.deleteMany).toHaveBeenCalledWith({ where: { patientId: "p1" } });
+      await service.update(
+        "tenant-1",
+        "p1",
+        { allergies: [{ allergen: "Latex" }] },
+        "user-1",
+      );
+      expect(prisma.patientAllergy.deleteMany).toHaveBeenCalledWith({
+        where: { patientId: "p1" },
+      });
       expect(prisma.patientAllergy.create).toHaveBeenCalled();
     });
   });

@@ -85,9 +85,7 @@ describe("TenantGuard (tenant isolation)", () => {
       tenantId: "tenant-a",
       role: "HOSPITAL_ADMIN",
     });
-    await expect(guard.canActivate(ctx)).rejects.toThrow(
-      "Tenant is SUSPENDED",
-    );
+    await expect(guard.canActivate(ctx)).rejects.toThrow("Tenant is SUSPENDED");
   });
 
   it("allows TRIAL tenants", async () => {
@@ -119,7 +117,11 @@ describe("TenantGuard (tenant isolation)", () => {
       id: "tenant-x",
       status: "ACTIVE",
     });
-    const ctx = makeContext({ id: "sa", tenantId: null, role: "PLATFORM_SUPER_ADMIN" });
+    const ctx = makeContext({
+      id: "sa",
+      tenantId: null,
+      role: "PLATFORM_SUPER_ADMIN",
+    });
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
     expect(prisma.tenant.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({

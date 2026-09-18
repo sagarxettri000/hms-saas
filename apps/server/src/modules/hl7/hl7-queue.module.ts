@@ -1,6 +1,6 @@
-import { Module, Global } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Module, Global } from "@nestjs/common";
+import { BullModule } from "@nestjs/bullmq";
+import { ConfigModule, ConfigService } from "@nestjs/config";
 
 @Global()
 @Module({
@@ -9,10 +9,10 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         connection: {
-          host: configService.get('REDIS_HOST', 'localhost'),
-          port: configService.get('REDIS_PORT', 6379),
-          password: configService.get('REDIS_PASSWORD') || undefined,
-          db: configService.get('REDIS_DB', 0),
+          host: configService.get("REDIS_HOST", "localhost"),
+          port: configService.get("REDIS_PORT", 6379),
+          password: configService.get("REDIS_PASSWORD") || undefined,
+          db: configService.get("REDIS_DB", 0),
           maxRetriesPerRequest: 3,
           enableReadyCheck: true,
           lazyConnect: false,
@@ -22,7 +22,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
           removeOnFail: 50,
           attempts: 3,
           backoff: {
-            type: 'exponential',
+            type: "exponential",
             delay: 5000,
           },
         },
@@ -30,9 +30,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       inject: [ConfigService],
     }),
     BullModule.registerQueue(
-      { name: 'hl7-ingest' },
-      { name: 'hl7-retry' },
-      { name: 'hl7-dead-letter' },
+      { name: "hl7-ingest" },
+      { name: "hl7-retry" },
+      { name: "hl7-dead-letter" },
     ),
   ],
   exports: [BullModule],

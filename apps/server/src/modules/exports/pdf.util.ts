@@ -1,5 +1,8 @@
 function escapeText(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
 }
 
 function pdfString(value: string): string {
@@ -49,7 +52,9 @@ export function buildPdf(options: {
   const usableWidth = tableWidth;
   const colWidths = options.columns.map((c, i) => {
     const total = options.columns.reduce((s, col) => s + col.width, 0);
-    return total > 0 ? (c.width / total) * usableWidth : usableWidth / options.columns.length;
+    return total > 0
+      ? (c.width / total) * usableWidth
+      : usableWidth / options.columns.length;
   });
 
   const pageHeightContent = () => tableTop - 40;
@@ -151,7 +156,9 @@ export function buildPdf(options: {
     `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>`,
   );
   const stream = content.join("\n");
-  addObject(`<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`);
+  addObject(
+    `<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`,
+  );
   addObject("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
 
   const xrefOffset = Buffer.byteLength(pdf, "latin1");

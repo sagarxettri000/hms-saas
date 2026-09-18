@@ -255,9 +255,7 @@ export class LaboratoryService {
     if (params.status) where.status = params.status;
     const q = params.query || params.search;
     if (q) {
-      where.OR = [
-        { orderNumber: { contains: q, mode: "insensitive" } },
-      ];
+      where.OR = [{ orderNumber: { contains: q, mode: "insensitive" } }];
     }
     if (params.from || params.to) {
       where.orderedAt = {};
@@ -368,9 +366,7 @@ export class LaboratoryService {
             status: "COLLECTED",
           },
         })
-        .catch((err) =>
-          this.logger.warn("labSample create failed", err),
-        );
+        .catch((err) => this.logger.warn("labSample create failed", err));
     }
 
     await this.logAudit(tenantId, userId, "UPDATE", "LabOrder", id, {
@@ -504,7 +500,9 @@ export class LaboratoryService {
     const normalRange = criticalMatch ? criticalMatch[1] : range;
 
     const parseBounds = (r: string) => {
-      const m = r.match(/(?:<|<=)?\s*(\d+\.?\d*)\s*[-–—]\s*(?:>|>=)?\s*(\d+\.?\d*)/);
+      const m = r.match(
+        /(?:<|<=)?\s*(\d+\.?\d*)\s*[-–—]\s*(?:>|>=)?\s*(\d+\.?\d*)/,
+      );
       if (m) return { low: parseFloat(m[1]), high: parseFloat(m[2]) };
       const low = r.match(/(?:>=?)\s*(\d+\.?\d*)/);
       const high = r.match(/<=\s*(\d+\.?\d*)/);
@@ -546,7 +544,9 @@ export class LaboratoryService {
       const order = await this.prisma.labOrder.findUnique({
         where: { id: orderId },
         include: {
-          patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+          patient: {
+            select: { id: true, firstName: true, lastName: true, mrn: true },
+          },
         },
       });
       if (!order) return;
@@ -595,28 +595,56 @@ export class LaboratoryService {
     });
   }
 
-  async generateReportPdf(tenantId: string, orderId: string, userId?: string): Promise<Buffer> {
+  async generateReportPdf(
+    tenantId: string,
+    orderId: string,
+    userId?: string,
+  ): Promise<Buffer> {
     const order = await this.prisma.labOrder.findFirst({
       where: { id: orderId, tenantId },
       include: {
-        patient: { select: { id: true, firstName: true, middleName: true, lastName: true, mrn: true, phone: true, gender: true, dateOfBirth: true } },
+        patient: {
+          select: {
+            id: true,
+            firstName: true,
+            middleName: true,
+            lastName: true,
+            mrn: true,
+            phone: true,
+            gender: true,
+            dateOfBirth: true,
+          },
+        },
         items: true,
         samples: true,
       },
     });
     if (!order) throw new NotFoundException("Lab order not found");
 
-    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+    });
     if (!tenant) throw new NotFoundException("Tenant not found");
 
     const doctor = order.doctorId
-      ? await this.prisma.doctorProfile.findFirst({ where: { id: order.doctorId, tenantId }, include: { user: { select: { firstName: true, middleName: true, lastName: true } } } })
+      ? await this.prisma.doctorProfile.findFirst({
+          where: { id: order.doctorId, tenantId },
+          include: {
+            user: {
+              select: { firstName: true, middleName: true, lastName: true },
+            },
+          },
+        })
       : null;
 
     let generatedBy: string | undefined;
     if (userId) {
-      const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true } });
-      if (user) generatedBy = [user.firstName, user.lastName].filter(Boolean).join(" ");
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { firstName: true, lastName: true },
+      });
+      if (user)
+        generatedBy = [user.firstName, user.lastName].filter(Boolean).join(" ");
     }
 
     return buildLabReportPdf(
@@ -639,32 +667,74 @@ export class LaboratoryService {
     );
   }
 
-  async rejectSample(tenantId: string, orderId: string, sampleId: string, reason: string, note?: string, userId?: string) {
-    const order = await this.prisma.labOrder.findFirst({ where: { id: orderId, tenantId } });
+  async rejectSample(
+    tenantId: string,
+    orderId: string,
+    sampleId: string,
+    reason: string,
+    note?: string,
+    userId?: string,
+  ) {
+    const order = await this.prisma.labOrder.findFirst({
+      where: { id: orderId, tenantId },
+    });
     if (!order) throw new NotFoundException("Lab order not found");
 
-    const sample = await this.prisma.labSample.findFirst({ where: { id: sampleId, labOrderId: orderId, tenantId } });
+    const sample = await this.prisma.labSample.findFirst({
+      where: { id: sampleId, labOrderId: orderId, tenantId },
+    });
     if (!sample) throw new NotFoundException("Sample not found");
 
     const updated = await this.prisma.labSample.update({
       where: { id: sampleId },
-      data: { status: "REJECTED", rejectionReason: reason as any, rejectionNote: note },
+      data: {
+        status: "REJECTED",
+        rejectionReason: reason as any,
+        rejectionNote: note,
+      },
     });
 
-    await this.logAudit(tenantId, userId, "REJECT", "LabSample", sampleId, { reason, note } as any);
+    await this.logAudit(tenantId, userId, "REJECT", "LabSample", sampleId, {
+      reason,
+      note,
+    } as any);
     return updated;
   }
 
   async getLabSummary(tenantId: string) {
-    const [totalTests, totalOrders, pendingOrders, completedToday, sampleCollected] =
-      await Promise.all([
-        this.prisma.labTest.count({ where: { tenantId, isActive: true } }),
-        this.prisma.labOrder.count({ where: { tenantId } }),
-        this.prisma.labOrder.count({ where: { tenantId, status: { in: ["ORDERED", "SAMPLE_COLLECTED", "RECEIVED", "PROCESSING"] } } }),
-        this.prisma.labOrder.count({ where: { tenantId, status: { in: ["VERIFIED", "APPROVED", "REPORTED"] }, updatedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } } }),
-        this.prisma.labSample.count({ where: { tenantId, status: "COLLECTED" } }),
-      ]);
-    return { totalTests, totalOrders, pendingOrders, completedToday, sampleCollected };
+    const [
+      totalTests,
+      totalOrders,
+      pendingOrders,
+      completedToday,
+      sampleCollected,
+    ] = await Promise.all([
+      this.prisma.labTest.count({ where: { tenantId, isActive: true } }),
+      this.prisma.labOrder.count({ where: { tenantId } }),
+      this.prisma.labOrder.count({
+        where: {
+          tenantId,
+          status: {
+            in: ["ORDERED", "SAMPLE_COLLECTED", "RECEIVED", "PROCESSING"],
+          },
+        },
+      }),
+      this.prisma.labOrder.count({
+        where: {
+          tenantId,
+          status: { in: ["VERIFIED", "APPROVED", "REPORTED"] },
+          updatedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+        },
+      }),
+      this.prisma.labSample.count({ where: { tenantId, status: "COLLECTED" } }),
+    ]);
+    return {
+      totalTests,
+      totalOrders,
+      pendingOrders,
+      completedToday,
+      sampleCollected,
+    };
   }
 
   private async generateOrderNumber(tenantId: string): Promise<string> {

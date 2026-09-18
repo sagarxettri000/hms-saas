@@ -43,7 +43,9 @@ export class HrController {
 
   @Post("staff")
   @Permissions(PermissionAction.CREATE)
-  @ApiOperation({ summary: "Create a staff member (creates linked user account)" })
+  @ApiOperation({
+    summary: "Create a staff member (creates linked user account)",
+  })
   createStaff(@Body() dto: CreateStaffDto, @Req() req: any) {
     return this.hrService.createStaff(req.user.tenantId, dto);
   }

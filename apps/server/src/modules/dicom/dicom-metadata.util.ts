@@ -118,7 +118,10 @@ export function extractDicomMetadata(buffer: Buffer): DicomFileMetadata {
   };
 }
 
-function readUInt(dataset: dicomParser.DataSet, tag: string): number | undefined {
+function readUInt(
+  dataset: dicomParser.DataSet,
+  tag: string,
+): number | undefined {
   try {
     const value = dataset.uint16(tag);
     return typeof value === "number" ? value : undefined;

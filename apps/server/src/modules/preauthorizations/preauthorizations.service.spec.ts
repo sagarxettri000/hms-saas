@@ -33,7 +33,12 @@ describe("PreauthorizationsService", () => {
     it("creates a request with defaults", async () => {
       const result = await service.create(
         "t1",
-        { patientName: "P", providerName: "Prov", treatment: "MRI", estimatedCost: 500 },
+        {
+          patientName: "P",
+          providerName: "Prov",
+          treatment: "MRI",
+          estimatedCost: 500,
+        },
         "u1",
       );
       expect(result.treatment).toBe("MRI");

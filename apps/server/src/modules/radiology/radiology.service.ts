@@ -256,7 +256,13 @@ export class RadiologyService {
       this.prisma.radiologyOrder.count({ where }),
     ]);
 
-    const radiologistIds = [...new Set(data.map((o) => o.assignedRadiologistId).filter((id): id is string => !!id))];
+    const radiologistIds = [
+      ...new Set(
+        data
+          .map((o) => o.assignedRadiologistId)
+          .filter((id): id is string => !!id),
+      ),
+    ];
     if (radiologistIds.length) {
       const users = await this.prisma.user.findMany({
         where: { id: { in: radiologistIds } },
@@ -265,9 +271,18 @@ export class RadiologyService {
       const userById = new Map(users.map((u) => [u.id, u]));
       return {
         data: data.map((o) => {
-          const u = o.assignedRadiologistId ? userById.get(o.assignedRadiologistId) : undefined;
+          const u = o.assignedRadiologistId
+            ? userById.get(o.assignedRadiologistId)
+            : undefined;
           return u
-            ? { ...o, assignedRadiologist: { id: u.id, firstName: u.firstName, lastName: u.lastName } }
+            ? {
+                ...o,
+                assignedRadiologist: {
+                  id: u.id,
+                  firstName: u.firstName,
+                  lastName: u.lastName,
+                },
+              }
             : o;
         }),
         total,
@@ -288,7 +303,13 @@ export class RadiologyService {
           select: { id: true, firstName: true, lastName: true, mrn: true },
         },
         dicomStudies: {
-          select: { id: true, studyInstanceUid: true, accessionNumber: true, modality: true, studyDate: true },
+          select: {
+            id: true,
+            studyInstanceUid: true,
+            accessionNumber: true,
+            modality: true,
+            studyDate: true,
+          },
         },
         encounter: true,
         images: true,
@@ -355,7 +376,10 @@ export class RadiologyService {
     await this.logAudit(tenantId, userId, "UPDATE", "RadiologyOrder", id, {
       status: toStatus,
     });
-    if (["SCHEDULED", "IMAGES_UPLOADED"].includes(toStatus) && !order.assignedRadiologistId) {
+    if (
+      ["SCHEDULED", "IMAGES_UPLOADED"].includes(toStatus) &&
+      !order.assignedRadiologistId
+    ) {
       void this.autofillAssignee(tenantId, id);
     }
     if (["REPORTED", "VERIFIED"].includes(toStatus)) {
@@ -443,7 +467,12 @@ export class RadiologyService {
   async addRevision(
     tenantId: string,
     id: string,
-    dto: { findings?: string; impression?: string; report?: string; reason?: string },
+    dto: {
+      findings?: string;
+      impression?: string;
+      report?: string;
+      reason?: string;
+    },
     userId?: string,
     role?: string,
   ) {
@@ -532,7 +561,8 @@ export class RadiologyService {
         tenantId,
         order,
         `Critical finding on ${order.orderNumber}`,
-        dto.note || "A critical radiological finding has been flagged. Please review urgently.",
+        dto.note ||
+          "A critical radiological finding has been flagged. Please review urgently.",
       );
     }
     return updated;
@@ -552,7 +582,12 @@ export class RadiologyService {
     let targetId = radiologistId;
     if (targetId) {
       const radiologist = await this.prisma.user.findFirst({
-        where: { id: targetId, tenantId, role: "RADIOLOGIST", status: "ACTIVE" },
+        where: {
+          id: targetId,
+          tenantId,
+          role: "RADIOLOGIST",
+          status: "ACTIVE",
+        },
         select: { id: true },
       });
       if (!radiologist) {
@@ -575,7 +610,9 @@ export class RadiologyService {
       const lastIndex = radiologists.findIndex(
         (r) => r.id === last?.assignedRadiologistId,
       );
-      targetId = (radiologists[(lastIndex + 1) % radiologists.length] ?? radiologists[0]).id;
+      targetId = (
+        radiologists[(lastIndex + 1) % radiologists.length] ?? radiologists[0]
+      ).id;
     }
 
     const updated = await this.prisma.radiologyOrder.update({
@@ -617,20 +654,30 @@ export class RadiologyService {
     });
 
     const hours = (a?: Date | null, b?: Date | null) =>
-      a && b ? Math.round(((a.getTime() - b.getTime()) / 3600000) * 10) / 10 : null;
+      a && b
+        ? Math.round(((a.getTime() - b.getTime()) / 3600000) * 10) / 10
+        : null;
 
     const userMap: Record<string, string> = {};
     if (orders.some((o) => o.assignedRadiologistId)) {
       const users = await this.prisma.user.findMany({
-        where: { id: { in: orders.map((o) => o.assignedRadiologistId!).filter(Boolean) } },
+        where: {
+          id: {
+            in: orders.map((o) => o.assignedRadiologistId!).filter(Boolean),
+          },
+        },
         select: { id: true, firstName: true, lastName: true },
       });
       users.forEach((u) => {
-        userMap[u.id] = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.id;
+        userMap[u.id] =
+          [u.firstName, u.lastName].filter(Boolean).join(" ") || u.id;
       });
     }
 
-    const buckets = new Map<string, { cases: number; reportMs: number; verifyMs: number; verified: number }>();
+    const buckets = new Map<
+      string,
+      { cases: number; reportMs: number; verifyMs: number; verified: number }
+    >();
     let overallReportMs = 0;
     let overallVerifyMs = 0;
     let overallCases = 0;
@@ -638,7 +685,12 @@ export class RadiologyService {
 
     for (const o of orders) {
       const key = o.assignedRadiologistId ?? "_unassigned_";
-      const bucket = buckets.get(key) || { cases: 0, reportMs: 0, verifyMs: 0, verified: 0 };
+      const bucket = buckets.get(key) || {
+        cases: 0,
+        reportMs: 0,
+        verifyMs: 0,
+        verified: 0,
+      };
       bucket.cases += 1;
       overallCases += 1;
       const r = hours(o.reportedAt, o.orderedAt);
@@ -660,8 +712,12 @@ export class RadiologyService {
       radiologistId: id,
       name: id === "_unassigned_" ? "Unassigned" : userMap[id] || id,
       cases: b.cases,
-      avgReportHours: b.cases ? Math.round((b.reportMs / b.cases) * 10) / 10 : null,
-      avgVerifyHours: b.verified ? Math.round((b.verifyMs / b.verified) * 10) / 10 : null,
+      avgReportHours: b.cases
+        ? Math.round((b.reportMs / b.cases) * 10) / 10
+        : null,
+      avgVerifyHours: b.verified
+        ? Math.round((b.verifyMs / b.verified) * 10) / 10
+        : null,
     }));
 
     return {
@@ -670,8 +726,12 @@ export class RadiologyService {
       overall: {
         cases: overallCases,
         verified: overallVerified,
-        avgReportHours: overallCases ? Math.round((overallReportMs / overallCases) * 10) / 10 : null,
-        avgVerifyHours: overallVerified ? Math.round((overallVerifyMs / overallVerified) * 10) / 10 : null,
+        avgReportHours: overallCases
+          ? Math.round((overallReportMs / overallCases) * 10) / 10
+          : null,
+        avgVerifyHours: overallVerified
+          ? Math.round((overallVerifyMs / overallVerified) * 10) / 10
+          : null,
       },
       perRadiologist,
     };
@@ -697,16 +757,25 @@ export class RadiologyService {
     }
 
     const reviewer = await this.prisma.user.findFirst({
-      where: { id: dto.reviewerId, tenantId, role: "RADIOLOGIST", status: "ACTIVE" },
+      where: {
+        id: dto.reviewerId,
+        tenantId,
+        role: "RADIOLOGIST",
+        status: "ACTIVE",
+      },
       select: { id: true },
     });
-    if (!reviewer) throw new BadRequestException("Active radiologist not found");
+    if (!reviewer)
+      throw new BadRequestException("Active radiologist not found");
 
     const pending = await this.prisma.radiologyPeerReview.findFirst({
       where: { radiologyOrderId: id, status: "REQUESTED" },
       select: { id: true },
     });
-    if (pending) throw new BadRequestException("A review is already pending for this order");
+    if (pending)
+      throw new BadRequestException(
+        "A review is already pending for this order",
+      );
 
     const peerReview = await this.prisma.radiologyPeerReview.create({
       data: {
@@ -731,7 +800,13 @@ export class RadiologyService {
       console.warn(`Failed to notify reviewer: ${error}`);
     }
 
-    await this.logAudit(tenantId, userId, "CREATE", "RadiologyPeerReview", peerReview.id);
+    await this.logAudit(
+      tenantId,
+      userId,
+      "CREATE",
+      "RadiologyPeerReview",
+      peerReview.id,
+    );
     return peerReview;
   }
 
@@ -746,7 +821,9 @@ export class RadiologyService {
             id: true,
             orderNumber: true,
             status: true,
-            patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+            patient: {
+              select: { id: true, firstName: true, lastName: true, mrn: true },
+            },
           },
         },
       },
@@ -817,16 +894,27 @@ export class RadiologyService {
       },
     });
 
-    await this.logAudit(tenantId, userId, "UPDATE", "RadiologyPeerReview", reviewId, {
-      status: dto.status,
-    });
+    await this.logAudit(
+      tenantId,
+      userId,
+      "UPDATE",
+      "RadiologyPeerReview",
+      reviewId,
+      {
+        status: dto.status,
+      },
+    );
 
-    if (peerReview.requestedBy && (dto.status === "REJECTED" || dto.status === "OVERRIDE")) {
+    if (
+      peerReview.requestedBy &&
+      (dto.status === "REJECTED" || dto.status === "OVERRIDE")
+    ) {
       try {
         await this.notifications?.create(tenantId, {
           userId: peerReview.requestedBy,
           title: `Peer review ${dto.status.toLowerCase()}`,
-          body: dto.note || `The second opinion was ${dto.status.toLowerCase()}.`,
+          body:
+            dto.note || `The second opinion was ${dto.status.toLowerCase()}.`,
           type: "RADIOLOGY",
           referenceType: "RadiologyOrder",
           referenceId: peerReview.radiologyOrderId,
@@ -865,48 +953,113 @@ export class RadiologyService {
   }
 
   async getSummary(tenantId: string) {
-    const [totalOrders, newOrders, inProgress, reported, completedToday, criticalCount] = await Promise.all([
+    const [
+      totalOrders,
+      newOrders,
+      inProgress,
+      reported,
+      completedToday,
+      criticalCount,
+    ] = await Promise.all([
       this.prisma.radiologyOrder.count({ where: { tenantId } }),
-      this.prisma.radiologyOrder.count({ where: { tenantId, status: { in: ["ORDERED", "SCHEDULED"] } } }),
-      this.prisma.radiologyOrder.count({ where: { tenantId, status: { in: ["IN_PROGRESS", "IMAGES_UPLOADED"] } } }),
-      this.prisma.radiologyOrder.count({ where: { tenantId, status: { in: ["REPORTED", "VERIFIED", "APPROVED"] } } }),
       this.prisma.radiologyOrder.count({
-        where: { tenantId, status: { in: ["REPORTED", "VERIFIED", "APPROVED", "DELIVERED"] }, updatedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } },
+        where: { tenantId, status: { in: ["ORDERED", "SCHEDULED"] } },
       }),
-      this.prisma.radiologyOrder.count({ where: { tenantId, isCritical: true } }),
+      this.prisma.radiologyOrder.count({
+        where: { tenantId, status: { in: ["IN_PROGRESS", "IMAGES_UPLOADED"] } },
+      }),
+      this.prisma.radiologyOrder.count({
+        where: {
+          tenantId,
+          status: { in: ["REPORTED", "VERIFIED", "APPROVED"] },
+        },
+      }),
+      this.prisma.radiologyOrder.count({
+        where: {
+          tenantId,
+          status: { in: ["REPORTED", "VERIFIED", "APPROVED", "DELIVERED"] },
+          updatedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+        },
+      }),
+      this.prisma.radiologyOrder.count({
+        where: { tenantId, isCritical: true },
+      }),
     ]);
-    const totalImages = await this.prisma.radiologyImage.count({ where: { radiologyOrder: { tenantId } } });
-    return { totalOrders, newOrders, inProgress, reported, completedToday, totalImages, criticalCount };
+    const totalImages = await this.prisma.radiologyImage.count({
+      where: { radiologyOrder: { tenantId } },
+    });
+    return {
+      totalOrders,
+      newOrders,
+      inProgress,
+      reported,
+      completedToday,
+      totalImages,
+      criticalCount,
+    };
   }
 
-  async generateReportPdf(tenantId: string, orderId: string, userId?: string): Promise<Buffer> {
+  async generateReportPdf(
+    tenantId: string,
+    orderId: string,
+    userId?: string,
+  ): Promise<Buffer> {
     const order = await this.prisma.radiologyOrder.findFirst({
       where: { id: orderId, tenantId },
       include: {
-        patient: { select: { id: true, firstName: true, middleName: true, lastName: true, mrn: true, gender: true, dateOfBirth: true } },
+        patient: {
+          select: {
+            id: true,
+            firstName: true,
+            middleName: true,
+            lastName: true,
+            mrn: true,
+            gender: true,
+            dateOfBirth: true,
+          },
+        },
         images: true,
       },
     });
     if (!order) throw new NotFoundException("Radiology order not found");
 
-    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+    });
     if (!tenant) throw new NotFoundException("Tenant not found");
 
     let doctorName = "";
     if (order.doctorId) {
-      const doc = await this.prisma.doctorProfile.findFirst({ where: { id: order.doctorId, tenantId }, include: { user: { select: { firstName: true, lastName: true } } } });
-      if (doc?.user) doctorName = [doc.user.firstName, doc.user.lastName].filter(Boolean).join(" ");
+      const doc = await this.prisma.doctorProfile.findFirst({
+        where: { id: order.doctorId, tenantId },
+        include: { user: { select: { firstName: true, lastName: true } } },
+      });
+      if (doc?.user)
+        doctorName = [doc.user.firstName, doc.user.lastName]
+          .filter(Boolean)
+          .join(" ");
     }
 
     let generatedBy = "";
     if (userId) {
-      const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true } });
-      if (user) generatedBy = [user.firstName, user.lastName].filter(Boolean).join(" ");
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { firstName: true, lastName: true },
+      });
+      if (user)
+        generatedBy = [user.firstName, user.lastName].filter(Boolean).join(" ");
     }
 
-    const signerIds = [order.reportedBy, order.verifiedBy, order.approvedBy].filter(Boolean) as string[];
+    const signerIds = [
+      order.reportedBy,
+      order.verifiedBy,
+      order.approvedBy,
+    ].filter(Boolean) as string[];
     const signers = signerIds.length
-      ? await this.prisma.user.findMany({ where: { id: { in: signerIds } }, select: { id: true, firstName: true, lastName: true } })
+      ? await this.prisma.user.findMany({
+          where: { id: { in: signerIds } },
+          select: { id: true, firstName: true, lastName: true },
+        })
       : [];
     const signerNameOf = (id?: string | null) => {
       if (!id) return "";
@@ -914,8 +1067,21 @@ export class RadiologyService {
       return u ? [u.firstName, u.lastName].filter(Boolean).join(" ") : "";
     };
 
-    const patientName = [order.patient.firstName, order.patient.middleName, order.patient.lastName].filter(Boolean).join(" ");
-    const addr = [(tenant as any).addressLine1, (tenant as any).addressLine2, (tenant as any).city, (tenant as any).province].filter(Boolean).join(", ");
+    const patientName = [
+      order.patient.firstName,
+      order.patient.middleName,
+      order.patient.lastName,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const addr = [
+      (tenant as any).addressLine1,
+      (tenant as any).addressLine2,
+      (tenant as any).city,
+      (tenant as any).province,
+    ]
+      .filter(Boolean)
+      .join(", ");
 
     return buildRadiologyReportPdf({
       hospitalName: tenant.name || "Hospital",

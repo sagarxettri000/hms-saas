@@ -9,7 +9,9 @@ export class StorageService implements StorageDriver {
   private readonly driver: StorageDriver;
 
   constructor(config: ConfigService) {
-    const driver = (config.get<string>("STORAGE_DRIVER") || "local").toLowerCase();
+    const driver = (
+      config.get<string>("STORAGE_DRIVER") || "local"
+    ).toLowerCase();
     if (driver === "s3") {
       this.logger.log("Using S3 storage driver");
       this.driver = new S3StorageDriver(config);

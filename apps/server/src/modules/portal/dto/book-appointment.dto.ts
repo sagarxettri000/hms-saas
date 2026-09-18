@@ -18,7 +18,10 @@ export class BookAppointmentDto {
   doctorId!: string;
 
   @ApiProperty({ description: "Appointment start time (ISO 8601)" })
-  @IsDateString({}, { message: "appointmentDate must be a valid ISO 8601 date" })
+  @IsDateString(
+    {},
+    { message: "appointmentDate must be a valid ISO 8601 date" },
+  )
   appointmentDate!: string;
 
   @ApiProperty({ required: false })

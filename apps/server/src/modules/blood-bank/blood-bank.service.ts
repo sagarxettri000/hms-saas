@@ -52,15 +52,21 @@ const BLOOD_GROUPS = [
  */
 function normalizeBloodGroup(raw: unknown): string | undefined {
   if (raw === undefined || raw === null || raw === "") return undefined;
-  if (typeof raw !== "string") throw new BadRequestException("Invalid blood group");
-  const s = raw.trim().toUpperCase().replace(/[\s_]+/g, "_");
+  if (typeof raw !== "string")
+    throw new BadRequestException("Invalid blood group");
+  const s = raw
+    .trim()
+    .toUpperCase()
+    .replace(/[\s_]+/g, "_");
   if ((BLOOD_GROUPS as readonly string[]).includes(s)) return s;
   const compact = s.replace(/_/g, "");
   const abo = ["AB", "A", "B", "O"].find((g) => compact.startsWith(g));
   if (!abo) return compact === "UNKNOWN" ? "UNKNOWN" : undefined;
   const sign = compact.slice(abo.length);
-  if (sign === "+" || sign === "POS" || sign === "POSITIVE") return `${abo}_POS`;
-  if (sign === "-" || sign === "NEG" || sign === "NEGATIVE") return `${abo}_NEG`;
+  if (sign === "+" || sign === "POS" || sign === "POSITIVE")
+    return `${abo}_POS`;
+  if (sign === "-" || sign === "NEG" || sign === "NEGATIVE")
+    return `${abo}_NEG`;
   return undefined;
 }
 
@@ -74,7 +80,10 @@ const COMPONENTS = ["WHOLE_BLOOD", "PACKED_RBC", "PLATELETS", "PLASMA", "CRYO"];
 
 function normalizeComponent(raw: unknown): string {
   if (raw === undefined || raw === null || raw === "") return "WHOLE_BLOOD";
-  const s = String(raw).trim().toUpperCase().replace(/[\s-]+/g, "_");
+  const s = String(raw)
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
   return COMPONENTS.includes(s) ? s : "WHOLE_BLOOD";
 }
 
@@ -120,8 +129,7 @@ export class BloodBankService {
     if (!dto.phone || !String(dto.phone).trim())
       throw new BadRequestException("Donor phone is required");
     const bloodGroup = normalizeBloodGroup(dto.bloodGroup);
-    if (!bloodGroup)
-      throw new BadRequestException("Invalid blood group");
+    if (!bloodGroup) throw new BadRequestException("Invalid blood group");
 
     const donorCode = await this.generateCode(
       tenantId,
@@ -139,17 +147,27 @@ export class BloodBankService {
         address: dto.address || undefined,
         gender: normalizeGender(dto.gender) as any,
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
-        weight: dto.weight !== undefined && dto.weight !== null ? Number(dto.weight) : undefined,
+        weight:
+          dto.weight !== undefined && dto.weight !== null
+            ? Number(dto.weight)
+            : undefined,
         medicalHistory: dto.medicalHistory,
         donorCode,
       },
     });
 
-    await this.audit.log(tenantId, actorUserId, "BloodDonor", donor.id, "CREATE", {
-      name: donor.name,
-      bloodGroup: donor.bloodGroup,
-      donorCode: donor.donorCode,
-    });
+    await this.audit.log(
+      tenantId,
+      actorUserId,
+      "BloodDonor",
+      donor.id,
+      "CREATE",
+      {
+        name: donor.name,
+        bloodGroup: donor.bloodGroup,
+        donorCode: donor.donorCode,
+      },
+    );
     return donor;
   }
 
@@ -175,11 +193,13 @@ export class BloodBankService {
     // Explicit whitelist — never spread client payloads.
     const data: any = {};
     if (dto.name !== undefined) {
-      if (!String(dto.name).trim()) throw new BadRequestException("Donor name is required");
+      if (!String(dto.name).trim())
+        throw new BadRequestException("Donor name is required");
       data.name = String(dto.name).trim();
     }
     if (dto.phone !== undefined) {
-      if (!String(dto.phone).trim()) throw new BadRequestException("Donor phone is required");
+      if (!String(dto.phone).trim())
+        throw new BadRequestException("Donor phone is required");
       data.phone = String(dto.phone).trim();
     }
     if (dto.bloodGroup !== undefined) {
@@ -189,22 +209,26 @@ export class BloodBankService {
     }
     if (dto.email !== undefined) data.email = dto.email || null;
     if (dto.address !== undefined) data.address = dto.address || null;
-    if (dto.gender !== undefined) data.gender = normalizeGender(dto.gender) ?? null;
+    if (dto.gender !== undefined)
+      data.gender = normalizeGender(dto.gender) ?? null;
     if (dto.dateOfBirth !== undefined)
       data.dateOfBirth = dto.dateOfBirth ? new Date(dto.dateOfBirth) : null;
     if (dto.weight !== undefined) {
       const w = dto.weight as unknown;
       const n = Number(w);
-      data.weight =
-        w !== null && w !== "" && Number.isFinite(n) ? n : null;
+      data.weight = w !== null && w !== "" && Number.isFinite(n) ? n : null;
     }
     if (dto.isActive !== undefined) data.isActive = Boolean(dto.isActive);
-    if (dto.medicalHistory !== undefined) data.medicalHistory = dto.medicalHistory;
+    if (dto.medicalHistory !== undefined)
+      data.medicalHistory = dto.medicalHistory;
 
     if (Object.keys(data).length === 0)
       throw new BadRequestException("No changes to apply");
 
-    const updated = await this.prisma.bloodDonor.update({ where: { id }, data });
+    const updated = await this.prisma.bloodDonor.update({
+      where: { id },
+      data,
+    });
 
     await this.audit.log(tenantId, actorUserId, "BloodDonor", id, "UPDATE", {
       previous: {
@@ -222,10 +246,13 @@ export class BloodBankService {
 
   // ---------- Units ----------
 
-  async registerUnit(tenantId: string, dto: RegisterUnitDto, actorUserId?: string) {
+  async registerUnit(
+    tenantId: string,
+    dto: RegisterUnitDto,
+    actorUserId?: string,
+  ) {
     const bloodGroup = normalizeBloodGroup(dto.bloodGroup);
-    if (!bloodGroup)
-      throw new BadRequestException("Invalid blood group");
+    if (!bloodGroup) throw new BadRequestException("Invalid blood group");
     const component = normalizeComponent(dto.component);
 
     let expiry: Date;
@@ -332,8 +359,16 @@ export class BloodBankService {
     const where: any = { tenantId };
     const status = query.status?.trim().toUpperCase();
     if (status) {
-      const valid = ["AVAILABLE", "RESERVED", "ISSUED", "EXPIRED", "DISCARDED", "RETURNED"];
-      if (!valid.includes(status)) throw new BadRequestException("Invalid status filter");
+      const valid = [
+        "AVAILABLE",
+        "RESERVED",
+        "ISSUED",
+        "EXPIRED",
+        "DISCARDED",
+        "RETURNED",
+      ];
+      if (!valid.includes(status))
+        throw new BadRequestException("Invalid status filter");
       where.status = status;
     }
     const bloodGroup = normalizeBloodGroup(query.bloodGroup);
@@ -422,7 +457,12 @@ export class BloodBankService {
     return updated;
   }
 
-  async discardUnit(tenantId: string, id: string, reason: string, actorUserId?: string) {
+  async discardUnit(
+    tenantId: string,
+    id: string,
+    reason: string,
+    actorUserId?: string,
+  ) {
     const unit = await this.prisma.bloodUnit.findFirst({
       where: { id, tenantId },
     });

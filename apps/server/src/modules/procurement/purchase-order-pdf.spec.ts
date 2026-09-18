@@ -64,7 +64,8 @@ const order: any = {
   otherCharges: 50,
   grandTotal: 6371,
   totalAmount: 6371,
-  terms: "Delivery within 15 business days. Warranty as per manufacturer policy.",
+  terms:
+    "Delivery within 15 business days. Warranty as per manufacturer policy.",
   notes: "Urgent requirement for Q4 stock replenishment.",
   supplier,
   store: { name: "General Store", code: "GS-01", location: "Ground Floor" },
@@ -170,7 +171,9 @@ describe("buildPurchaseOrderPdf", () => {
   });
 
   it("contains letterhead and hospital identity", () => {
-    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString("latin1");
+    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString(
+      "latin1",
+    );
     expect(content).toContain("NB Maitri Hospital");
     expect(content).toContain("PAN: 301234567");
     expect(content).toContain("VAT: 301234567");
@@ -180,7 +183,9 @@ describe("buildPurchaseOrderPdf", () => {
   });
 
   it("renders the PURCHASE ORDER title and metadata", () => {
-    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString("latin1");
+    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString(
+      "latin1",
+    );
     expect(content).toContain("PURCHASE ORDER");
     expect(content).toContain("PO-20260915-0001");
     expect(content).toContain("Standard");
@@ -189,7 +194,9 @@ describe("buildPurchaseOrderPdf", () => {
   });
 
   it("renders the buyer and vendor blocks", () => {
-    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString("latin1");
+    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString(
+      "latin1",
+    );
     expect(content).toContain("BUYER / HOSPITAL");
     expect(content).toContain("VENDOR / SUPPLIER");
     expect(content).toContain("MedSupply Nepal Pvt Ltd");
@@ -206,7 +213,9 @@ describe("buildPurchaseOrderPdf", () => {
   });
 
   it("renders the procurement reference block", () => {
-    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString("latin1");
+    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString(
+      "latin1",
+    );
     expect(content).toContain("PROCUREMENT REFERENCES");
     expect(content).toContain("PR-20260910-0003");
     expect(content).toContain("Sunita Gurung");
@@ -215,7 +224,9 @@ describe("buildPurchaseOrderPdf", () => {
   });
 
   it("renders the item table with all line items and their financial values", () => {
-    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString("latin1");
+    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString(
+      "latin1",
+    );
     expect(content).toContain("PURCHASE ORDER ITEMS");
     expect(content).toContain("N95 Respirator Mask");
     expect(content).toContain("PPE-N95-01");
@@ -227,7 +238,9 @@ describe("buildPurchaseOrderPdf", () => {
   });
 
   it("renders hospital-specific requirements for flagged items", () => {
-    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString("latin1");
+    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString(
+      "latin1",
+    );
     expect(content).toContain("HOSPITAL-SPECIFIC");
     expect(content).toContain("Batch/Lot required");
     expect(content).toContain("Expiry required");
@@ -235,7 +248,9 @@ describe("buildPurchaseOrderPdf", () => {
   });
 
   it("renders the financial summary with all computed totals", () => {
-    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString("latin1");
+    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString(
+      "latin1",
+    );
     expect(content).toContain("FINANCIAL SUMMARY");
     expect(content).toContain("GRAND TOTAL");
     expect(content).toContain("6,371.00");
@@ -247,7 +262,9 @@ describe("buildPurchaseOrderPdf", () => {
   });
 
   it("renders payment terms and delivery blocks", () => {
-    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString("latin1");
+    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString(
+      "latin1",
+    );
     expect(content).toContain("PAYMENT TERMS");
     expect(content).toContain("Net 30 days");
     expect(content).toContain("Bank Transfer");
@@ -257,14 +274,18 @@ describe("buildPurchaseOrderPdf", () => {
   });
 
   it("renders goods receipt linkage", () => {
-    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString("latin1");
+    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString(
+      "latin1",
+    );
     expect(content).toContain("GOODS RECEIPTS");
     expect(content).toContain("GRN-20260914-0001");
     expect(content).toContain("INV-2026-123");
   });
 
   it("renders purchase justification, approval and terms sections", () => {
-    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString("latin1");
+    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString(
+      "latin1",
+    );
     expect(content).toContain("PURCHASE JUSTIFICATION");
     expect(content).toContain("Annual procurement of PPE");
     expect(content).toContain("APPROVAL");
@@ -275,7 +296,9 @@ describe("buildPurchaseOrderPdf", () => {
   });
 
   it("renders document control and signature blocks", () => {
-    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString("latin1");
+    const content = buildPurchaseOrderPdf(order, tenant, "Admin User").toString(
+      "latin1",
+    );
     expect(content).toContain("DOCUMENT CONTROL");
     expect(content).toContain("Created By");
     expect(content).toContain("Admin User");
@@ -356,7 +379,11 @@ describe("buildPurchaseOrderPdf", () => {
         },
       ],
     };
-    const buffer = buildPurchaseOrderPdf(minimalOrder, { name: "Test Hospital" }, "test");
+    const buffer = buildPurchaseOrderPdf(
+      minimalOrder,
+      { name: "Test Hospital" },
+      "test",
+    );
     const content = buffer.toString("latin1");
     expect(content.startsWith("%PDF-1.4")).toBe(true);
     expect(content).toContain("Test Hospital");
@@ -398,7 +425,11 @@ describe("buildPurchaseOrderPdf", () => {
       trainingRequired: false,
       criticality: "HIGH",
     }));
-    const buffer = buildPurchaseOrderPdf({ ...order, items: manyItems }, tenant, "Admin User");
+    const buffer = buildPurchaseOrderPdf(
+      { ...order, items: manyItems },
+      tenant,
+      "Admin User",
+    );
     const content = buffer.toString("latin1");
     const pageCount = (content.match(/\/Type \/Page /g) || []).length;
     expect(pageCount).toBeGreaterThanOrEqual(3);

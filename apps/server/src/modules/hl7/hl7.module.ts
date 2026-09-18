@@ -1,10 +1,10 @@
-import { Module } from '@nestjs/common';
-import { Hl7Controller } from './hl7.controller';
-import { Hl7Service } from './hl7.service';
-import { Hl7OutboundService } from './hl7-outbound.service';
-import { Hl7QueueService } from './hl7-queue.service';
-import { Hl7QueueModule } from './hl7-queue.module';
-import { AuditModule } from '../audit/audit.module';
+import { Module } from "@nestjs/common";
+import { Hl7Controller } from "./hl7.controller";
+import { Hl7Service } from "./hl7.service";
+import { Hl7OutboundService } from "./hl7-outbound.service";
+import { Hl7QueueService } from "./hl7-queue.service";
+import { Hl7QueueModule } from "./hl7-queue.module";
+import { AuditModule } from "../audit/audit.module";
 
 @Module({
   imports: [Hl7QueueModule, AuditModule],

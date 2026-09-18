@@ -12,7 +12,12 @@ export interface CreateHandoverDto {
 export class NursingHandoversService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(tenantId: string, dto: CreateHandoverDto, userId: string, userName?: string) {
+  async create(
+    tenantId: string,
+    dto: CreateHandoverDto,
+    userId: string,
+    userName?: string,
+  ) {
     return this.prisma.shiftHandover.create({
       data: {
         tenantId,

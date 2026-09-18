@@ -93,10 +93,7 @@ export class CommunicationsService {
     }
   }
 
-  private async sendTwilio(
-    config: Record<string, any>,
-    payload: SmsPayload,
-  ) {
+  private async sendTwilio(config: Record<string, any>, payload: SmsPayload) {
     const accountSid = config.accountSid || config.apiKey;
     const authToken = config.apiSecret || config.apiKey;
     const from = config.senderId;
@@ -119,10 +116,7 @@ export class CommunicationsService {
     return res.ok;
   }
 
-  private async sendMsg91(
-    config: Record<string, any>,
-    payload: SmsPayload,
-  ) {
+  private async sendMsg91(config: Record<string, any>, payload: SmsPayload) {
     const authKey = config.apiKey;
     const senderId = config.senderId || "HMSAAS";
     const url = `https://api.msg91.com/api/v5/send`;
@@ -146,10 +140,7 @@ export class CommunicationsService {
     return res.ok;
   }
 
-  private async sendGeneric(
-    config: Record<string, any>,
-    payload: SmsPayload,
-  ) {
+  private async sendGeneric(config: Record<string, any>, payload: SmsPayload) {
     const endpoint = config.endpoint;
     if (!endpoint) {
       this.logger.warn("Generic SMS gateway needs an endpoint URL");

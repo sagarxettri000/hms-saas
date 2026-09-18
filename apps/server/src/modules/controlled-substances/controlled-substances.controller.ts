@@ -36,7 +36,10 @@ export class ControlledSubstancesController {
   @ApiOperation({ summary: "Log a controlled substance dispense/usage" })
   create(@Body() dto: CreateControlledLogDto, @Req() req: any) {
     const u = req.user;
-    const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.username || u.email;
+    const name =
+      [u.firstName, u.lastName].filter(Boolean).join(" ") ||
+      u.username ||
+      u.email;
     return this.service.create(req.user.tenantId, dto, req.user.id, name);
   }
 

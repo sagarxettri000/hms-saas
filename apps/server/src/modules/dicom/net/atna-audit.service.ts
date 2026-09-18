@@ -42,7 +42,11 @@ export class AtnaAuditService {
       const xml = buildAtnaXml(entry);
       if (this.audit) {
         await this.audit.log(tenantId, userId, entity, entityId, entry.action, {
-          atna: { xml, eventId: entry.eventIdCode, eventLabel: entry.eventIdLabel },
+          atna: {
+            xml,
+            eventId: entry.eventIdCode,
+            eventLabel: entry.eventIdLabel,
+          },
         });
         return;
       }
@@ -65,28 +69,49 @@ export class AtnaAuditService {
     details?: { patientName?: string; accession?: string; count?: number },
   ): void {
     for (const studyId of studyIds) {
-      this.emit(tenantId, userId, this.base(tenantId, userId, {
-        outcome: "0",
-        action: "C",
-        eventIdCode: ATNA_CODES.EVENT_IMPORT,
-        eventIdLabel: "Import",
-        objects: [
-          { id: studyId, role: ATNA_CODES.ROLE_STUDY, roleLabel: "Study", description: this.describe(details) },
-        ],
-      }), "DICOM_STUDY", studyId);
+      this.emit(
+        tenantId,
+        userId,
+        this.base(tenantId, userId, {
+          outcome: "0",
+          action: "C",
+          eventIdCode: ATNA_CODES.EVENT_IMPORT,
+          eventIdLabel: "Import",
+          objects: [
+            {
+              id: studyId,
+              role: ATNA_CODES.ROLE_STUDY,
+              roleLabel: "Study",
+              description: this.describe(details),
+            },
+          ],
+        }),
+        "DICOM_STUDY",
+        studyId,
+      );
     }
   }
 
   recordImportFailure(tenantId: string, userId: string, error: string): void {
-    this.emit(tenantId, userId, this.base(tenantId, userId, {
-      outcome: "12",
-      action: "C",
-      eventIdCode: ATNA_CODES.EVENT_IMPORT,
-      eventIdLabel: "Import",
-      objects: [
-        { id: "N/A", role: ATNA_CODES.ROLE_STUDY, roleLabel: "Study", description: error.slice(0, 1000) },
-      ],
-    }), "DICOM_STUDY");
+    this.emit(
+      tenantId,
+      userId,
+      this.base(tenantId, userId, {
+        outcome: "12",
+        action: "C",
+        eventIdCode: ATNA_CODES.EVENT_IMPORT,
+        eventIdLabel: "Import",
+        objects: [
+          {
+            id: "N/A",
+            role: ATNA_CODES.ROLE_STUDY,
+            roleLabel: "Study",
+            description: error.slice(0, 1000),
+          },
+        ],
+      }),
+      "DICOM_STUDY",
+    );
   }
 
   /** Read access to a DICOM object (WADO/QIDO/MWL). */
@@ -97,13 +122,27 @@ export class AtnaAuditService {
     label = "DICOM object accessed",
     extraObjects: AtnaEntry["objects"] = [],
   ): void {
-    this.emit(tenantId, userId, this.base(tenantId, userId, {
-      outcome: "0",
-      action: "R",
-      eventIdCode: ATNA_CODES.EVENT_ACCESS,
-      eventIdLabel: "DICOM Instances Accessed",
-      objects: [{ id: objectId, role: ATNA_CODES.ROLE_STUDY, roleLabel: "Study", description: label }, ...extraObjects],
-    }), "DICOM_STUDY", objectId);
+    this.emit(
+      tenantId,
+      userId,
+      this.base(tenantId, userId, {
+        outcome: "0",
+        action: "R",
+        eventIdCode: ATNA_CODES.EVENT_ACCESS,
+        eventIdLabel: "DICOM Instances Accessed",
+        objects: [
+          {
+            id: objectId,
+            role: ATNA_CODES.ROLE_STUDY,
+            roleLabel: "Study",
+            description: label,
+          },
+          ...extraObjects,
+        ],
+      }),
+      "DICOM_STUDY",
+      objectId,
+    );
   }
 
   /** C-STORE export to an external AE node. */
@@ -113,20 +152,26 @@ export class AtnaAuditService {
     nodeName: string,
     objects: AtnaEntry["objects"],
   ): void {
-    this.emit(tenantId, userId, this.base(tenantId, userId, {
-      outcome: "0",
-      action: "E",
-      eventIdCode: ATNA_CODES.EVENT_EXPORT,
-      eventIdLabel: "Export",
-      eventTypeCode: ATNA_CODES.EVENT_EXPORT,
-      eventTypeLabel: "DICOM instances exported to an AE node",
-      participant: {
-        name: nodeName,
-        role: ATNA_CODES.ROLE_DESTINATION,
-        roleLabel: "Destination",
-      },
-      objects,
-    }), "DICOM_NODE", nodeName);
+    this.emit(
+      tenantId,
+      userId,
+      this.base(tenantId, userId, {
+        outcome: "0",
+        action: "E",
+        eventIdCode: ATNA_CODES.EVENT_EXPORT,
+        eventIdLabel: "Export",
+        eventTypeCode: ATNA_CODES.EVENT_EXPORT,
+        eventTypeLabel: "DICOM instances exported to an AE node",
+        participant: {
+          name: nodeName,
+          role: ATNA_CODES.ROLE_DESTINATION,
+          roleLabel: "Destination",
+        },
+        objects,
+      }),
+      "DICOM_NODE",
+      nodeName,
+    );
   }
 
   /** Node authentication result (C-ECHO). */
@@ -136,18 +181,24 @@ export class AtnaAuditService {
     nodeName: string,
     connected: boolean,
   ): void {
-    this.emit(tenantId, userId, this.base(tenantId, userId, {
-      outcome: connected ? "0" : "12",
-      action: "E",
-      eventIdCode: ATNA_CODES.EVENT_NODE_AUTH,
-      eventIdLabel: "Node Authentication",
-      participant: {
-        name: nodeName,
-        role: ATNA_CODES.ROLE_RESOURCE,
-        roleLabel: "Resource",
-      },
-      objects: [],
-    }), "DICOM_NODE", nodeName);
+    this.emit(
+      tenantId,
+      userId,
+      this.base(tenantId, userId, {
+        outcome: connected ? "0" : "12",
+        action: "E",
+        eventIdCode: ATNA_CODES.EVENT_NODE_AUTH,
+        eventIdLabel: "Node Authentication",
+        participant: {
+          name: nodeName,
+          role: ATNA_CODES.ROLE_RESOURCE,
+          roleLabel: "Resource",
+        },
+        objects: [],
+      }),
+      "DICOM_NODE",
+      nodeName,
+    );
   }
 
   /** Application start / stop (listener lifecycle). */
@@ -157,19 +208,27 @@ export class AtnaAuditService {
     nodeName: string,
     starting: boolean,
   ): void {
-    this.emit(tenantId, userId, this.base(tenantId, userId, {
-      outcome: "0",
-      action: starting ? "C" : "D",
-      eventIdCode: starting ? ATNA_CODES.EVENT_APP_START : ATNA_CODES.EVENT_APP_STOP,
-      eventIdLabel: starting ? "Application Start" : "Application Stop",
-      eventTypeLabel: "DICOM SCP listener",
-      participant: {
-        name: nodeName,
-        role: ATNA_CODES.ROLE_RESOURCE,
-        roleLabel: "Resource",
-      },
-      objects: [],
-    }), "DICOM_LISTENER", nodeName);
+    this.emit(
+      tenantId,
+      userId,
+      this.base(tenantId, userId, {
+        outcome: "0",
+        action: starting ? "C" : "D",
+        eventIdCode: starting
+          ? ATNA_CODES.EVENT_APP_START
+          : ATNA_CODES.EVENT_APP_STOP,
+        eventIdLabel: starting ? "Application Start" : "Application Stop",
+        eventTypeLabel: "DICOM SCP listener",
+        participant: {
+          name: nodeName,
+          role: ATNA_CODES.ROLE_RESOURCE,
+          roleLabel: "Resource",
+        },
+        objects: [],
+      }),
+      "DICOM_LISTENER",
+      nodeName,
+    );
   }
 
   private base(
@@ -188,7 +247,11 @@ export class AtnaAuditService {
     };
   }
 
-  private describe(details?: { patientName?: string; accession?: string; count?: number }): string {
+  private describe(details?: {
+    patientName?: string;
+    accession?: string;
+    count?: number;
+  }): string {
     if (!details) return "DICOM study imported";
     return [
       details.patientName ? `patient=${details.patientName}` : "",

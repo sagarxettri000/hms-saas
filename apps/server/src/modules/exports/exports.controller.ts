@@ -41,7 +41,11 @@ export class ExportsController {
   @Header("Content-Type", "text/csv; charset=utf-8")
   @Header("Content-Disposition", 'attachment; filename="invoices.csv"')
   @ApiOperation({ summary: "Export invoices to CSV" })
-  async invoices(@Req() req: any, @Query("from") from?: string, @Query("to") to?: string) {
+  async invoices(
+    @Req() req: any,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
     return this.exportsService.invoicesCsv(req.user.tenantId, { from, to });
   }
 
@@ -74,7 +78,10 @@ export class ExportsController {
     @Query("from") from?: string,
     @Query("to") to?: string,
   ) {
-    const pdf = await this.exportsService.revenuePdf(req.user.tenantId, { from, to });
+    const pdf = await this.exportsService.revenuePdf(req.user.tenantId, {
+      from,
+      to,
+    });
     return res.send(pdf);
   }
 

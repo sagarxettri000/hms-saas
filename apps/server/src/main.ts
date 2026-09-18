@@ -13,16 +13,22 @@ import { RlsContextInterceptor } from "./common/rls/rls-context.interceptor";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    logger: process.env.NODE_ENV === "production"
-      ? ["error", "warn"]
-      : undefined,
+    logger:
+      process.env.NODE_ENV === "production" ? ["error", "warn"] : undefined,
   });
 
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(",") || ["http://localhost:3000"],
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Tenant-ID", "X-Correlation-ID", "X-HMS-CSRF", "X-Requested-With"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Tenant-ID",
+      "X-Correlation-ID",
+      "X-HMS-CSRF",
+      "X-Requested-With",
+    ],
   });
 
   app.use(helmet());

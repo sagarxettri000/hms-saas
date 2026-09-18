@@ -139,7 +139,13 @@ export class RadiologyController {
   @ApiOperation({ summary: "Add a report addendum/revision" })
   addRevision(
     @Param("id") id: string,
-    @Body() dto: { findings?: string; impression?: string; report?: string; reason?: string },
+    @Body()
+    dto: {
+      findings?: string;
+      impression?: string;
+      report?: string;
+      reason?: string;
+    },
     @Req() req: any,
   ) {
     return this.radiologyService.addRevision(
@@ -209,7 +215,10 @@ export class RadiologyController {
   @Get("tat-metrics")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Radiologist turnaround-time metrics" })
-  getTatMetrics(@Query() query: { from?: string; to?: string }, @Req() req: any) {
+  getTatMetrics(
+    @Query() query: { from?: string; to?: string },
+    @Req() req: any,
+  ) {
     return this.radiologyService.tatMetrics(req.user.tenantId, query);
   }
 
@@ -263,7 +272,8 @@ export class RadiologyController {
   @ApiOperation({ summary: "Decide a peer review (approve/reject/override)" })
   decidePeerReview(
     @Param("id") id: string,
-    @Body() dto: { status: "APPROVED" | "REJECTED" | "OVERRIDE"; note?: string },
+    @Body()
+    dto: { status: "APPROVED" | "REJECTED" | "OVERRIDE"; note?: string },
     @Req() req: any,
   ) {
     return this.radiologyService.decidePeerReview(
@@ -278,7 +288,11 @@ export class RadiologyController {
   @Get("orders/:id/pdf")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Download radiology report PDF" })
-  async downloadReportPdf(@Param("id") id: string, @Req() req: any, @Res() res: any) {
+  async downloadReportPdf(
+    @Param("id") id: string,
+    @Req() req: any,
+    @Res() res: any,
+  ) {
     const buffer = await this.radiologyService.generateReportPdf(
       req.user.tenantId,
       id,

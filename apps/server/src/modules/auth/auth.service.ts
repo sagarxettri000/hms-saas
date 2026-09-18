@@ -11,13 +11,17 @@ import * as crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UserRole, getRolePermissions } from "@hms/shared";
-import { LoginDto, RegisterDto, ResetPasswordDto, ChangePasswordDto, EnableTwoFactorDto, DisableTwoFactorDto } from "./dto/auth.dto";
+import {
+  LoginDto,
+  RegisterDto,
+  ResetPasswordDto,
+  ChangePasswordDto,
+  EnableTwoFactorDto,
+  DisableTwoFactorDto,
+} from "./dto/auth.dto";
 import { MailService } from "./mail.service";
 import { TwoFactorService } from "./two-factor.service";
-import {
-  accessPrivatePem,
-  accessSigningKid,
-} from "./token-keys";
+import { accessPrivatePem, accessSigningKid } from "./token-keys";
 
 export interface AuthUser {
   id: string;
@@ -182,7 +186,10 @@ export class AuthService {
       }
       this.canAttemptTwoFactor(dto.email);
       try {
-        this.twoFactorService.assertValid(user.twoFactorSecret, dto.twoFactorCode);
+        this.twoFactorService.assertValid(
+          user.twoFactorSecret,
+          dto.twoFactorCode,
+        );
         this.clearTwoFactorFailures(dto.email);
       } catch (err) {
         this.recordTwoFactorFailure(dto.email);
@@ -211,7 +218,10 @@ export class AuthService {
       : 7 * 24 * 60 * 60 * 1000;
 
     const refreshToken = crypto.randomBytes(40).toString("hex");
-    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+    const refreshTokenHash = crypto
+      .createHash("sha256")
+      .update(refreshToken)
+      .digest("hex");
 
     const session = await this.prisma.session.create({
       data: {
@@ -374,10 +384,7 @@ export class AuthService {
     }
 
     const token = crypto.randomBytes(32).toString("hex");
-    const tokenHash = crypto
-      .createHash("sha256")
-      .update(token)
-      .digest("hex");
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
     await this.prisma.passwordResetToken.create({
@@ -402,7 +409,10 @@ export class AuthService {
     }
 
     if (process.env.NODE_ENV !== "production") {
-      return { message: "If the email exists, a reset link will be sent.", resetUrl };
+      return {
+        message: "If the email exists, a reset link will be sent.",
+        resetUrl,
+      };
     }
 
     return { message: "If the email exists, a reset link will be sent." };
@@ -559,9 +569,7 @@ export class AuthService {
           where: { tenantId: user.tenantId },
         }),
       ]);
-      const effective = new Map(
-        tenantFlags.map((f) => [f.flagId, f.enabled]),
-      );
+      const effective = new Map(tenantFlags.map((f) => [f.flagId, f.enabled]));
       result.featureFlags = catalog.map((f) => ({
         key: f.key,
         enabled: effective.has(f.id) ? effective.get(f.id) : f.defaultEnabled,

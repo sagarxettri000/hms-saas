@@ -59,7 +59,9 @@ export class EquipmentController {
 
   @Post(":id/serviced")
   @Permissions(PermissionAction.EDIT)
-  @ApiOperation({ summary: "Record equipment as serviced (adds log + updates last service)" })
+  @ApiOperation({
+    summary: "Record equipment as serviced (adds log + updates last service)",
+  })
   recordService(
     @Param("id") id: string,
     @Body() dto: CreateLogDto,
@@ -71,8 +73,15 @@ export class EquipmentController {
   @Get(":id/logs")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "List maintenance logs for equipment" })
-  findEquipmentLogs(@Param("id") id: string, @Query() query: any, @Req() req: any) {
-    return this.service.findLogs(req.user.tenantId, { ...query, equipmentId: id });
+  findEquipmentLogs(
+    @Param("id") id: string,
+    @Query() query: any,
+    @Req() req: any,
+  ) {
+    return this.service.findLogs(req.user.tenantId, {
+      ...query,
+      equipmentId: id,
+    });
   }
 
   @Get(":id")

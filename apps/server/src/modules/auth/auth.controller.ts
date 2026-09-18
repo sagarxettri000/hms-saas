@@ -47,14 +47,22 @@ export class AuthController {
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: "Login with email and password" })
-  async login(@Body() dto: LoginDto, @Req() req: any, @Res({ passthrough: true }) res: any) {
+  async login(
+    @Body() dto: LoginDto,
+    @Req() req: any,
+    @Res({ passthrough: true }) res: any,
+  ) {
     const result = await this.authService.login(
       dto,
       req.headers["user-agent"],
       req.ip,
     );
     if (result && (result as any).accessToken) {
-      this.setAuthCookies(res, result as { accessToken: string; refreshToken: string }, dto.rememberMe);
+      this.setAuthCookies(
+        res,
+        result as { accessToken: string; refreshToken: string },
+        dto.rememberMe,
+      );
     }
     return result;
   }
@@ -65,7 +73,11 @@ export class AuthController {
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: "Refresh access token" })
-  async refreshToken(@Body() dto: RefreshTokenDto, @Req() req: any, @Res({ passthrough: true }) res: any) {
+  async refreshToken(
+    @Body() dto: RefreshTokenDto,
+    @Req() req: any,
+    @Res({ passthrough: true }) res: any,
+  ) {
     const refreshToken = dto.refreshToken || req.cookies?.hms_refresh;
     if (!refreshToken) {
       throw new UnauthorizedException("Invalid refresh token");
@@ -87,7 +99,11 @@ export class AuthController {
   @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Logout and invalidate session" })
-  async logout(@Body() dto: RefreshTokenDto, @Req() req: any, @Res({ passthrough: true }) res: any) {
+  async logout(
+    @Body() dto: RefreshTokenDto,
+    @Req() req: any,
+    @Res({ passthrough: true }) res: any,
+  ) {
     const refreshToken = dto.refreshToken || req.cookies?.hms_refresh;
     this.clearAuthCookies(res);
     if (refreshToken) {
@@ -180,7 +196,11 @@ export class AuthController {
     };
   }
 
-  private setAuthCookies(res: any, result: { accessToken: string; refreshToken: string }, rememberMe?: boolean) {
+  private setAuthCookies(
+    res: any,
+    result: { accessToken: string; refreshToken: string },
+    rememberMe?: boolean,
+  ) {
     const common = this.cookieOptions();
     res.cookie("hms_access", result.accessToken, {
       ...common,

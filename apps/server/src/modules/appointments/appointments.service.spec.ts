@@ -1,8 +1,17 @@
-import { ConflictException, NotFoundException, BadRequestException } from "@nestjs/common";
-import { AppointmentsService, CreateAppointmentDto } from "./appointments.service";
+import {
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
+import {
+  AppointmentsService,
+  CreateAppointmentDto,
+} from "./appointments.service";
 
 function makeService(prisma: any): AppointmentsService {
-  return new AppointmentsService(prisma, { create: jest.fn().mockResolvedValue({}) } as any);
+  return new AppointmentsService(prisma, {
+    create: jest.fn().mockResolvedValue({}),
+  } as any);
 }
 
 describe("AppointmentsService", () => {
@@ -16,7 +25,12 @@ describe("AppointmentsService", () => {
         create: jest.fn().mockImplementation(({ data, include }) => ({
           ...data,
           id: "apt-1",
-          patient: { id: "p1", firstName: "John", lastName: "Doe", mrn: "NBM-001" },
+          patient: {
+            id: "p1",
+            firstName: "John",
+            lastName: "Doe",
+            mrn: "NBM-001",
+          },
           doctor: { user: { firstName: "Dr", lastName: "Smith" } },
           department: { id: "dept-1", name: "OPD" },
         })),
@@ -25,7 +39,9 @@ describe("AppointmentsService", () => {
       },
       patient: {
         findFirst: jest.fn(),
-        create: jest.fn().mockImplementation(({ data }) => ({ ...data, id: "new-patient" })),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) => ({ ...data, id: "new-patient" })),
       },
       availabilitySlot: {
         updateMany: jest.fn(),
@@ -55,10 +71,18 @@ describe("AppointmentsService", () => {
         endTime: "10:15",
         tokenNumber: "TK-001",
         status: "CONFIRMED",
-        patient: { id: "p1", firstName: "John", lastName: "Doe", mrn: "NBM-001" },
+        patient: {
+          id: "p1",
+          firstName: "John",
+          lastName: "Doe",
+          mrn: "NBM-001",
+        },
         doctor: { user: { firstName: "Dr", lastName: "Smith" } },
       });
-      prisma.patient.findFirst.mockResolvedValue({ id: "p1", tenantId: "tenant-1" });
+      prisma.patient.findFirst.mockResolvedValue({
+        id: "p1",
+        tenantId: "tenant-1",
+      });
       jest.spyOn(service as any, "generateToken").mockResolvedValue("TK-001");
       jest.spyOn(service as any, "calculateEndTime").mockReturnValue("10:15");
       jest.spyOn(service as any, "logAudit").mockResolvedValue(undefined);
@@ -121,14 +145,21 @@ describe("AppointmentsService", () => {
           create: jest.fn().mockImplementation(({ data }) => ({
             ...data,
             id: "apt-1",
-            patient: { id: "new-patient", firstName: "New", lastName: "Patient", mrn: "NBM-001" },
+            patient: {
+              id: "new-patient",
+              firstName: "New",
+              lastName: "Patient",
+              mrn: "NBM-001",
+            },
             doctor: { user: { firstName: "Dr", lastName: "Smith" } },
             department: { id: "dept-1", name: "OPD" },
           })),
         },
         patient: {
           findFirst: jest.fn().mockResolvedValue(null),
-          create: jest.fn().mockImplementation(({ data }) => ({ ...data, id: "new-patient" })),
+          create: jest
+            .fn()
+            .mockImplementation(({ data }) => ({ ...data, id: "new-patient" })),
         },
         availabilitySlot: { updateMany: jest.fn() },
         $transaction: jest.fn().mockImplementation((fn) => fn(testPrisma)),
@@ -136,8 +167,12 @@ describe("AppointmentsService", () => {
       };
       const testService = makeService(testPrisma);
 
-      jest.spyOn(testService as any, "generateToken").mockResolvedValue("TK-001");
-      jest.spyOn(testService as any, "calculateEndTime").mockReturnValue("10:15");
+      jest
+        .spyOn(testService as any, "generateToken")
+        .mockResolvedValue("TK-001");
+      jest
+        .spyOn(testService as any, "calculateEndTime")
+        .mockReturnValue("10:15");
       jest.spyOn(testService as any, "logAudit").mockResolvedValue(undefined);
 
       const dto: CreateAppointmentDto = {
@@ -165,7 +200,10 @@ describe("AppointmentsService", () => {
       await service.create("tenant-1", dto, "user-1");
       expect(prisma.appointment.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: "CHECKED_IN", isWalkIn: true }),
+          data: expect.objectContaining({
+            status: "CHECKED_IN",
+            isWalkIn: true,
+          }),
         }),
       );
     });
@@ -175,7 +213,12 @@ describe("AppointmentsService", () => {
     const prisma = {
       appointment: {
         findMany: jest.fn().mockResolvedValue([
-          { id: "apt-1", patientId: "p1", doctorId: "doc-1", status: "CONFIRMED" },
+          {
+            id: "apt-1",
+            patientId: "p1",
+            doctorId: "doc-1",
+            status: "CONFIRMED",
+          },
         ]),
         count: jest.fn().mockResolvedValue(1),
       },
@@ -197,7 +240,10 @@ describe("AppointmentsService", () => {
       await service.findAll("tenant-1", { patientId: "p1" });
       expect(prisma.appointment.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ tenantId: "tenant-1", patientId: "p1" }),
+          where: expect.objectContaining({
+            tenantId: "tenant-1",
+            patientId: "p1",
+          }),
         }),
       );
     });
@@ -206,7 +252,10 @@ describe("AppointmentsService", () => {
       await service.findAll("tenant-1", { doctorId: "doc-1" });
       expect(prisma.appointment.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ tenantId: "tenant-1", doctorId: "doc-1" }),
+          where: expect.objectContaining({
+            tenantId: "tenant-1",
+            doctorId: "doc-1",
+          }),
         }),
       );
     });

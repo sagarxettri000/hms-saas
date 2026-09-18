@@ -10,7 +10,9 @@ describe("QualityChecklistsService", () => {
     it("returns tenant-scoped checklist items", async () => {
       const prisma = {
         qualityChecklist: {
-          findMany: jest.fn().mockResolvedValue([{ id: "q1", category: "A", item: "x" }]),
+          findMany: jest
+            .fn()
+            .mockResolvedValue([{ id: "q1", category: "A", item: "x" }]),
         },
       };
       const service = makeService(prisma as any);
@@ -26,9 +28,9 @@ describe("QualityChecklistsService", () => {
     it("rejects missing category or item", async () => {
       const prisma = { qualityChecklist: {} };
       const service = makeService(prisma as any);
-      await expect(service.setItem("t1", { category: "A", item: "" }, "u1")).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.setItem("t1", { category: "A", item: "" }, "u1"),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it("creates a new checked item", async () => {
@@ -54,8 +56,12 @@ describe("QualityChecklistsService", () => {
     it("updates an existing item when unchecked", async () => {
       const prisma = {
         qualityChecklist: {
-          findFirst: jest.fn().mockResolvedValue({ id: "q1", category: "A", item: "x" }),
-          update: jest.fn().mockImplementation(({ data }) => ({ id: "q1", ...data })),
+          findFirst: jest
+            .fn()
+            .mockResolvedValue({ id: "q1", category: "A", item: "x" }),
+          update: jest
+            .fn()
+            .mockImplementation(({ data }) => ({ id: "q1", ...data })),
           create: jest.fn(),
         },
       };

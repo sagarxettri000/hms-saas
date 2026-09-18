@@ -93,10 +93,17 @@ export class DischargeBillingService {
         include: { details: true },
       });
 
-      await this.logAudit(tenantId, userId, "CREATE", "DischargeBill", bill.id, {
-        action: "DRAFT_CREATED",
-        billNumber,
-      });
+      await this.logAudit(
+        tenantId,
+        userId,
+        "CREATE",
+        "DischargeBill",
+        bill.id,
+        {
+          action: "DRAFT_CREATED",
+          billNumber,
+        },
+      );
 
       return bill;
     });
@@ -129,7 +136,7 @@ export class DischargeBillingService {
     });
 
     let serviceName = dto.serviceName;
-    let serviceId = dto.serviceId;
+    const serviceId = dto.serviceId;
     let serviceCode = dto.serviceCode;
     let taxPercent = 0;
 
@@ -143,8 +150,7 @@ export class DischargeBillingService {
         taxPercent = Number(service.taxPercent || 0);
       }
     }
-    if (!serviceName)
-      throw new BadRequestException("Service name is required");
+    if (!serviceName) throw new BadRequestException("Service name is required");
 
     const grossAmount = quantity * unitRate;
     const taxAmount = (grossAmount * taxPercent) / 100;
@@ -197,11 +203,18 @@ export class DischargeBillingService {
 
     await this.prisma.dischargeBillDetail.delete({ where: { id: detailId } });
 
-    await this.logAudit(tenantId, userId, "DELETE", "DischargeBillDetail", detailId, {
-      action: "CHARGE_REMOVED",
-      billId,
-      serviceName: detail.serviceName,
-    });
+    await this.logAudit(
+      tenantId,
+      userId,
+      "DELETE",
+      "DischargeBillDetail",
+      detailId,
+      {
+        action: "CHARGE_REMOVED",
+        billId,
+        serviceName: detail.serviceName,
+      },
+    );
   }
 
   // ========================
@@ -226,7 +239,9 @@ export class DischargeBillingService {
       label: "Discount amount",
     });
     if (discountAmount <= 0)
-      throw new BadRequestException("Discount amount must be greater than zero");
+      throw new BadRequestException(
+        "Discount amount must be greater than zero",
+      );
     if (!dto.reason || !dto.reason.trim())
       throw new BadRequestException("Discount reason is required");
 
@@ -755,10 +770,7 @@ export class DischargeBillingService {
       where: { tenantId, dischargeBillId: billId },
     });
 
-    const subtotal = details.reduce(
-      (sum, d) => sum + Number(d.grossAmount),
-      0,
-    );
+    const subtotal = details.reduce((sum, d) => sum + Number(d.grossAmount), 0);
     const tax = details.reduce((sum, d) => sum + Number(d.tax), 0);
     const netAmount = subtotal + tax;
 

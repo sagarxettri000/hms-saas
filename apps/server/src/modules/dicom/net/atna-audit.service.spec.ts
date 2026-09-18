@@ -1,4 +1,8 @@
-import { buildAtnaXml, ATNA_CODES, AtnaEntry } from "../../../common/audit/atna";
+import {
+  buildAtnaXml,
+  ATNA_CODES,
+  AtnaEntry,
+} from "../../../common/audit/atna";
 import { AtnaAuditService } from "./atna-audit.service";
 
 function makeAudit() {
@@ -12,10 +16,24 @@ const entry: AtnaEntry = {
   action: "C",
   eventIdCode: ATNA_CODES.EVENT_IMPORT,
   eventIdLabel: "Import",
-  initiator: { userId: "user-1", name: "Dr. Rai", role: ATNA_CODES.ROLE_PERSON, roleLabel: "User" },
-  participant: { name: "HMS", role: ATNA_CODES.ROLE_APPLICATION, roleLabel: "Application" },
+  initiator: {
+    userId: "user-1",
+    name: "Dr. Rai",
+    role: ATNA_CODES.ROLE_PERSON,
+    roleLabel: "User",
+  },
+  participant: {
+    name: "HMS",
+    role: ATNA_CODES.ROLE_APPLICATION,
+    roleLabel: "Application",
+  },
   objects: [
-    { id: "study-1", role: ATNA_CODES.ROLE_STUDY, roleLabel: "Study", description: "CT Chest, count=12" },
+    {
+      id: "study-1",
+      role: ATNA_CODES.ROLE_STUDY,
+      roleLabel: "Study",
+      description: "CT Chest, count=12",
+    },
   ],
 };
 
@@ -29,14 +47,14 @@ describe("ATNA (RFC 3881) audit", () => {
     expect(xml).toContain(`<EventID code="${ATNA_CODES.EVENT_IMPORT}"`);
     expect(xml).toContain('<ActiveParticipant UserID="user-1"');
     expect(xml).toContain("<ParticipantObjectIdentification");
-    expect(xml).toContain("ParticipantObjectID=\"study-1\"");
+    expect(xml).toContain('ParticipantObjectID="study-1"');
     expect(xml).toContain(`code="${ATNA_CODES.ROLE_STUDY}"`);
   });
 
   it("escapes XML-significant characters in identifiers", () => {
     const evil: AtnaEntry = {
       ...entry,
-      initiator: { ...entry.initiator, name: "A <B> & \"C\"" },
+      initiator: { ...entry.initiator, name: 'A <B> & "C"' },
       objects: [{ id: "study-<1>", role: "110171", roleLabel: "Study & More" }],
     };
     const xml = buildAtnaXml(evil);

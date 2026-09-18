@@ -89,7 +89,10 @@ export interface AssociateRequestDetails {
   implementationVersionName?: string;
 }
 
-export function parsePduHeader(bytes: Buffer, offset: number): { type: number; length: number; dataOffset: number } {
+export function parsePduHeader(
+  bytes: Buffer,
+  offset: number,
+): { type: number; length: number; dataOffset: number } {
   if (bytes.length - offset < 6) throw new Error("Incomplete PDU header");
   const type = bytes[offset];
   const length = bytes.readUInt32BE(offset + 2);
@@ -97,7 +100,10 @@ export function parsePduHeader(bytes: Buffer, offset: number): { type: number; l
 }
 
 export function readStr(bytes: Buffer, offset: number, length: number): string {
-  return bytes.subarray(offset, offset + length).toString("latin1").replace(/\s+$/g, "");
+  return bytes
+    .subarray(offset, offset + length)
+    .toString("latin1")
+    .replace(/\s+$/g, "");
 }
 
 function readUidItem(bytes: Buffer, offset: number): string {
@@ -106,7 +112,11 @@ function readUidItem(bytes: Buffer, offset: number): string {
   return bytes.subarray(offset + 4, offset + 4 + len).toString("latin1");
 }
 
-export function parseAssociateRq(bytes: Buffer, offset: number, length: number): AssociateRequestDetails {
+export function parseAssociateRq(
+  bytes: Buffer,
+  offset: number,
+  length: number,
+): AssociateRequestDetails {
   let pos = offset;
 
   // Protocol version (2 bytes) + reserved (2 bytes)
@@ -146,7 +156,11 @@ export function parseAssociateRq(bytes: Buffer, offset: number, length: number):
       const numTs = bytes[p++];
       p++; // reserved
 
-      const context: PresentationContextRQ = { id: pcId, abstractSyntaxUid: "", transferSyntaxUids: [] };
+      const context: PresentationContextRQ = {
+        id: pcId,
+        abstractSyntaxUid: "",
+        transferSyntaxUids: [],
+      };
 
       const pcEnd = p + (itemEnd - p);
       while (p < pcEnd) {
@@ -192,11 +206,20 @@ export function parseAssociateRq(bytes: Buffer, offset: number, length: number):
   return details;
 }
 
-export function writeFixedString(buf: Buffer, offset: number, value: string, length: number) {
+export function writeFixedString(
+  buf: Buffer,
+  offset: number,
+  value: string,
+  length: number,
+) {
   buf.write(value.slice(0, length).padEnd(length, " "), offset, "latin1");
 }
 
-export interface AcContext { id: number; result: number; transferSyntaxUid: string; }
+export interface AcContext {
+  id: number;
+  result: number;
+  transferSyntaxUid: string;
+}
 
 /**
  * Build an A-ASSOCIATE-AC PDU body. Returns the full PDU (with header).
@@ -225,11 +248,7 @@ export function buildAssociateAc(
     const inner: Buffer[] = [];
     // Transfer syntax sub-item
     inner.push(
-      Buffer.concat([
-        Buffer.from([0x40, 0x00]),
-        u16(tsUid.length),
-        tsUid,
-      ]),
+      Buffer.concat([Buffer.from([0x40, 0x00]), u16(tsUid.length), tsUid]),
     );
     const innerLen = 4 + inner.reduce((s, b) => s + b.length, 0);
     sub.push(
@@ -247,9 +266,7 @@ export function buildAssociateAc(
 
   // User information
   const ui: Buffer[] = [];
-  ui.push(
-    Buffer.concat([Buffer.from([0x51, 0x00]), u16(4), u32(16384)]),
-  );
+  ui.push(Buffer.concat([Buffer.from([0x51, 0x00]), u16(4), u32(16384)]));
   const icl = Buffer.from(implementationClassUid, "latin1");
   ui.push(Buffer.concat([Buffer.from([0x52, 0x00]), u16(icl.length), icl]));
   const iver = Buffer.from(implementationVersionName, "latin1");
@@ -307,7 +324,11 @@ export interface Pdv {
   data: Buffer;
 }
 
-export function parsePDataTf(bytes: Buffer, offset: number, length: number): Pdv[] {
+export function parsePDataTf(
+  bytes: Buffer,
+  offset: number,
+  length: number,
+): Pdv[] {
   const pdvs: Pdv[] = [];
   let pos = offset;
   const end = offset + length;
@@ -329,7 +350,14 @@ export function buildPDataTf(pdvs: Pdv[]): Buffer {
     const inner = Buffer.alloc(2);
     inner[0] = pdv.contextId;
     inner[1] = pdv.controlHeader;
-    chunks.push(Buffer.concat([Buffer.from([0x00, 0x00]), u16(pdv.data.length + 2), inner, pdv.data]));
+    chunks.push(
+      Buffer.concat([
+        Buffer.from([0x00, 0x00]),
+        u16(pdv.data.length + 2),
+        inner,
+        pdv.data,
+      ]),
+    );
   }
   const variable = Buffer.concat(chunks);
   const header = Buffer.alloc(6);
@@ -365,17 +393,44 @@ export interface DimseCommand {
 }
 
 const VR_BY_SHORT: Record<string, string> = {
-  AE: "AE", AS: "AS", AT: "AT", CS: "CS", DA: "DA", DS: "DS", DT: "DT",
-  FD: "FD", FL: "FL", IS: "IS", LO: "LO", LT: "LT", OB: "OB", OD: "OD",
-  OF: "OF", OW: "OW", PN: "PN", SH: "SH", SL: "SL", SQ: "SQ", SS: "SS",
-  ST: "ST", TM: "TM", UI: "UI", UL: "UL", US: "US", UT: "UT",
+  AE: "AE",
+  AS: "AS",
+  AT: "AT",
+  CS: "CS",
+  DA: "DA",
+  DS: "DS",
+  DT: "DT",
+  FD: "FD",
+  FL: "FL",
+  IS: "IS",
+  LO: "LO",
+  LT: "LT",
+  OB: "OB",
+  OD: "OD",
+  OF: "OF",
+  OW: "OW",
+  PN: "PN",
+  SH: "SH",
+  SL: "SL",
+  SQ: "SQ",
+  SS: "SS",
+  ST: "ST",
+  TM: "TM",
+  UI: "UI",
+  UL: "UL",
+  US: "US",
+  UT: "UT",
 };
 
 /**
  * Parse a DICOM dataset (used for command sets) in Implicit VR Little Endian.
  * Returns an array of elements with decoded values for scalar VRs.
  */
-export function parseDatasetImplicitLe(bytes: Buffer, offset: number, dataLength: number): Array<{ tag: string; vr: string; value: unknown }> {
+export function parseDatasetImplicitLe(
+  bytes: Buffer,
+  offset: number,
+  dataLength: number,
+): Array<{ tag: string; vr: string; value: unknown }> {
   const elements: Array<{ tag: string; vr: string; value: unknown }> = [];
   let pos = offset;
   const end = offset + dataLength;
@@ -384,7 +439,9 @@ export function parseDatasetImplicitLe(bytes: Buffer, offset: number, dataLength
     const group = bytes.readUInt16LE(pos);
     const element = bytes.readUInt16LE(pos + 2);
     const length = bytes.readUInt32LE(pos + 4);
-    const tag = group.toString(16).padStart(4, "0") + element.toString(16).padStart(4, "0");
+    const tag =
+      group.toString(16).padStart(4, "0") +
+      element.toString(16).padStart(4, "0");
 
     if (group === 0xfffe) {
       // Sequence/item delimiters: skip
@@ -422,28 +479,48 @@ function implicitVr(group: number, element: number): string {
   // Command group elements (0000,xxxx) are US or UL in command sets except UIDs.
   const tag = (group << 16) | element;
   switch (tag) {
-    case 0x00000000: return "UL";
-    case 0x00000100: return "US";
-    case 0x00000101: return "US";
-    case 0x00000102: return "US";
-    case 0x00000110: return "US";
-    case 0x00000120: return "US";
-    case 0x00000700: return "US";
-    case 0x00000800: return "US";
-    case 0x00000900: return "US";
-    case 0x00000901: return "US";
-    case 0x00000002: return "UI"; // affected SOP class UID
-    case 0x00001000: return "UI"; // affected SOP instance UID
-    case 0x00000200: return "AT";
-    case 0x00000300: return "TM";
-    case 0x0000a000: return "AT";
+    case 0x00000000:
+      return "UL";
+    case 0x00000100:
+      return "US";
+    case 0x00000101:
+      return "US";
+    case 0x00000102:
+      return "US";
+    case 0x00000110:
+      return "US";
+    case 0x00000120:
+      return "US";
+    case 0x00000700:
+      return "US";
+    case 0x00000800:
+      return "US";
+    case 0x00000900:
+      return "US";
+    case 0x00000901:
+      return "US";
+    case 0x00000002:
+      return "UI"; // affected SOP class UID
+    case 0x00001000:
+      return "UI"; // affected SOP instance UID
+    case 0x00000200:
+      return "AT";
+    case 0x00000300:
+      return "TM";
+    case 0x0000a000:
+      return "AT";
     default:
       if (group === 0x0000) return "US";
       return "OB";
   }
 }
 
-export function decodeByteValue(bytes: Buffer, offset: number, length: number, vr: string): string {
+export function decodeByteValue(
+  bytes: Buffer,
+  offset: number,
+  length: number,
+  vr: string,
+): string {
   const raw = bytes.subarray(offset, offset + length);
   switch (vr) {
     case "UI":
@@ -467,7 +544,12 @@ export function decodeByteValue(bytes: Buffer, offset: number, length: number, v
   }
 }
 
-function decodeValue(bytes: Buffer, offset: number, length: number, vr: string): unknown {
+function decodeValue(
+  bytes: Buffer,
+  offset: number,
+  length: number,
+  vr: string,
+): unknown {
   if (vr === "US" && length === 2) return bytes.readUInt16LE(offset);
   if (vr === "UL" && length === 4) return bytes.readUInt32LE(offset);
   if (vr === "SS" && length === 2) return bytes.readInt16LE(offset);
@@ -476,30 +558,39 @@ function decodeValue(bytes: Buffer, offset: number, length: number, vr: string):
     // multi-value numeric
     if (vr === "US") {
       const out: number[] = [];
-      for (let i = 0; i < length; i += 2) out.push(bytes.readUInt16LE(offset + i));
+      for (let i = 0; i < length; i += 2)
+        out.push(bytes.readUInt16LE(offset + i));
       return out.length === 1 ? out[0] : out;
     }
     const out: number[] = [];
-    for (let i = 0; i < length; i += 4) out.push(bytes.readUInt32LE(offset + i));
+    for (let i = 0; i < length; i += 4)
+      out.push(bytes.readUInt32LE(offset + i));
     return out.length === 1 ? out[0] : out;
   }
   return decodeByteValue(bytes, offset, length, vr);
 }
 
-export function commandToAttributes(cmd: DimseCommand, tagOrVR?: Record<string, unknown>): Array<{ tag: string; vr: string; value: unknown }> {
+export function commandToAttributes(
+  cmd: DimseCommand,
+  tagOrVR?: Record<string, unknown>,
+): Array<{ tag: string; vr: string; value: unknown }> {
   const map: Array<{ tag: string; vr: string; value: unknown }> = [];
-  const push = (tag: string, vr: string, value: unknown) => map.push({ tag, vr, value });
+  const push = (tag: string, vr: string, value: unknown) =>
+    map.push({ tag, vr, value });
 
   const groupLength = estimateGroupLength(cmd);
   push("00000000", "UL", groupLength);
   if (cmd.affectedSopClassUid) push("00000002", "UI", cmd.affectedSopClassUid);
   push("00000100", "US", cmd.commandField);
   if (cmd.messageId !== undefined) push("00000110", "US", cmd.messageId);
-  if (cmd.messageIdBeingRespondedTo !== undefined) push("00000120", "US", cmd.messageIdBeingRespondedTo);
+  if (cmd.messageIdBeingRespondedTo !== undefined)
+    push("00000120", "US", cmd.messageIdBeingRespondedTo);
   if (cmd.priority !== undefined) push("00000700", "US", cmd.priority);
-  if (cmd.commandDataSetType !== undefined) push("00000800", "US", cmd.commandDataSetType);
+  if (cmd.commandDataSetType !== undefined)
+    push("00000800", "US", cmd.commandDataSetType);
   if (cmd.status !== undefined) push("00000900", "US", cmd.status);
-  if (cmd.affectedSopInstanceUid) push("00001000", "UI", cmd.affectedSopInstanceUid);
+  if (cmd.affectedSopInstanceUid)
+    push("00001000", "UI", cmd.affectedSopInstanceUid);
 
   if (groupLength > 0) map[0].value = groupLength;
   return map;
@@ -511,14 +602,16 @@ function estimateGroupLength(cmd: DimseCommand): number {
     total += 4 + 4 + valueLength;
     if (even && valueLength % 2) total += 1;
   };
-  if (cmd.affectedSopClassUid) count("UI", cmd.affectedSopClassUid.length, true);
+  if (cmd.affectedSopClassUid)
+    count("UI", cmd.affectedSopClassUid.length, true);
   count("US", 2, false);
   if (cmd.messageId !== undefined) count("US", 2, false);
   if (cmd.messageIdBeingRespondedTo !== undefined) count("US", 2, false);
   if (cmd.priority !== undefined) count("US", 2, false);
   if (cmd.commandDataSetType !== undefined) count("US", 2, false);
   if (cmd.status !== undefined) count("US", 2, false);
-  if (cmd.affectedSopInstanceUid) count("UI", cmd.affectedSopInstanceUid.length, true);
+  if (cmd.affectedSopInstanceUid)
+    count("UI", cmd.affectedSopInstanceUid.length, true);
   return total;
 }
 
@@ -545,7 +638,8 @@ export function encodeCommandSet(cmd: DimseCommand): Buffer {
       }
     } else if (typeof attr.value === "string") {
       valueBuf = Buffer.from(attr.value, "latin1");
-      if (valueBuf.length % 2) valueBuf = Buffer.concat([valueBuf, Buffer.from([0x00])]);
+      if (valueBuf.length % 2)
+        valueBuf = Buffer.concat([valueBuf, Buffer.from([0x00])]);
     } else {
       valueBuf = Buffer.alloc(0);
     }
@@ -564,7 +658,10 @@ export function pdvForCommand(cmd: DimseCommand, contextId: number): Pdv {
   return { contextId, controlHeader: 0x02, data };
 }
 
-export function buildCommandSetPData(cmd: DimseCommand, contextId: number): Buffer {
+export function buildCommandSetPData(
+  cmd: DimseCommand,
+  contextId: number,
+): Buffer {
   return buildPDataTf([pdvForCommand(cmd, contextId)]);
 }
 

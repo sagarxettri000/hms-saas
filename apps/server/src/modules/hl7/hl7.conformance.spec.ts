@@ -103,7 +103,11 @@ describe("HL7 v2.5 conformance", () => {
     expect(segments[0]).toMatch(/^MSH\|\^\~\\&\|HMS\|[^|]*\|PACS\|HOSPITAL\|/);
     expect(segments[0]).toContain("|ORU^R01|ORU.20260909.42|P|2.5");
     expect(segments.some((s) => s.startsWith("PID|1|MRN-1001||"))).toBe(true);
-    expect(segments.some((s) => s.startsWith("OBR|1|RAD-2026-0111|ACC-8888|CT^CHEST ABDOMEN"))).toBe(true);
+    expect(
+      segments.some((s) =>
+        s.startsWith("OBR|1|RAD-2026-0111|ACC-8888|CT^CHEST ABDOMEN"),
+      ),
+    ).toBe(true);
     expect(segments).toContain("ORC|RE|RAD-2026-0111|ACC-8888");
     const obxs = segments.filter((s) => s.startsWith("OBX|"));
     expect(obxs.length).toBe(3);
@@ -116,7 +120,9 @@ describe("HL7 v2.5 conformance", () => {
     expect(frame[frame.length - 2]).toBe(0x1c);
     expect(frame[frame.length - 1]).toBe(0x0d);
     expect(frame.indexOf(MLLP_EOB)).toBeGreaterThan(0);
-    const inner = frame.subarray(1, frame.indexOf(MLLP_EOB) - 1).toString("utf8");
+    const inner = frame
+      .subarray(1, frame.indexOf(MLLP_EOB) - 1)
+      .toString("utf8");
     expect(inner).toContain("ORU^R01");
 
     // The built message re-parses cleanly (round-trip stability).

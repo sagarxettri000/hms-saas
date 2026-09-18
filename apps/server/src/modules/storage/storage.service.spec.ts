@@ -20,7 +20,11 @@ describe("LocalStorageDriver", () => {
   const driver = new LocalStorageDriver(config);
 
   it("puts and reads a file back with correct mime", async () => {
-    const result = await driver.put("a/b/test.pdf", Buffer.from("%PDF-test"), "application/pdf");
+    const result = await driver.put(
+      "a/b/test.pdf",
+      Buffer.from("%PDF-test"),
+      "application/pdf",
+    );
     expect(result.size).toBe(9);
     expect(result.url).toContain("/api/v1/storage/file/a/b/test.pdf");
     const got = await driver.get("a/b/test.pdf");
@@ -41,11 +45,16 @@ describe("LocalStorageDriver", () => {
   });
 
   it("rejects traversal keys", async () => {
-    await expect(driver.put("../escape.txt", Buffer.from("x"), "text/plain")).rejects.toThrow();
+    await expect(
+      driver.put("../escape.txt", Buffer.from("x"), "text/plain"),
+    ).rejects.toThrow();
   });
 
   afterAll(() => {
-    fs.rmSync(config.get<string>("STORAGE_LOCAL_DIR")!, { recursive: true, force: true });
+    fs.rmSync(config.get<string>("STORAGE_LOCAL_DIR")!, {
+      recursive: true,
+      force: true,
+    });
   });
 });
 
@@ -53,11 +62,18 @@ describe("StorageService", () => {
   it("resolves to the local driver by default", async () => {
     const config = makeConfig({});
     const service = new StorageService(config);
-    const result = await service.put("f.txt", Buffer.from("hello"), "text/plain");
+    const result = await service.put(
+      "f.txt",
+      Buffer.from("hello"),
+      "text/plain",
+    );
     expect(result.key).toBe("f.txt");
     const got = await service.get("f.txt");
     expect(got!.data.toString()).toBe("hello");
-    fs.rmSync(config.get<string>("STORAGE_LOCAL_DIR")!, { recursive: true, force: true });
+    fs.rmSync(config.get<string>("STORAGE_LOCAL_DIR")!, {
+      recursive: true,
+      force: true,
+    });
   });
 
   it("throws NotFoundException for missing files", async () => {

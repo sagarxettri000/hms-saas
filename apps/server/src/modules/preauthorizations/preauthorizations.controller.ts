@@ -56,7 +56,11 @@ export class PreauthorizationsController {
   @Patch(":id")
   @Permissions(PermissionAction.EDIT)
   @ApiOperation({ summary: "Update a pre-authorization" })
-  update(@Param("id") id: string, @Body() dto: UpdatePreauthDto, @Req() req: any) {
+  update(
+    @Param("id") id: string,
+    @Body() dto: UpdatePreauthDto,
+    @Req() req: any,
+  ) {
     return this.service.update(req.user.tenantId, id, dto, req.user.id);
   }
 

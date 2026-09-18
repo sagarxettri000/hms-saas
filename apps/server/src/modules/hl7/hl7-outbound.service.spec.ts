@@ -52,25 +52,30 @@ async function freePort(): Promise<number> {
   });
 }
 
-async function ackServer(ack = "MSH|^~\\&|RIS|||||20060101120000||ACK|a1|P|2.5\rMSA|AA|ctl\r", timeoutMs = 5000) {
+async function ackServer(
+  ack = "MSH|^~\\&|RIS|||||20060101120000||ACK|a1|P|2.5\rMSA|AA|ctl\r",
+  timeoutMs = 5000,
+) {
   const server = net.createServer();
   server.listen(0, "127.0.0.1");
-  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
+  await new Promise<void>((resolve) =>
+    server.once("listening", () => resolve()),
+  );
   const port = (server.address() as net.AddressInfo).port;
 
   const received = new Promise<string>((resolve) => {
     server.on("connection", (socket) => {
       socket.on("data", (data: Buffer) => {
         resolve(data.toString("utf8"));
-        socket.write(Buffer.from([0x0b, ...Buffer.from(ack, "utf8"), 0x1c, 0x0d]));
+        socket.write(
+          Buffer.from([0x0b, ...Buffer.from(ack, "utf8"), 0x1c, 0x0d]),
+        );
       });
     });
   });
 
   const stop = () =>
-    new Promise<void>((resolve) =>
-      server.close(() => resolve()),
-    );
+    new Promise<void>((resolve) => server.close(() => resolve()));
 
   return { port, received, timeoutMs, stop };
 }
@@ -102,22 +107,35 @@ describe("HL7 outbound service", () => {
 
   it("skips transmission when outbound relay is disabled", async () => {
     const prisma = makePrisma(order);
-    prisma.integrationSetting.findUnique.mockResolvedValue({ config: { enabled: false } } as any);
+    prisma.integrationSetting.findUnique.mockResolvedValue({
+      config: { enabled: false },
+    } as any);
     const service = new Hl7OutboundService(prisma as any);
     const result = await service.sendRadiologyReport("t1", "order-1");
-    expect(result).toMatchObject({ orderId: "order-1", sent: false, skipped: true });
+    expect(result).toMatchObject({
+      orderId: "order-1",
+      sent: false,
+      skipped: true,
+    });
   });
 
   it("updates the relay configuration", async () => {
     const prisma = makePrisma(order);
     const service = new Hl7OutboundService(prisma as any);
-    await service.setConfig("t1", { enabled: true, host: "ris.example.com", port: 2575 });
+    await service.setConfig("t1", {
+      enabled: true,
+      host: "ris.example.com",
+      port: 2575,
+    });
     expect(prisma.integrationSetting.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           tenantId_provider: { tenantId: "t1", provider: "hl7-outbound" },
         },
-        create: expect.objectContaining({ tenantId: "t1", provider: "hl7-outbound" }),
+        create: expect.objectContaining({
+          tenantId: "t1",
+          provider: "hl7-outbound",
+        }),
       }),
     );
   });

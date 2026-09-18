@@ -7,7 +7,12 @@ function makeController(service: any) {
 
 function makeReq(overrides: any = {}) {
   return {
-    user: { id: "u1", tenantId: "t1", username: "nurse", ...(overrides.user || {}) },
+    user: {
+      id: "u1",
+      tenantId: "t1",
+      username: "nurse",
+      ...(overrides.user || {}),
+    },
   };
 }
 
@@ -16,7 +21,12 @@ describe("NursingHandoversController", () => {
     it("passes tenant, dto and resolved user name to the service", async () => {
       const service = { create: jest.fn().mockResolvedValue({ id: "h1" }) };
       const controller = makeController(service);
-      const dto = { wardId: "w1", wardName: "Ward A", shiftDate: "2026-01-01", notes: "quiet" };
+      const dto = {
+        wardId: "w1",
+        wardName: "Ward A",
+        shiftDate: "2026-01-01",
+        notes: "quiet",
+      };
       const result = await controller.create(dto, makeReq());
       expect(service.create).toHaveBeenCalledWith("t1", dto, "u1", "nurse");
       expect(result).toEqual({ id: "h1" });

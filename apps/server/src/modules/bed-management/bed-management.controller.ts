@@ -51,7 +51,9 @@ export class BedManagementController {
 
   @Get("board")
   @Permissions(PermissionAction.VIEW)
-  @ApiOperation({ summary: "Nursing bed board: all wards with beds, patients and status" })
+  @ApiOperation({
+    summary: "Nursing bed board: all wards with beds, patients and status",
+  })
   getBoard(@Req() req: any) {
     return this.service.getBoard(req.user.tenantId);
   }

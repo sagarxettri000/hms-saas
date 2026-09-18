@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
@@ -35,18 +39,27 @@ export class DicomWebService {
     const parts = await parseMultipartRelated(body, contentType);
 
     const dicomParts = parts.filter(
-      (p) => (p.headers["content-type"] || "")
-        .toLowerCase()
-        .split(";")[0]
-        .trim() === "application/dicom",
+      (p) =>
+        (p.headers["content-type"] || "").toLowerCase().split(";")[0].trim() ===
+        "application/dicom",
     );
 
     if (!dicomParts.length) {
-      throw new BadRequestException("No application/dicom parts found in the request body");
+      throw new BadRequestException(
+        "No application/dicom parts found in the request body",
+      );
     }
 
     const files = dicomParts.map(
-      (p, i): { buffer: Buffer; originalname: string; mimetype: string; size: number } => ({
+      (
+        p,
+        i,
+      ): {
+        buffer: Buffer;
+        originalname: string;
+        mimetype: string;
+        size: number;
+      } => ({
         buffer: p.data,
         originalname: p.headers["content-location"] || `instance-${i + 1}.dcm`,
         mimetype: "application/dicom",
@@ -84,7 +97,11 @@ export class DicomWebService {
     return {
       "00081190": {
         vr: "UR",
-        Value: studyUid ? [`/dicomweb/studies/${studyUid}`] : [`/dicomweb/studies/${result.ingested[0]?.study.studyInstanceUid || ""}`],
+        Value: studyUid
+          ? [`/dicomweb/studies/${studyUid}`]
+          : [
+              `/dicomweb/studies/${result.ingested[0]?.study.studyInstanceUid || ""}`,
+            ],
       },
       "00081198": { vr: "US", Value: [result.ingested.length] },
       numberOfInstancesStored: result.ingested.length,
@@ -95,7 +112,11 @@ export class DicomWebService {
   /**
    * QIDO-RS: query series across a study (or all studies).
    */
-  async qidoSeries(tenantId: string, studyUid: string | undefined, query: Record<string, string>) {
+  async qidoSeries(
+    tenantId: string,
+    studyUid: string | undefined,
+    query: Record<string, string>,
+  ) {
     const dicomStudyFilter: Prisma.DicomStudyWhereInput = { tenantId };
     if (studyUid) dicomStudyFilter.studyInstanceUid = studyUid;
 
@@ -103,21 +124,27 @@ export class DicomWebService {
       dicomStudy: dicomStudyFilter,
     };
     if (query.Modality) where.modality = query.Modality;
-    if (query.SeriesInstanceUID) where.seriesInstanceUid = query.SeriesInstanceUID;
+    if (query.SeriesInstanceUID)
+      where.seriesInstanceUid = query.SeriesInstanceUID;
 
     const limit = clampLimit(query.limit);
     const offset = clampOffset(query.offset);
     const fuzzy = query.fuzzymatching?.toLowerCase() === "true";
 
     if (query.SeriesDescription && fuzzy) {
-      where.seriesDescription = { contains: query.SeriesDescription, mode: "insensitive" };
+      where.seriesDescription = {
+        contains: query.SeriesDescription,
+        mode: "insensitive",
+      };
     } else if (query.SeriesDescription) {
       where.seriesDescription = query.SeriesDescription;
     }
 
     const series = await this.prisma.dicomSeries.findMany({
       where,
-      include: { dicomStudy: { select: { studyInstanceUid: true, studyDate: true } } },
+      include: {
+        dicomStudy: { select: { studyInstanceUid: true, studyDate: true } },
+      },
       orderBy: { seriesNumber: "asc" as const },
       take: limit,
       skip: offset,
@@ -129,15 +156,24 @@ export class DicomWebService {
   /**
    * QIDO-RS: query instances.
    */
-  async qidoInstances(tenantId: string, studyUid: string | undefined, seriesUid: string | undefined, query: Record<string, string>) {
+  async qidoInstances(
+    tenantId: string,
+    studyUid: string | undefined,
+    seriesUid: string | undefined,
+    query: Record<string, string>,
+  ) {
     const instStudyFilter: Prisma.DicomStudyWhereInput = { tenantId };
     if (studyUid) instStudyFilter.studyInstanceUid = studyUid;
 
-    const dicomSeriesFilter: Prisma.DicomSeriesWhereInput = { dicomStudy: instStudyFilter };
+    const dicomSeriesFilter: Prisma.DicomSeriesWhereInput = {
+      dicomStudy: instStudyFilter,
+    };
     if (seriesUid) dicomSeriesFilter.seriesInstanceUid = seriesUid;
     if (query.Modality) dicomSeriesFilter.modality = query.Modality;
 
-    const where: Prisma.DicomInstanceWhereInput = { dicomSeries: dicomSeriesFilter };
+    const where: Prisma.DicomInstanceWhereInput = {
+      dicomSeries: dicomSeriesFilter,
+    };
     if (query.SOPInstanceUID) where.sopInstanceUid = query.SOPInstanceUID;
 
     const limit = clampLimit(query.limit);
@@ -187,7 +223,17 @@ export class DicomWebService {
   async metadataSeries(tenantId: string, seriesUid: string) {
     const series = await this.prisma.dicomSeries.findFirst({
       where: { seriesInstanceUid: seriesUid, dicomStudy: { tenantId } },
-      include: { dicomStudy: { select: { studyInstanceUid: true, studyDate: true, studyDescription: true, accessionNumber: true, patientId: true } } },
+      include: {
+        dicomStudy: {
+          select: {
+            studyInstanceUid: true,
+            studyDate: true,
+            studyDescription: true,
+            accessionNumber: true,
+            patientId: true,
+          },
+        },
+      },
     });
     if (!series) notFound("DICOM series not found");
     return buildSeriesJson(series, this.baseUrl());
@@ -203,7 +249,9 @@ export class DicomWebService {
       where: {
         sopInstanceUid: instanceUid,
         dicomSeries: {
-          ...(studyUid ? { dicomStudy: { tenantId, studyInstanceUid: studyUid } } : { dicomStudy: { tenantId } }),
+          ...(studyUid
+            ? { dicomStudy: { tenantId, studyInstanceUid: studyUid } }
+            : { dicomStudy: { tenantId } }),
           ...(seriesUid ? { seriesInstanceUid: seriesUid } : {}),
         },
       },
@@ -230,7 +278,10 @@ export class DicomWebService {
     studyUid: string,
     seriesUid: string,
     instanceUid?: string | undefined,
-  ): Promise<{ parts: { data: Buffer; contentType: string }[]; single?: { data: Buffer; contentType: string } }> {
+  ): Promise<{
+    parts: { data: Buffer; contentType: string }[];
+    single?: { data: Buffer; contentType: string };
+  }> {
     const base = {
       dicomSeries: {
         seriesInstanceUid: seriesUid,
@@ -266,7 +317,9 @@ export class DicomWebService {
    */
   async retrieveStudy(tenantId: string, studyUid: string) {
     const instances = await this.prisma.dicomInstance.findMany({
-      where: { dicomSeries: { dicomStudy: { tenantId, studyInstanceUid: studyUid } } },
+      where: {
+        dicomSeries: { dicomStudy: { tenantId, studyInstanceUid: studyUid } },
+      },
       select: { storageKey: true, contentType: true },
       orderBy: { instanceNumber: "asc" as const },
     });
@@ -286,7 +339,11 @@ export class DicomWebService {
    */
   async wadoInstance(
     tenantId: string,
-    uids: { studyInstanceUid: string; seriesInstanceUid: string; instanceUid: string },
+    uids: {
+      studyInstanceUid: string;
+      seriesInstanceUid: string;
+      instanceUid: string;
+    },
   ) {
     const instance = await this.prisma.dicomInstance.findFirst({
       where: {
@@ -333,7 +390,10 @@ export class DicomWebService {
     if (!objectUid) throw new BadRequestException("Missing objectUID");
 
     const instance = await this.prisma.dicomInstance.findFirst({
-      where: { sopInstanceUid: objectUid, dicomSeries: { dicomStudy: { tenantId } } },
+      where: {
+        sopInstanceUid: objectUid,
+        dicomSeries: { dicomStudy: { tenantId } },
+      },
       select: { storageKey: true, contentType: true },
     });
     if (!instance) throw new NotFoundException("DICOM object not found");
@@ -352,7 +412,12 @@ export class DicomWebService {
     if (query.StudyDescription) {
       if (fuzzy) {
         (where as { OR?: unknown[] }).OR = [
-          { studyDescription: { contains: query.StudyDescription, mode: "insensitive" } },
+          {
+            studyDescription: {
+              contains: query.StudyDescription,
+              mode: "insensitive",
+            },
+          },
         ];
       } else {
         where.studyDescription = query.StudyDescription;
@@ -383,7 +448,8 @@ export class DicomWebService {
   }
 
   private baseUrl() {
-    const apiBase = process.env.API_BASE_URL || process.env.PUBLIC_API_URL || "";
+    const apiBase =
+      process.env.API_BASE_URL || process.env.PUBLIC_API_URL || "";
     return apiBase ? `${apiBase}/dicomweb` : "/dicomweb";
   }
 }

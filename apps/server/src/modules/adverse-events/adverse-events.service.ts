@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 
@@ -27,14 +31,11 @@ export interface UpdateAdverseEventDto {
 export class AdverseEventsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(
-    tenantId: string,
-    dto: CreateAdverseEventDto,
-    userId?: string,
-  ) {
+  async create(tenantId: string, dto: CreateAdverseEventDto, userId?: string) {
     if (!tenantId) throw new BadRequestException("Tenant ID is required");
     if (!dto.type) throw new BadRequestException("Event type is required");
-    if (!dto.description) throw new BadRequestException("Description is required");
+    if (!dto.description)
+      throw new BadRequestException("Description is required");
 
     if (dto.patientId) {
       const patient = await this.prisma.patient.findFirst({
@@ -64,7 +65,14 @@ export class AdverseEventsService {
 
   async findAll(
     tenantId: string,
-    query: { patientId?: string; status?: string; type?: string; severity?: string; page?: number; limit?: number } = {},
+    query: {
+      patientId?: string;
+      status?: string;
+      type?: string;
+      severity?: string;
+      page?: number;
+      limit?: number;
+    } = {},
   ) {
     const where: Prisma.AdverseEventWhereInput = { tenantId };
     if (query.patientId) where.patientId = query.patientId;

@@ -43,7 +43,10 @@ export class DicomMwlService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(tenantId: string, params: MwlSearchParams): Promise<WorklistEntry[]> {
+  async list(
+    tenantId: string,
+    params: MwlSearchParams,
+  ): Promise<WorklistEntry[]> {
     const where: Prisma.RadiologyOrderWhereInput = {
       tenantId,
     };
@@ -70,11 +73,17 @@ export class DicomMwlService {
       where.OR = [
         { orderNumber: { contains: q, mode: "insensitive" } },
         { accessionNumber: { contains: q, mode: "insensitive" } },
-        { patient: { is: { OR: [
-          { firstName: { contains: q, mode: "insensitive" } },
-          { lastName: { contains: q, mode: "insensitive" } },
-          { mrn: { contains: q, mode: "insensitive" } },
-        ] } } },
+        {
+          patient: {
+            is: {
+              OR: [
+                { firstName: { contains: q, mode: "insensitive" } },
+                { lastName: { contains: q, mode: "insensitive" } },
+                { mrn: { contains: q, mode: "insensitive" } },
+              ],
+            },
+          },
+        },
       ] as never[];
     }
 
@@ -84,7 +93,15 @@ export class DicomMwlService {
     const orders = await this.prisma.radiologyOrder.findMany({
       where,
       include: {
-        patient: { select: { id: true, firstName: true, lastName: true, mrn: true, hospitalNumber: true } },
+        patient: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            mrn: true,
+            hospitalNumber: true,
+          },
+        },
         dicomStudies: { select: { id: true, studyInstanceUid: true }, take: 1 },
       },
       orderBy: { scheduledAt: "asc" as const },
@@ -106,18 +123,34 @@ export class DicomMwlService {
   }
 
   /** Mark a scheduled order as in progress when images begin to arrive. */
-  async markPerformed(tenantId: string, orderId: string): Promise<{ performed: boolean }> {
+  async markPerformed(
+    tenantId: string,
+    orderId: string,
+  ): Promise<{ performed: boolean }> {
     const updated = await this.prisma.radiologyOrder.updateMany({
-      where: { id: orderId, tenantId, status: { in: ["ORDERED", "SCHEDULED"] } },
+      where: {
+        id: orderId,
+        tenantId,
+        status: { in: ["ORDERED", "SCHEDULED"] },
+      },
       data: { status: "IN_PROGRESS" },
     });
     return { performed: updated.count > 0 };
   }
 
   /** Mark a scheduled order as completed (images uploaded, worklist item done). */
-  async markCompleted(tenantId: string, orderId: string): Promise<{ completed: boolean }> {
+  async markCompleted(
+    tenantId: string,
+    orderId: string,
+  ): Promise<{ completed: boolean }> {
     const updated = await this.prisma.radiologyOrder.updateMany({
-      where: { id: orderId, tenantId, status: { in: ["ORDERED", "SCHEDULED", "IN_PROGRESS", "IMAGES_UPLOADED"] } },
+      where: {
+        id: orderId,
+        tenantId,
+        status: {
+          in: ["ORDERED", "SCHEDULED", "IN_PROGRESS", "IMAGES_UPLOADED"],
+        },
+      },
       data: { status: "IMAGES_UPLOADED" },
     });
     return { completed: updated.count > 0 };

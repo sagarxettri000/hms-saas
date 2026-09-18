@@ -12,13 +12,11 @@ describe("AdverseEventsService", () => {
         findFirst: jest.fn().mockResolvedValue({ id: "p1" }),
       },
       adverseEvent: {
-        create: jest
-          .fn()
-          .mockImplementation(({ data }) => ({
-            ...data,
-            id: "e1",
-            status: "OPEN",
-          })),
+        create: jest.fn().mockImplementation(({ data }) => ({
+          ...data,
+          id: "e1",
+          status: "OPEN",
+        })),
       },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
     };

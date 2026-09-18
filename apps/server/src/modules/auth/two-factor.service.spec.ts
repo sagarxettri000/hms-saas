@@ -113,6 +113,8 @@ describe("TwoFactorService", () => {
   it("assertValid passes for a valid code", () => {
     const secret = service.generateSecret();
     const counter = Math.floor(Date.now() / 1000 / 30);
-    expect(() => service.assertValid(secret, totp(secret, counter))).not.toThrow();
+    expect(() =>
+      service.assertValid(secret, totp(secret, counter)),
+    ).not.toThrow();
   });
 });

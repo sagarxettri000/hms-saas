@@ -12,7 +12,11 @@ import * as path from "path";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { buildAtnaXml, ATNA_CODES } from "../../common/audit/atna";
-import { buildAckMessage, parseHl7Message, parseHl7Timestamp } from "./hl7.parser";
+import {
+  buildAckMessage,
+  parseHl7Message,
+  parseHl7Timestamp,
+} from "./hl7.parser";
 import {
   Hl7Action,
   Hl7ListenerConfig,
@@ -42,7 +46,10 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
     void this.stopMllpListener();
   }
 
-  async startMllpListener(tenantId: string, config: Hl7ListenerConfig): Promise<void> {
+  async startMllpListener(
+    tenantId: string,
+    config: Hl7ListenerConfig,
+  ): Promise<void> {
     await this.stopMllpListener();
     if (!config.enabled) {
       this.mllpConfig = { enabled: false };
@@ -53,8 +60,12 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
     const port = Number(config.port) || 2575;
 
     const createHandler = (socket: net.Socket | tls.TLSSocket) => {
-      socket.on("data", (chunk: Buffer) => this.handleMllpFrame(tenantId, chunk, socket));
-      socket.on("error", (err: Error) => this.logger.warn(`MLLP socket error: ${err.message}`));
+      socket.on("data", (chunk: Buffer) =>
+        this.handleMllpFrame(tenantId, chunk, socket),
+      );
+      socket.on("error", (err: Error) =>
+        this.logger.warn(`MLLP socket error: ${err.message}`),
+      );
     };
 
     const server = config.tls?.enabled
@@ -115,14 +126,21 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
     return Boolean(this.mllpServer && this.mllpConfig?.tls?.enabled);
   }
 
-  private handleMllpFrame(tenantId: string, chunk: Buffer, socket: net.Socket | tls.TLSSocket) {
+  private handleMllpFrame(
+    tenantId: string,
+    chunk: Buffer,
+    socket: net.Socket | tls.TLSSocket,
+  ) {
     const SOB = 0x0b;
     const EOB = 0x1c;
     const CR = 0x0d;
     if (chunk[0] !== SOB) return;
     const eob = chunk.indexOf(EOB);
     if (eob < 2) return;
-    const frame = chunk.subarray(1, eob - 1).toString("utf8").trim();
+    const frame = chunk
+      .subarray(1, eob - 1)
+      .toString("utf8")
+      .trim();
     if (!frame) return;
 
     this.processMessage(frame, { tenantId }).then(
@@ -134,14 +152,22 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
           ack = "MSH|^~\\&|HMS|||||\rMSA|AR|0\r";
         }
         socket.write(
-          Buffer.concat([Buffer.from([SOB]), Buffer.from(ack, "utf8"), Buffer.from([EOB, CR])]),
+          Buffer.concat([
+            Buffer.from([SOB]),
+            Buffer.from(ack, "utf8"),
+            Buffer.from([EOB, CR]),
+          ]),
         );
       },
-      (err: Error) => this.logger.error(`HL7 processing failed: ${err.message}`),
+      (err: Error) =>
+        this.logger.error(`HL7 processing failed: ${err.message}`),
     );
   }
 
-  async processMessage(raw: string, options: Hl7ProcessOptions = {}): Promise<Hl7ProcessResult> {
+  async processMessage(
+    raw: string,
+    options: Hl7ProcessOptions = {},
+  ): Promise<Hl7ProcessResult> {
     const parsed = parseHl7Message(raw);
     const key = `${parsed.messageType}^${parsed.eventType}`;
     const tenantId = options.tenantId;
@@ -161,7 +187,9 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
 
     try {
       if (key.startsWith("ADT")) {
-        actions.push(...(await this.handleAdt(parsed, tenantId, options.userId)));
+        actions.push(
+          ...(await this.handleAdt(parsed, tenantId, options.userId)),
+        );
       } else if (key === "ORM^O01") {
         actions.push(...(await this.handleOrm(parsed, tenantId)));
       } else if (key === "ORU^R01") {
@@ -172,7 +200,9 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
         actions.push({ type: "IGNORED", detail: key });
       }
     } catch (err) {
-      this.logger.error(`event ${key} (${parsed.messageControlId}) failed: ${(err as Error).message}`);
+      this.logger.error(
+        `event ${key} (${parsed.messageControlId}) failed: ${(err as Error).message}`,
+      );
       actions.push({ type: "ERROR", detail: (err as Error).message });
     }
 
@@ -227,9 +257,16 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
           },
         ],
       });
-      void this.audit.log(tenantId, userId, "HL7_MESSAGE", parsed.messageControlId, "CREATE", {
-        atna: { xml },
-      });
+      void this.audit.log(
+        tenantId,
+        userId,
+        "HL7_MESSAGE",
+        parsed.messageControlId,
+        "CREATE",
+        {
+          atna: { xml },
+        },
+      );
     } catch (err) {
       this.logger.warn(`ATNA HL7 audit failed: ${(err as Error).message}`);
     }
@@ -266,14 +303,18 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
       ...(nameField[0] ? { lastName: nameField[0] } : {}),
       ...(nameField[1] ? { firstName: nameField[1] } : {}),
       ...(nameField[2] ? { middleName: nameField[2] } : {}),
-      ...(parseHl7Timestamp(pid.text(6)) ? { dateOfBirth: parseHl7Timestamp(pid.text(6)) } : {}),
+      ...(parseHl7Timestamp(pid.text(6))
+        ? { dateOfBirth: parseHl7Timestamp(pid.text(6)) }
+        : {}),
       ...(ref.gender ? { gender: ref.gender } : {}),
       ...(pid.field(12)?.[0]?.[0] ? { phone: pid.field(12)![0][0] } : {}),
       ...(addressField[0] ? { addressLine1: addressField[0] } : {}),
       ...(addressField[2] ? { city: addressField[2] } : {}),
       ...(addressField[3] ? { province: addressField[3] } : {}),
       ...(addressField[4] ? { postalCode: addressField[4] } : {}),
-      ...(addressField[5] && addressField[5] !== "US" ? { country: addressField[5] } : {}),
+      ...(addressField[5] && addressField[5] !== "US"
+        ? { country: addressField[5] }
+        : {}),
       ...(maritalStatus ? { maritalStatus } : {}),
     };
 
@@ -324,7 +365,10 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
 
   // ---- ORM ^O01 (order entry) -> radiology order ----
 
-  private async handleOrm(parsed: ParsedHl7Message, tenantId: string): Promise<Hl7Action[]> {
+  private async handleOrm(
+    parsed: ParsedHl7Message,
+    tenantId: string,
+  ): Promise<Hl7Action[]> {
     const patientId = await this.resolveOrCreatePatient(parsed, tenantId);
     const obr = parsed.segment("OBR");
     const orc = parsed.segment("ORC");
@@ -332,12 +376,11 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
 
     const { modality, procedureText } = this.classifyObr(obr);
     const control = orc?.text(0) ?? "NW";
-    const status =
-      ["SC", "SN", "OC", "OR"].includes(control)
-        ? "SCHEDULED"
-        : control === "IP"
-          ? "IN_PROGRESS"
-          : "ORDERED";
+    const status = ["SC", "SN", "OC", "OR"].includes(control)
+      ? "SCHEDULED"
+      : control === "IP"
+        ? "IN_PROGRESS"
+        : "ORDERED";
 
     const order = await this.prisma.radiologyOrder.create({
       data: {
@@ -364,7 +407,10 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
 
   // ---- SIU ^S12/S13 (schedule) -> scheduled radiology order ----
 
-  private async handleSiu(parsed: ParsedHl7Message, tenantId: string): Promise<Hl7Action[]> {
+  private async handleSiu(
+    parsed: ParsedHl7Message,
+    tenantId: string,
+  ): Promise<Hl7Action[]> {
     const patientId = await this.resolveOrCreatePatient(parsed, tenantId);
     const sch = parsed.segment("SCH");
     const ail = parsed.segment("AIL");
@@ -373,9 +419,13 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
     const start = parseHl7Timestamp(sch?.field(10)?.[0]?.[0]);
     const procedureField = sch?.field(5)[0] ?? [];
     const procedureText = procedureField[1] ?? procedureField[0];
-    const location = ail ? [ail.text(2), ail.text(3)].filter(Boolean).join(" / ") : undefined;
+    const location = ail
+      ? [ail.text(2), ail.text(3)].filter(Boolean).join(" / ")
+      : undefined;
 
-    const status = ["CN", "DC", "CA", "XR", "HD"].includes(actionCode) ? "ORDERED" : "SCHEDULED";
+    const status = ["CN", "DC", "CA", "XR", "HD"].includes(actionCode)
+      ? "ORDERED"
+      : "SCHEDULED";
 
     const order = await this.prisma.radiologyOrder.create({
       data: {
@@ -383,7 +433,9 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
         patientId,
         orderNumber: await this.generateOrderNumber(tenantId, "RAD"),
         accessionNumber: parsed.segment("OBR")?.text(3) ?? undefined,
-        modality: (procedureText ? this.classifyProcedureText(procedureText) : "OTHERS") as any,
+        modality: (procedureText
+          ? this.classifyProcedureText(procedureText)
+          : "OTHERS") as any,
         bodyPart: procedureText ?? undefined,
         status: status as any,
         scheduledAt: start ?? new Date(),
@@ -403,14 +455,18 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
 
   // ---- ORU ^R01 (results) -> radiology report or lab results ----
 
-  private async handleOru(parsed: ParsedHl7Message, tenantId: string): Promise<Hl7Action[]> {
+  private async handleOru(
+    parsed: ParsedHl7Message,
+    tenantId: string,
+  ): Promise<Hl7Action[]> {
     const patientId = await this.resolveOrCreatePatient(parsed, tenantId);
     const obr = parsed.segment("OBR");
     const obxs = parsed.allSegments("OBX");
     if (!obr) return [{ type: "ERROR", detail: "ORU without OBR" }];
 
     const { isRadiology } = this.classifyObr(obr);
-    if (isRadiology) return this.applyRadiologyResult(tenantId, patientId, obr, obxs);
+    if (isRadiology)
+      return this.applyRadiologyResult(tenantId, patientId, obr, obxs);
     return this.applyLabResult(tenantId, patientId, obr, obxs);
   }
 
@@ -420,7 +476,9 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
     obr: Hl7Segment,
     obxs: Hl7Segment[],
   ): Promise<Hl7Action[]> {
-    const refs = [obr.text(1), obr.text(2)].filter((r): r is string => Boolean(r));
+    const refs = [obr.text(1), obr.text(2)].filter((r): r is string =>
+      Boolean(r),
+    );
 
     let order: { id: string } | null = refs.length
       ? await this.prisma.radiologyOrder.findFirst({
@@ -431,7 +489,11 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
 
     if (!order) {
       order = await this.prisma.radiologyOrder.findFirst({
-        where: { tenantId, patientId, status: { notIn: ["REPORTED", "VERIFIED"] } },
+        where: {
+          tenantId,
+          patientId,
+          status: { notIn: ["REPORTED", "VERIFIED"] },
+        },
         orderBy: { createdAt: "desc" },
         select: { id: true },
       });
@@ -482,7 +544,9 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
         type: "RADIOLOGY_ORDER_REPORTED",
         entityId,
         created,
-        detail: lines ? `${lines.split("\n").length} result line(s)` : "no OBX content",
+        detail: lines
+          ? `${lines.split("\n").length} result line(s)`
+          : "no OBX content",
       },
     ];
   }
@@ -493,7 +557,9 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
     obr: Hl7Segment,
     obxs: Hl7Segment[],
   ): Promise<Hl7Action[]> {
-    const refs = [obr.text(1), obr.text(2)].filter((r): r is string => Boolean(r));
+    const refs = [obr.text(1), obr.text(2)].filter((r): r is string =>
+      Boolean(r),
+    );
 
     let order: { id: string } | null = refs.length
       ? await this.prisma.labOrder.findFirst({
@@ -504,7 +570,11 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
 
     if (!order) {
       order = await this.prisma.labOrder.findFirst({
-        where: { tenantId, patientId, status: { notIn: ["REPORTED", "VERIFIED", "APPROVED"] } },
+        where: {
+          tenantId,
+          patientId,
+          status: { notIn: ["REPORTED", "VERIFIED", "APPROVED"] },
+        },
         orderBy: { createdAt: "desc" },
         select: { id: true },
       });
@@ -539,7 +609,9 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
       const unit = o.component(5, 0, 0);
       const referenceRange = o.component(6, 0, 0);
       const flags = o.field(7)[0] ?? [];
-      const isAbnormal = flags.some((f) => ["L", "H", "LL", "HH", "A"].includes(f));
+      const isAbnormal = flags.some((f) =>
+        ["L", "H", "LL", "HH", "A"].includes(f),
+      );
 
       await this.prisma.labOrderItem.create({
         data: {
@@ -555,7 +627,14 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    return [{ type: "LAB_ORDER_REPORTED", entityId: orderId, created, detail: `${obxs.length} OBX item(s)` }];
+    return [
+      {
+        type: "LAB_ORDER_REPORTED",
+        entityId: orderId,
+        created,
+        detail: `${obxs.length} OBX item(s)`,
+      },
+    ];
   }
 
   // ---- shared helpers ----
@@ -565,14 +644,21 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
       const candidate = (rep[0] ?? "").trim();
       if (!candidate) continue;
       const found = await this.prisma.patient.findFirst({
-        where: { tenantId, deletedAt: null, OR: [{ mrn: candidate }, { hospitalNumber: candidate }] },
+        where: {
+          tenantId,
+          deletedAt: null,
+          OR: [{ mrn: candidate }, { hospitalNumber: candidate }],
+        },
       });
       if (found) return found;
     }
     return null;
   }
 
-  private async resolveOrCreatePatient(parsed: ParsedHl7Message, tenantId: string): Promise<string> {
+  private async resolveOrCreatePatient(
+    parsed: ParsedHl7Message,
+    tenantId: string,
+  ): Promise<string> {
     const pid = parsed.segment("PID");
     if (pid) {
       const existing = await this.findPatientByPid(tenantId, pid);
@@ -619,17 +705,31 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
       lastName: nameField[0],
       dateOfBirth: parseHl7Timestamp(pid?.text(6)),
       gender:
-        genderCode === "M" ? "MALE" : genderCode === "F" ? "FEMALE" : genderCode === "O" || genderCode === "U" ? "OTHER" : undefined,
+        genderCode === "M"
+          ? "MALE"
+          : genderCode === "F"
+            ? "FEMALE"
+            : genderCode === "O" || genderCode === "U"
+              ? "OTHER"
+              : undefined,
       phone: pid?.field(12)?.[0]?.[0],
     };
   }
 
-  private classifyObr(obr: Hl7Segment): { modality: string; procedureText?: string; isRadiology: boolean } {
+  private classifyObr(obr: Hl7Segment): {
+    modality: string;
+    procedureText?: string;
+    isRadiology: boolean;
+  } {
     const universal = obr.field(3)[0] ?? [];
     const code = (universal[0] ?? "").toUpperCase();
     const text = universal[1] ?? "";
     const modality = this.classifyProcedureText(code || text);
-    return { modality, procedureText: text || undefined, isRadiology: modality !== "OTHERS" };
+    return {
+      modality,
+      procedureText: text || undefined,
+      isRadiology: modality !== "OTHERS",
+    };
   }
 
   private classifyProcedureText(raw: string | undefined): string {
@@ -659,9 +759,13 @@ export class Hl7Service implements OnModuleInit, OnModuleDestroy {
     return `NBM-${ymd}-${String(seq).padStart(4, "0")}`;
   }
 
-  private async generateOrderNumber(tenantId: string, prefix: "RAD" | "LAB"): Promise<string> {
+  private async generateOrderNumber(
+    tenantId: string,
+    prefix: "RAD" | "LAB",
+  ): Promise<string> {
     const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const model = prefix === "RAD" ? this.prisma.radiologyOrder : this.prisma.labOrder;
+    const model =
+      prefix === "RAD" ? this.prisma.radiologyOrder : this.prisma.labOrder;
     const latest = await (model as any).findFirst({
       where: { tenantId, orderNumber: { startsWith: `${prefix}-${ymd}` } },
       orderBy: { createdAt: "desc" },

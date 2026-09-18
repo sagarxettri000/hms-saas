@@ -15,7 +15,12 @@ const prismaMock = (): any => ({
     create: jest.fn(),
     update: jest.fn(),
   },
-  bedAllocation: { findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn(), create: jest.fn() },
+  bedAllocation: {
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+    update: jest.fn(),
+    create: jest.fn(),
+  },
   bed: { findFirst: jest.fn(), update: jest.fn() },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
   $transaction: jest.fn((fn) => fn(prismaMock())),
@@ -26,7 +31,10 @@ const notificationsMock = () => ({ create: jest.fn() });
 describe("AdmissionsService.findAll (search)", () => {
   it("builds a search filter across admissionNumber and patient name/mrn", async () => {
     const prisma = prismaMock();
-    const service = new AdmissionsService(prisma as any, notificationsMock() as any);
+    const service = new AdmissionsService(
+      prisma as any,
+      notificationsMock() as any,
+    );
 
     await service.findAll(tenantId, { search: "  JhAn  " } as any);
 
@@ -50,7 +58,10 @@ describe("AdmissionsService.findAll (search)", () => {
 
   it("does not add OR when search is empty/whitespace", async () => {
     const prisma = prismaMock();
-    const service = new AdmissionsService(prisma as any, notificationsMock() as any);
+    const service = new AdmissionsService(
+      prisma as any,
+      notificationsMock() as any,
+    );
 
     await service.findAll(tenantId, { search: "   " } as any);
 
@@ -60,9 +71,15 @@ describe("AdmissionsService.findAll (search)", () => {
 
   it("combines status filter with search", async () => {
     const prisma = prismaMock();
-    const service = new AdmissionsService(prisma as any, notificationsMock() as any);
+    const service = new AdmissionsService(
+      prisma as any,
+      notificationsMock() as any,
+    );
 
-    await service.findAll(tenantId, { status: "ADMITTED", search: "NBM" } as any);
+    await service.findAll(tenantId, {
+      status: "ADMITTED",
+      search: "NBM",
+    } as any);
 
     const where = prisma.admission.findMany.mock.calls[0][0].where;
     expect(where.status).toBe("ADMITTED");
@@ -73,7 +90,10 @@ describe("AdmissionsService.findAll (search)", () => {
     const prisma = prismaMock();
     prisma.admission.findMany.mockResolvedValue([{ id: "a1" }]);
     prisma.admission.count.mockResolvedValue(21);
-    const service = new AdmissionsService(prisma as any, notificationsMock() as any);
+    const service = new AdmissionsService(
+      prisma as any,
+      notificationsMock() as any,
+    );
 
     const res = await service.findAll(tenantId, { page: 2, limit: 20 } as any);
 
@@ -87,12 +107,17 @@ describe("AdmissionsService.findById", () => {
   it("throws NotFound for a foreign-tenant id (IDOR guard)", async () => {
     const prisma = prismaMock();
     prisma.admission.findFirst.mockResolvedValue(null);
-    const service = new AdmissionsService(prisma as any, notificationsMock() as any);
+    const service = new AdmissionsService(
+      prisma as any,
+      notificationsMock() as any,
+    );
 
     await expect(service.findById(tenantId, "other-tenant-id")).rejects.toThrow(
       NotFoundException,
     );
     // tenant scope is always part of the lookup
-    expect(prisma.admission.findFirst.mock.calls[0][0].where.tenantId).toBe(tenantId);
+    expect(prisma.admission.findFirst.mock.calls[0][0].where.tenantId).toBe(
+      tenantId,
+    );
   });
 });

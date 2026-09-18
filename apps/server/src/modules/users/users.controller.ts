@@ -67,7 +67,9 @@ export class UsersController {
   @ApiOperation({ summary: "Get user stats (total/active counts)" })
   getStats(@Req() req: any, @Query() query: any) {
     return this.usersService.getStats(
-      req.user.role === "PLATFORM_SUPER_ADMIN" ? query.tenantId : req.user.tenantId,
+      req.user.role === "PLATFORM_SUPER_ADMIN"
+        ? query.tenantId
+        : req.user.tenantId,
     );
   }
 

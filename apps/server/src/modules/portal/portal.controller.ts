@@ -1,9 +1,20 @@
-import { Body, Controller, Get, Post, Query, Req, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PortalService } from "./portal.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
-import { Roles, TenantScoped } from "../../common/decorators/permissions.decorator";
+import {
+  Roles,
+  TenantScoped,
+} from "../../common/decorators/permissions.decorator";
 import { UserRole } from "@hms/shared";
 import { BookAppointmentDto } from "./dto/book-appointment.dto";
 
@@ -57,8 +68,14 @@ export class PortalController {
 
   @Get("appointments")
   @ApiOperation({ summary: "Get patient appointments" })
-  async getAppointments(@Query("patientId") patientId: string, @Req() req: any) {
-    return this.portalService.getPatientAppointments(patientId, req.user.tenantId);
+  async getAppointments(
+    @Query("patientId") patientId: string,
+    @Req() req: any,
+  ) {
+    return this.portalService.getPatientAppointments(
+      patientId,
+      req.user.tenantId,
+    );
   }
 
   @Post("appointments")

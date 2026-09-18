@@ -29,9 +29,7 @@ function makePrisma(overrides: any = {}) {
 const BASE_DTO = {
   patientId: "pat1",
   storeId: "st1",
-  items: [
-    { medicineId: "med1", quantity: 2, unitPrice: 100 },
-  ],
+  items: [{ medicineId: "med1", quantity: 2, unitPrice: 100 }],
 };
 
 describe("PharmacyService.sale", () => {
@@ -131,7 +129,9 @@ describe("PharmacyService.sale", () => {
     prisma.tenantSetting = {
       findUnique: jest.fn(async () => null),
     };
-    const settings = { set: jest.fn(async (_t: string, _k: string, v: unknown) => v) };
+    const settings = {
+      set: jest.fn(async (_t: string, _k: string, v: unknown) => v),
+    };
     const audit = { log: jest.fn(async () => undefined) };
     return new PharmacyService(prisma as any, settings as any, audit as any);
   }
@@ -140,10 +140,14 @@ describe("PharmacyService.sale", () => {
     const tx = buildTx(10);
     const service = makeService(tx);
 
-    const res: any = await service.sale("t1", {
-      ...BASE_DTO,
-      paymentMethod: "CASH",
-    } as any, "u1");
+    const res: any = await service.sale(
+      "t1",
+      {
+        ...BASE_DTO,
+        paymentMethod: "CASH",
+      } as any,
+      "u1",
+    );
 
     expect(res.success).toBe(true);
     expect(res.invoice.type).toBe("PHARMACY");
@@ -178,7 +182,9 @@ describe("PharmacyService.sale", () => {
       "t1",
       {
         ...BASE_DTO,
-        items: [{ medicineId: "med1", quantity: 1, unitPrice: 100, taxPercent: 10 }],
+        items: [
+          { medicineId: "med1", quantity: 1, unitPrice: 100, taxPercent: 10 },
+        ],
         paymentMethod: "CASH",
       } as any,
       "u1",
@@ -195,7 +201,14 @@ describe("PharmacyService.sale", () => {
     const service = makeService(tx);
 
     await expect(
-      service.sale("t1", { ...BASE_DTO, items: [{ medicineId: "med1", quantity: 5, unitPrice: 100 }] } as any, "u1"),
+      service.sale(
+        "t1",
+        {
+          ...BASE_DTO,
+          items: [{ medicineId: "med1", quantity: 5, unitPrice: 100 }],
+        } as any,
+        "u1",
+      ),
     ).rejects.toThrow(ConflictException);
 
     expect(tx.created).toHaveLength(0);
@@ -205,9 +218,9 @@ describe("PharmacyService.sale", () => {
   it("throws BadRequestException for missing items", async () => {
     const tx = buildTx(10);
     const service = makeService(tx);
-    await expect(service.sale("t1", { ...BASE_DTO, items: [] } as any, "u1")).rejects.toThrow(
-      BadRequestException,
-    );
+    await expect(
+      service.sale("t1", { ...BASE_DTO, items: [] } as any, "u1"),
+    ).rejects.toThrow(BadRequestException);
   });
 
   it("throws NotFoundException for unknown store", async () => {
@@ -236,7 +249,11 @@ describe("PharmacyService.sale", () => {
   it("marks a prescription as DISPENSED when prescriptionId is provided", async () => {
     const tx = buildTx(10);
     const service = makeService(tx);
-    await service.sale("t1", { ...BASE_DTO, prescriptionId: "rx1", paymentMethod: "CASH" } as any, "u1");
+    await service.sale(
+      "t1",
+      { ...BASE_DTO, prescriptionId: "rx1", paymentMethod: "CASH" } as any,
+      "u1",
+    );
     expect(tx.prescription.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ id: "rx1", tenantId: "t1" }),
@@ -248,7 +265,11 @@ describe("PharmacyService.sale", () => {
   it("assigns a unique barcode derived from the invoice number on every sale", async () => {
     const tx = buildTx(10);
     const service = makeService(tx);
-    const res: any = await service.sale("t1", { ...BASE_DTO, paymentMethod: "CASH" } as any, "u1");
+    const res: any = await service.sale(
+      "t1",
+      { ...BASE_DTO, paymentMethod: "CASH" } as any,
+      "u1",
+    );
     expect(res.invoice.barcode).toBe(res.invoice.invoiceNumber);
     expect(res.invoice.barcode).toMatch(/^INV-\d{8}-\d{5}$/);
   });
@@ -267,7 +288,11 @@ describe("PharmacyService.sale", () => {
       return realCreate(args);
     });
     const service = makeService(tx);
-    const res: any = await service.sale("t1", { ...BASE_DTO, paymentMethod: "CASH" } as any, "u1");
+    const res: any = await service.sale(
+      "t1",
+      { ...BASE_DTO, paymentMethod: "CASH" } as any,
+      "u1",
+    );
     expect(attempts).toBe(2);
     expect(res.invoice.barcode).toBe(res.invoice.invoiceNumber);
   });
@@ -287,17 +312,39 @@ describe("PharmacyService.sale", () => {
 
   it("saves and audits Pharmacy VAT/PAN settings via the shared settings store", async () => {
     const tx = buildTx(10);
-    const prisma = makePrisma({ tx, $transaction: jest.fn(async (fn: any) => fn(tx)) });
+    const prisma = makePrisma({
+      tx,
+      $transaction: jest.fn(async (fn: any) => fn(tx)),
+    });
     prisma.store.findFirst.mockResolvedValue({ id: "st1", name: "Main Store" });
-    prisma.patient.findFirst.mockResolvedValue({ id: "pat1", firstName: "John", lastName: "Doe" });
+    prisma.patient.findFirst.mockResolvedValue({
+      id: "pat1",
+      firstName: "John",
+      lastName: "Doe",
+    });
     prisma.tenantSetting = { findUnique: jest.fn(async () => null) };
-    const settings = { set: jest.fn(async (_t: string, _k: string, v: unknown) => v) };
+    const settings = {
+      set: jest.fn(async (_t: string, _k: string, v: unknown) => v),
+    };
     const audit = { log: jest.fn(async () => undefined) };
-    const service = new PharmacyService(prisma as any, settings as any, audit as any);
+    const service = new PharmacyService(
+      prisma as any,
+      settings as any,
+      audit as any,
+    );
 
-    const saved = await service.setBillingSettings("t1", { vatNumber: "601234567", panNumber: "123456789" }, "u1");
+    const saved = await service.setBillingSettings(
+      "t1",
+      { vatNumber: "601234567", panNumber: "123456789" },
+      "u1",
+    );
     expect(saved).toEqual({ vatNumber: "601234567", panNumber: "123456789" });
-    expect(settings.set).toHaveBeenCalledWith("t1", "pharmacyBilling", { vatNumber: "601234567", panNumber: "123456789" }, "u1");
+    expect(settings.set).toHaveBeenCalledWith(
+      "t1",
+      "pharmacyBilling",
+      { vatNumber: "601234567", panNumber: "123456789" },
+      "u1",
+    );
     expect(audit.log).toHaveBeenCalledWith(
       "t1",
       "u1",

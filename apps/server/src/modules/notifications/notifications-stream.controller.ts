@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Post,
-  Query,
-  Req,
-  Sse,
-  UseGuards,
-} from "@nestjs/common";
+import { Controller, Post, Query, Req, Sse, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Observable } from "rxjs";
 import { NotificationsHub, NotificationEvent } from "./notifications.hub";
@@ -24,7 +17,9 @@ export class NotificationsStreamController {
   @Post("stream-token")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Issue a short-lived token for the notification stream" })
+  @ApiOperation({
+    summary: "Issue a short-lived token for the notification stream",
+  })
   streamToken(@Req() req: any) {
     const token = this.jwtService.sign(
       {

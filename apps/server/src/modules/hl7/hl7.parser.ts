@@ -1,24 +1,23 @@
-import {
-  Hl7Field,
-  Hl7Segment,
-  ParsedHl7Message,
-} from "./hl7.types";
+import { Hl7Field, Hl7Segment, ParsedHl7Message } from "./hl7.types";
 
 const CRCENTER = /[\r\n]+/;
 
 function decodeEscapes(value: string): string {
   if (!value.includes("\\")) return value;
-  return value.replace(
-    /\\(F|S|T|R|E)\\/g,
-    (m, code: string) =>
-      code === "F" ? "|" : code === "S" ? "^" : code === "T" ? "&" : code === "R" ? "~" : "\\",
+  return value.replace(/\\(F|S|T|R|E)\\/g, (m, code: string) =>
+    code === "F"
+      ? "|"
+      : code === "S"
+        ? "^"
+        : code === "T"
+          ? "&"
+          : code === "R"
+            ? "~"
+            : "\\",
   );
 }
 
-function splitSubcomponents(
-  component: string,
-  subCompChars: string,
-): string[] {
+function splitSubcomponents(component: string, subCompChars: string): string[] {
   if (!subCompChars) return [decodeEscapes(component)];
   return component.split(subCompChars).map(decodeEscapes);
 }
@@ -128,7 +127,8 @@ export function parseHl7Message(raw: string): ParsedHl7Message {
   };
 }
 
-const TS_PATTERN = /^(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?(?:\+\d{4})?/;
+const TS_PATTERN =
+  /^(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?(?:\+\d{4})?/;
 
 export function parseHl7Timestamp(ts: string | undefined): Date | undefined {
   if (!ts) return undefined;
@@ -146,7 +146,10 @@ export function parseHl7Timestamp(ts: string | undefined): Date | undefined {
   );
 }
 
-export function buildAckMessage(incoming: ParsedHl7Message, appName: string): string {
+export function buildAckMessage(
+  incoming: ParsedHl7Message,
+  appName: string,
+): string {
   const now = new Date()
     .toISOString()
     .slice(0, 14)

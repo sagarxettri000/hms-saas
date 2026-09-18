@@ -7,7 +7,12 @@ function makeController(service: any) {
 
 function makeReq(overrides: any = {}) {
   return {
-    user: { id: "u1", tenantId: "t1", username: "jdoe", ...(overrides.user || {}) },
+    user: {
+      id: "u1",
+      tenantId: "t1",
+      username: "jdoe",
+      ...(overrides.user || {}),
+    },
   };
 }
 
@@ -25,8 +30,16 @@ describe("ControlledSubstancesController", () => {
     it("prefers first/last name for the actor name", async () => {
       const service = { create: jest.fn().mockResolvedValue({}) };
       const controller = makeController(service);
-      await controller.create({ drug: "X", quantity: 1 }, makeReq({ user: { firstName: "Jane", lastName: "Doe" } }));
-      expect(service.create).toHaveBeenCalledWith("t1", { drug: "X", quantity: 1 }, "u1", "Jane Doe");
+      await controller.create(
+        { drug: "X", quantity: 1 },
+        makeReq({ user: { firstName: "Jane", lastName: "Doe" } }),
+      );
+      expect(service.create).toHaveBeenCalledWith(
+        "t1",
+        { drug: "X", quantity: 1 },
+        "u1",
+        "Jane Doe",
+      );
     });
   });
 
@@ -42,7 +55,9 @@ describe("ControlledSubstancesController", () => {
 
   describe("remove", () => {
     it("passes id and tenant to the service", async () => {
-      const service = { remove: jest.fn().mockResolvedValue({ success: true }) };
+      const service = {
+        remove: jest.fn().mockResolvedValue({ success: true }),
+      };
       const controller = makeController(service);
       const result = await controller.remove("l1", makeReq());
       expect(service.remove).toHaveBeenCalledWith("t1", "l1");

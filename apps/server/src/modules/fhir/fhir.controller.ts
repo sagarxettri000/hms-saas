@@ -45,7 +45,11 @@ export class FhirController {
   @Get("Patient")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "FHIR search Patient resources" })
-  async searchPatients(@Req() req: any, @Res() res: Response, @Query() query: any) {
+  async searchPatients(
+    @Req() req: any,
+    @Res() res: Response,
+    @Query() query: any,
+  ) {
     this.fhirHeaders(res);
     const bundle = await this.fhirService.searchPatients(
       req.user.tenantId,
@@ -70,7 +74,11 @@ export class FhirController {
   @Get("Observation")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "FHIR search Observation resources" })
-  async searchObservations(@Req() req: any, @Res() res: Response, @Query() query: any) {
+  async searchObservations(
+    @Req() req: any,
+    @Res() res: Response,
+    @Query() query: any,
+  ) {
     this.fhirHeaders(res);
     const bundle = await this.fhirService.searchObservations(
       req.user.tenantId,
@@ -98,7 +106,11 @@ export class FhirController {
   @Get("DiagnosticReport")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "FHIR search DiagnosticReport resources" })
-  async searchReports(@Req() req: any, @Res() res: Response, @Query() query: any) {
+  async searchReports(
+    @Req() req: any,
+    @Res() res: Response,
+    @Query() query: any,
+  ) {
     this.fhirHeaders(res);
     const bundle = await this.fhirService.searchDiagnosticReports(
       req.user.tenantId,

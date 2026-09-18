@@ -10,10 +10,20 @@ describe("DischargeBillingService", () => {
   function mockPrisma(overrides: Record<string, any> = {}) {
     const defaults: Record<string, any> = {
       patient: {
-        findFirst: jest.fn().mockResolvedValue({ id: patientId, tenantId, firstName: "John", lastName: "Doe" }),
+        findFirst: jest.fn().mockResolvedValue({
+          id: patientId,
+          tenantId,
+          firstName: "John",
+          lastName: "Doe",
+        }),
       },
       admission: {
-        findFirst: jest.fn().mockResolvedValue({ id: admissionId, tenantId, patientId, admissionDate: now }),
+        findFirst: jest.fn().mockResolvedValue({
+          id: admissionId,
+          tenantId,
+          patientId,
+          admissionDate: now,
+        }),
       },
       bed: { findMany: jest.fn().mockResolvedValue([]) },
       bedAllocation: { findMany: jest.fn().mockResolvedValue([]) },
@@ -24,7 +34,13 @@ describe("DischargeBillingService", () => {
       oTCase: { findMany: jest.fn().mockResolvedValue([]) },
       invoice: {
         findMany: jest.fn().mockResolvedValue([]),
-        create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: "inv1", invoiceNumber: "INV-20260902-00001", ...data })),
+        create: jest.fn().mockImplementation(({ data }) =>
+          Promise.resolve({
+            id: "inv1",
+            invoiceNumber: "INV-20260902-00001",
+            ...data,
+          }),
+        ),
         update: jest.fn().mockResolvedValue({}),
       },
       nursingNote: { findMany: jest.fn().mockResolvedValue([]) },
@@ -32,33 +48,57 @@ describe("DischargeBillingService", () => {
       billingService: { findMany: jest.fn().mockResolvedValue([]) },
       deposit: { findMany: jest.fn().mockResolvedValue([]) },
       payment: {
-        create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: "pay1", ...data })),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ id: "pay1", ...data }),
+          ),
         findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([]),
       },
       financialTransaction: {
-        create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: "ft1", ...data })),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ id: "ft1", ...data }),
+          ),
         findFirst: jest.fn().mockResolvedValue(null),
       },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
       dischargeBill: {
         findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue({ data: [], total: 0 }),
-        create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: "db1", ...data })),
-        update: jest.fn().mockImplementation(({ where, data }) => Promise.resolve({ id: where.id, ...data })),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ id: "db1", ...data }),
+          ),
+        update: jest
+          .fn()
+          .mockImplementation(({ where, data }) =>
+            Promise.resolve({ id: where.id, ...data }),
+          ),
         count: jest.fn().mockResolvedValue(0),
       },
       dischargeBillDetail: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: "d1", ...data })),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ id: "d1", ...data }),
+          ),
         createMany: jest.fn().mockResolvedValue({ count: 0 }),
         delete: jest.fn().mockResolvedValue({}),
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       chargeTransaction: {
         findMany: jest.fn().mockResolvedValue([]),
-        create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: "ct1", ...data })),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ id: "ct1", ...data }),
+          ),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         count: jest.fn().mockResolvedValue(0),
       },
@@ -70,9 +110,15 @@ describe("DischargeBillingService", () => {
   describe("createDraftBill", () => {
     it("creates an empty draft bill (services added manually later)", async () => {
       const prisma = mockPrisma();
-      prisma.$transaction = jest.fn().mockImplementation(async (fn: any) => fn(prisma));
+      prisma.$transaction = jest
+        .fn()
+        .mockImplementation(async (fn: any) => fn(prisma));
       const service = new DischargeBillingService(prisma as any);
-      const result = await service.createDraftBill(tenantId, { patientId, admissionId }, userId);
+      const result = await service.createDraftBill(
+        tenantId,
+        { patientId, admissionId },
+        userId,
+      );
       expect(result).toBeDefined();
       // A brand-new draft bill starts with no auto-collected charge details
       expect(prisma.dischargeBill.create).toHaveBeenCalled();
@@ -95,7 +141,9 @@ describe("DischargeBillingService", () => {
           update: jest.fn().mockResolvedValue(draftBill),
         },
       });
-      prisma.$transaction = jest.fn().mockImplementation(async (fn: any) => fn(prisma));
+      prisma.$transaction = jest
+        .fn()
+        .mockImplementation(async (fn: any) => fn(prisma));
       const service = new DischargeBillingService(prisma as any);
       const result = await service.addManualCharge(
         tenantId,
@@ -121,7 +169,12 @@ describe("DischargeBillingService", () => {
       });
       const service = new DischargeBillingService(prisma as any);
       await expect(
-        service.addManualCharge(tenantId, "db1", { serviceName: "X", quantity: 1, unitRate: 100 }, userId),
+        service.addManualCharge(
+          tenantId,
+          "db1",
+          { serviceName: "X", quantity: 1, unitRate: 100 },
+          userId,
+        ),
       ).rejects.toThrow();
     });
   });
@@ -140,7 +193,9 @@ describe("DischargeBillingService", () => {
           findMany: jest.fn().mockResolvedValue([]),
         },
       });
-      prisma.$transaction = jest.fn().mockImplementation(async (fn: any) => fn(prisma));
+      prisma.$transaction = jest
+        .fn()
+        .mockImplementation(async (fn: any) => fn(prisma));
       const service = new DischargeBillingService(prisma as any);
       await service.removeCharge(tenantId, "db1", "d1", userId);
       expect(prisma.dischargeBillDetail.delete).toHaveBeenCalled();
@@ -156,7 +211,9 @@ describe("DischargeBillingService", () => {
           update: jest.fn().mockResolvedValue({ ...draftBill, discount: 5000 }),
         },
       });
-      prisma.$transaction = jest.fn().mockImplementation(async (fn: any) => fn(prisma));
+      prisma.$transaction = jest
+        .fn()
+        .mockImplementation(async (fn: any) => fn(prisma));
       const service = new DischargeBillingService(prisma as any);
       const result = await service.applyDiscount(
         tenantId,
@@ -182,14 +239,48 @@ describe("DischargeBillingService", () => {
         discount: 0,
         corporateAmount: 0,
         details: [
-          { grossAmount: 10000, tax: 1000, discount: 0, insuranceAmount: 0, netAmount: 11000, serviceName: "Consultation", serviceCode: "CON", quantity: 1, unitRate: 10000, chargeTransactionId: "ct1", serviceId: "s1", description: null, sourceModule: "IPD", sourceTransactionId: null },
-          { grossAmount: 5000, tax: 500, discount: 0, insuranceAmount: 0, netAmount: 5500, serviceName: "Lab Test", serviceCode: "LAB", quantity: 1, unitRate: 5000, chargeTransactionId: "ct2", serviceId: "s2", description: null, sourceModule: "LAB", sourceTransactionId: "lab1" },
+          {
+            grossAmount: 10000,
+            tax: 1000,
+            discount: 0,
+            insuranceAmount: 0,
+            netAmount: 11000,
+            serviceName: "Consultation",
+            serviceCode: "CON",
+            quantity: 1,
+            unitRate: 10000,
+            chargeTransactionId: "ct1",
+            serviceId: "s1",
+            description: null,
+            sourceModule: "IPD",
+            sourceTransactionId: null,
+          },
+          {
+            grossAmount: 5000,
+            tax: 500,
+            discount: 0,
+            insuranceAmount: 0,
+            netAmount: 5500,
+            serviceName: "Lab Test",
+            serviceCode: "LAB",
+            quantity: 1,
+            unitRate: 5000,
+            chargeTransactionId: "ct2",
+            serviceId: "s2",
+            description: null,
+            sourceModule: "LAB",
+            sourceTransactionId: "lab1",
+          },
         ],
       };
       const prisma = mockPrisma({
         dischargeBill: {
           findFirst: jest.fn().mockResolvedValue(draftBill),
-          update: jest.fn().mockImplementation(({ where, data }) => Promise.resolve({ id: where.id, ...data })),
+          update: jest
+            .fn()
+            .mockImplementation(({ where, data }) =>
+              Promise.resolve({ id: where.id, ...data }),
+            ),
         },
         deposit: { findMany: jest.fn().mockResolvedValue([]) },
         chargeTransaction: {
@@ -197,12 +288,20 @@ describe("DischargeBillingService", () => {
           updateMany: jest.fn().mockResolvedValue({ count: 2 }),
         },
         invoice: {
-          create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: "inv1", invoiceNumber: "INV-20260902-00001", ...data })),
+          create: jest.fn().mockImplementation(({ data }) =>
+            Promise.resolve({
+              id: "inv1",
+              invoiceNumber: "INV-20260902-00001",
+              ...data,
+            }),
+          ),
           update: jest.fn().mockResolvedValue({}),
           findFirst: jest.fn().mockResolvedValue(null),
         },
       });
-      prisma.$transaction = jest.fn().mockImplementation(async (fn: any) => fn(prisma));
+      prisma.$transaction = jest
+        .fn()
+        .mockImplementation(async (fn: any) => fn(prisma));
       const service = new DischargeBillingService(prisma as any);
       const result = await service.finalizeBill(tenantId, "db1", userId);
       expect(result).toBeDefined();
@@ -224,7 +323,9 @@ describe("DischargeBillingService", () => {
         },
       });
       const service = new DischargeBillingService(prisma as any);
-      await expect(service.finalizeBill(tenantId, "db1", userId)).rejects.toThrow();
+      await expect(
+        service.finalizeBill(tenantId, "db1", userId),
+      ).rejects.toThrow();
     });
 
     it("rejects finalizing a bill with no details", async () => {
@@ -240,7 +341,9 @@ describe("DischargeBillingService", () => {
         },
       });
       const service = new DischargeBillingService(prisma as any);
-      await expect(service.finalizeBill(tenantId, "db1", userId)).rejects.toThrow();
+      await expect(
+        service.finalizeBill(tenantId, "db1", userId),
+      ).rejects.toThrow();
     });
   });
 
@@ -264,12 +367,18 @@ describe("DischargeBillingService", () => {
           update: jest.fn().mockResolvedValue(bill),
         },
         payment: {
-          create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: "pay1", ...data })),
+          create: jest
+            .fn()
+            .mockImplementation(({ data }) =>
+              Promise.resolve({ id: "pay1", ...data }),
+            ),
           findFirst: jest.fn().mockResolvedValue(null),
         },
         invoice: { update: jest.fn().mockResolvedValue({}) },
       });
-      prisma.$transaction = jest.fn().mockImplementation(async (fn: any) => fn(prisma));
+      prisma.$transaction = jest
+        .fn()
+        .mockImplementation(async (fn: any) => fn(prisma));
       const service = new DischargeBillingService(prisma as any);
       const result = await service.recordPayment(
         tenantId,
@@ -303,7 +412,12 @@ describe("DischargeBillingService", () => {
       });
       const service = new DischargeBillingService(prisma as any);
       await expect(
-        service.recordPayment(tenantId, "db1", { amount: 10000, method: "CASH" }, userId),
+        service.recordPayment(
+          tenantId,
+          "db1",
+          { amount: 10000, method: "CASH" },
+          userId,
+        ),
       ).rejects.toThrow();
     });
 
@@ -321,7 +435,12 @@ describe("DischargeBillingService", () => {
       });
       const service = new DischargeBillingService(prisma as any);
       await expect(
-        service.recordPayment(tenantId, "db1", { amount: 1000, method: "CASH" }, userId),
+        service.recordPayment(
+          tenantId,
+          "db1",
+          { amount: 1000, method: "CASH" },
+          userId,
+        ),
       ).rejects.toThrow();
     });
   });
@@ -335,20 +454,33 @@ describe("DischargeBillingService", () => {
           update: jest.fn().mockResolvedValue({ ...bill, status: "CANCELLED" }),
         },
       });
-      prisma.$transaction = jest.fn().mockImplementation(async (fn: any) => fn(prisma));
+      prisma.$transaction = jest
+        .fn()
+        .mockImplementation(async (fn: any) => fn(prisma));
       const service = new DischargeBillingService(prisma as any);
-      const result = await service.cancelBill(tenantId, "db1", "Changed mind", userId);
+      const result = await service.cancelBill(
+        tenantId,
+        "db1",
+        "Changed mind",
+        userId,
+      );
       expect(result).toBeDefined();
     });
 
     it("rejects cancelling a bill with payments", async () => {
-      const bill = { id: "db1", tenantId, status: "FINALIZED", paidAmount: 5000 };
+      const bill = {
+        id: "db1",
+        tenantId,
+        status: "FINALIZED",
+        paidAmount: 5000,
+      };
       const prisma = mockPrisma({
         dischargeBill: { findFirst: jest.fn().mockResolvedValue(bill) },
       });
       const service = new DischargeBillingService(prisma as any);
-      await expect(service.cancelBill(tenantId, "db1", "reason", userId)).rejects.toThrow();
+      await expect(
+        service.cancelBill(tenantId, "db1", "reason", userId),
+      ).rejects.toThrow();
     });
   });
-
 });

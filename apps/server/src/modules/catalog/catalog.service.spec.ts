@@ -42,7 +42,9 @@ describe("CatalogService", () => {
   });
 
   it("lists tenant medicines with search filter", async () => {
-    prisma.medicine.findMany.mockResolvedValue([{ id: "m1", name: "Paracetamol" }]);
+    prisma.medicine.findMany.mockResolvedValue([
+      { id: "m1", name: "Paracetamol" },
+    ]);
     const results = await service.medicines("t1", "para");
     expect(results).toHaveLength(1);
     const arg = prisma.medicine.findMany.mock.calls[0][0];

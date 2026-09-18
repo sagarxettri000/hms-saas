@@ -543,7 +543,7 @@ function BedsTab() {
         <button className="btn btn-secondary" onClick={load}>Refresh</button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
-        {beds.map((b) => {
+        {beds.slice().sort(bedOrder.compareBeds).map((b) => {
           const occupant = b.allocations?.[0]?.admission?.patient;
           const occupied = b.status === 'OCCUPIED';
           return (

@@ -18,7 +18,13 @@ import { TwoFactorSetupGuard } from "./guards/two-factor-setup.guard";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, MailService, TwoFactorService, TwoFactorSetupGuard],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    MailService,
+    TwoFactorService,
+    TwoFactorSetupGuard,
+  ],
   exports: [AuthService, MailService],
 })
 export class AuthModule {}

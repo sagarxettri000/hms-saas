@@ -28,8 +28,12 @@ describe("HL7 outbound ORU builder", () => {
     const msg = buildRadiologyOruReport(base as any, { controlId: "ctl-1" });
 
     const lines = msg.trim().split("\r");
-    expect(lines[0]).toMatch(/^MSH\|\^\~\\&\|HMS\|\|\|\|[0-9]{14}\|\|ORU\^R01\|ctl-1\|P\|2\.5$/);
-    expect(lines[1]).toMatch(/^PID\|1\|MRN-1\|\|Shrestha\^Ramesh\|\|19900102\d*\|M$/);
+    expect(lines[0]).toMatch(
+      /^MSH\|\^\~\\&\|HMS\|\|\|\|[0-9]{14}\|\|ORU\^R01\|ctl-1\|P\|2\.5$/,
+    );
+    expect(lines[1]).toMatch(
+      /^PID\|1\|MRN-1\|\|Shrestha\^Ramesh\|\|19900102\d*\|M$/,
+    );
     expect(lines[2]).toBe("ORC|RE|RAD-2026-0001|ACC-12345");
     expect(lines[3]).toMatch(/^OBR\|1\|RAD-2026-0001\|ACC-12345\|CT\^CHEST/);
     expect(lines[4]).toBe("OBX|1|TX|1^IMPRESSION||No acute finding|");
@@ -39,12 +43,10 @@ describe("HL7 outbound ORU builder", () => {
   });
 
   it("escapes HL7 delimiters in free-text", () => {
-    const msg = buildRadiologyOruReport(
-      {
-        ...base,
-        report: { impression: "a|b^c~d&e\\f" },
-      } as any,
-    );
+    const msg = buildRadiologyOruReport({
+      ...base,
+      report: { impression: "a|b^c~d&e\\f" },
+    } as any);
     const obx = msg.trim().split("\r")[4];
     expect(obx).toBe("OBX|1|TX|1^IMPRESSION||a\\F\\b\\S\\c\\R\\d\\T\\e\\E\\f|");
   });
@@ -54,13 +56,16 @@ describe("HL7 outbound ORU builder", () => {
     expect(frame[0]).toBe(0x0b);
     expect(frame[frame.length - 2]).toBe(0x1c);
     expect(frame[frame.length - 1]).toBe(0x0d);
-    expect(frame.subarray(1, frame.length - 2).toString("utf8")).toBe("MSH|...");
+    expect(frame.subarray(1, frame.length - 2).toString("utf8")).toBe(
+      "MSH|...",
+    );
   });
 
   it("omits empty OBX values", () => {
-    const msg = buildRadiologyOruReport(
-      { ...base, report: { impression: "", findings: "", report: "" } } as any,
-    );
+    const msg = buildRadiologyOruReport({
+      ...base,
+      report: { impression: "", findings: "", report: "" },
+    } as any);
     const lines = msg.trim().split("\r");
     expect(lines[4]).toBe("OBX|1|TX|1^IMPRESSION|||");
   });

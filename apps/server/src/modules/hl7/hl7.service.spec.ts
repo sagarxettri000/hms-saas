@@ -36,7 +36,13 @@ const SIU = [
 ].join("\r");
 
 function makePrisma() {
-  const patient = { id: "patient-1", mrn: "MRN000123", firstName: "JOHN", lastName: "DOE", status: "ACTIVE" };
+  const patient = {
+    id: "patient-1",
+    mrn: "MRN000123",
+    firstName: "JOHN",
+    lastName: "DOE",
+    status: "ACTIVE",
+  };
   return {
     patient: {
       findFirst: jest.fn().mockResolvedValue(null),
@@ -44,17 +50,23 @@ function makePrisma() {
       update: jest.fn().mockResolvedValue({ ...patient, lastName: "SMITH" }),
     },
     radiologyOrder: {
-      create: jest.fn().mockImplementation(({ data }) => ({ ...data, id: "rad-1" })),
+      create: jest
+        .fn()
+        .mockImplementation(({ data }) => ({ ...data, id: "rad-1" })),
       findFirst: jest.fn().mockResolvedValue(null),
       update: jest.fn().mockResolvedValue({ id: "rad-1" }),
     },
     labOrder: {
-      create: jest.fn().mockImplementation(({ data }) => ({ ...data, id: "lab-1" })),
+      create: jest
+        .fn()
+        .mockImplementation(({ data }) => ({ ...data, id: "lab-1" })),
       findFirst: jest.fn().mockResolvedValue(null),
       update: jest.fn().mockResolvedValue({ id: "lab-1" }),
     },
     labOrderItem: {
-      create: jest.fn().mockImplementation(({ data }) => ({ id: "item-1", ...data })),
+      create: jest
+        .fn()
+        .mockImplementation(({ data }) => ({ id: "item-1", ...data })),
     },
   };
 }
@@ -76,7 +88,10 @@ describe("Hl7Service", () => {
 
   describe("ADT", () => {
     it("creates a new patient and reports it", async () => {
-      const result = await service.processMessage(ADT, { tenantId: "t1", userId: "u1" });
+      const result = await service.processMessage(ADT, {
+        tenantId: "t1",
+        userId: "u1",
+      });
       expect(result.accepted).toBe(true);
       expect(result.actions[0].type).toBe("PATIENT_UPSERTED");
       expect(result.actions[0].created).toBe(true);
@@ -91,9 +106,20 @@ describe("Hl7Service", () => {
     });
 
     it("updates an existing patient when the MRN matches", async () => {
-      prisma.patient.findFirst.mockResolvedValue({ ...prisma.patient.create.mock.results[0]?.value, id: "patient-1" });
-      prisma.patient.findFirst.mockResolvedValue({ id: "patient-1", mrn: "MRN000123" });
-      const realPatient = { id: "patient-1", mrn: "MRN000123", firstName: "JOHN", lastName: "DOE" };
+      prisma.patient.findFirst.mockResolvedValue({
+        ...prisma.patient.create.mock.results[0]?.value,
+        id: "patient-1",
+      });
+      prisma.patient.findFirst.mockResolvedValue({
+        id: "patient-1",
+        mrn: "MRN000123",
+      });
+      const realPatient = {
+        id: "patient-1",
+        mrn: "MRN000123",
+        firstName: "JOHN",
+        lastName: "DOE",
+      };
       prisma.patient.update.mockResolvedValue(realPatient);
 
       const message = ADT.replace("DOE^JOHN", "SMITH^JOHN");
@@ -101,7 +127,9 @@ describe("Hl7Service", () => {
       expect(result.accepted).toBe(true);
       expect(prisma.patient.create).not.toHaveBeenCalled();
       expect(prisma.patient.update).toHaveBeenCalledTimes(1);
-      expect(prisma.patient.update.mock.calls[0][0].data.lastName).toBe("SMITH");
+      expect(prisma.patient.update.mock.calls[0][0].data.lastName).toBe(
+        "SMITH",
+      );
     });
   });
 
@@ -140,8 +168,12 @@ describe("Hl7Service", () => {
       expect(result.actions[0].type).toBe("LAB_ORDER_REPORTED");
       expect(prisma.labOrder.create).toHaveBeenCalledTimes(1);
       expect(prisma.labOrderItem.create).toHaveBeenCalledTimes(2);
-      expect(prisma.labOrderItem.create.mock.calls[0][0].data.testName).toBe("WHITE BLOOD COUNT");
-      expect(prisma.labOrderItem.create.mock.calls[0][0].data.result).toBe("8.5");
+      expect(prisma.labOrderItem.create.mock.calls[0][0].data.testName).toBe(
+        "WHITE BLOOD COUNT",
+      );
+      expect(prisma.labOrderItem.create.mock.calls[0][0].data.result).toBe(
+        "8.5",
+      );
     });
   });
 

@@ -24,10 +24,14 @@ export class StockTransfersService {
       throw new BadRequestException("Valid quantity is required");
     }
     if (!dto.fromStoreId || !dto.toStoreId) {
-      throw new BadRequestException("Source and destination stores are required");
+      throw new BadRequestException(
+        "Source and destination stores are required",
+      );
     }
     if (dto.fromStoreId === dto.toStoreId) {
-      throw new BadRequestException("Source and destination stores must differ");
+      throw new BadRequestException(
+        "Source and destination stores must differ",
+      );
     }
     if (!dto.inventoryItemId) {
       throw new BadRequestException("An inventory item is required");
@@ -166,10 +170,7 @@ export class StockTransfersService {
     });
   }
 
-  async findAll(
-    tenantId: string,
-    params: { page?: number; limit?: number },
-  ) {
+  async findAll(tenantId: string, params: { page?: number; limit?: number }) {
     const page = Number(params.page) || 1;
     const limit = Number(params.limit) || 100;
     const where: any = { tenantId };

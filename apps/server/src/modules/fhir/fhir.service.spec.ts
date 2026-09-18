@@ -51,9 +51,7 @@ describe("FhirService", () => {
     expect(resource.gender).toBe("male");
     expect(resource.birthDate).toBe("1990-01-01");
     expect(resource.identifier).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ value: "MRN-001" }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ value: "MRN-001" })]),
     );
   });
 

@@ -54,7 +54,13 @@ const SUPPORTED_STORE_ABSTRACT_SYNTAX_PREFIX = "1.2.840.10008.5.1.4";
 export class DicomScpService {
   private readonly logger = new Logger(DicomScpService.name);
   private server?: net.Server;
-  private node?: { id: string; aeTitle: string; hostname: string; port: number; tls?: boolean };
+  private node?: {
+    id: string;
+    aeTitle: string;
+    hostname: string;
+    port: number;
+    tls?: boolean;
+  };
   private stats: ScpStats = {
     startedAt: "",
     associations: 0,
@@ -73,7 +79,9 @@ export class DicomScpService {
   async start(nodeId: string, tenantId: string): Promise<void> {
     await this.stop();
 
-    const node = await this.prisma.dicomNode.findFirst({ where: { id: nodeId, tenantId } });
+    const node = await this.prisma.dicomNode.findFirst({
+      where: { id: nodeId, tenantId },
+    });
     if (!node) throw new Error("DICOM node not found");
     if (!node.isLocal) throw new Error("Only local nodes can run a listener");
 
@@ -87,7 +95,13 @@ export class DicomScpService {
       failedInstances: 0,
       echoRequests: 0,
     };
-    this.node = { id: node.id, aeTitle: node.aeTitle, hostname: node.hostname, port, tls: node.tls ?? false };
+    this.node = {
+      id: node.id,
+      aeTitle: node.aeTitle,
+      hostname: node.hostname,
+      port,
+      tls: node.tls ?? false,
+    };
 
     const socketHandler = (socket: net.Socket) => {
       this.handleSocket(socket, tenantId);
@@ -108,7 +122,9 @@ export class DicomScpService {
       server.once("error", (err) => reject(err));
       server.listen(port, node.hostname || "0.0.0.0", () => {
         server.removeListener("error", reject);
-        this.logger.log(`DICOM SCP listener "${node.aeTitle}" on ${node.hostname || "0.0.0.0"}:${port}`);
+        this.logger.log(
+          `DICOM SCP listener "${node.aeTitle}" on ${node.hostname || "0.0.0.0"}:${port}`,
+        );
         resolve();
       });
     });
@@ -132,10 +148,20 @@ export class DicomScpService {
     return Boolean(this.server);
   }
 
-  getStats(): ScpStats & { node?: { aeTitle: string; port: number; tls?: boolean } | undefined } {
+  getStats(): ScpStats & {
+    node?: { aeTitle: string; port: number; tls?: boolean } | undefined;
+  } {
     return {
       ...this.stats,
-      ...(this.node ? { node: { aeTitle: this.node.aeTitle, port: this.node.port, tls: this.node.tls } } : {}),
+      ...(this.node
+        ? {
+            node: {
+              aeTitle: this.node.aeTitle,
+              port: this.node.port,
+              tls: this.node.tls,
+            },
+          }
+        : {}),
     };
   }
 
@@ -205,7 +231,9 @@ export class DicomScpService {
             store: (cmd) => this.storeInstance(cmd, tenantId, sendPdu),
           });
         } catch (err) {
-          this.logger.error(`SCP error handling PDU: ${(err as Error).message}`);
+          this.logger.error(
+            `SCP error handling PDU: ${(err as Error).message}`,
+          );
           this.stats.lastError = (err as Error).message;
           this.stats.failedInstances += 1;
           sendPdu(buildReleaseRqOrRp(PDU_TYPE.A_ABORT_RQ));
@@ -245,9 +273,17 @@ export class DicomScpService {
         for (const pc of req.presentationContexts) {
           const acceptTs = pickTransferSyntax(pc.transferSyntaxUids);
           if (acceptTs) {
-            accepted.push({ id: pc.id, result: 0x00, transferSyntaxUid: acceptTs });
+            accepted.push({
+              id: pc.id,
+              result: 0x00,
+              transferSyntaxUid: acceptTs,
+            });
           } else {
-            accepted.push({ id: pc.id, result: 0x02, transferSyntaxUid: TRANSFER_SYNTAXES.IMPLICIT_VR_LE });
+            accepted.push({
+              id: pc.id,
+              result: 0x02,
+              transferSyntaxUid: TRANSFER_SYNTAXES.IMPLICIT_VR_LE,
+            });
           }
         }
 
@@ -257,7 +293,12 @@ export class DicomScpService {
           return;
         }
 
-        const ac = buildAssociateAc(req, accepted, "1.2.826.0.1.3680043.8.498.2026", "HMS-SCP-1.0");
+        const ac = buildAssociateAc(
+          req,
+          accepted,
+          "1.2.826.0.1.3680043.8.498.2026",
+          "HMS-SCP-1.0",
+        );
         actions.sendPdu(ac);
 
         const negotiated: NegotiatedContext[] = accepted
@@ -265,7 +306,8 @@ export class DicomScpService {
           .map((c) => ({
             id: c.id,
             abstractSyntaxUid:
-              req.presentationContexts.find((pc) => pc.id === c.id)?.abstractSyntaxUid || "",
+              req.presentationContexts.find((pc) => pc.id === c.id)
+                ?.abstractSyntaxUid || "",
             transferSyntaxUid: c.transferSyntaxUid,
           }));
         actions.onAcceptAssociation(negotiated);
@@ -279,12 +321,23 @@ export class DicomScpService {
           const isLast = (pdv.controlHeader & 0x02) !== 0;
 
           if (isCommand) {
-            const cmdAttrs = parseDatasetImplicitLe(pdv.data, 0, pdv.data.length);
+            const cmdAttrs = parseDatasetImplicitLe(
+              pdv.data,
+              0,
+              pdv.data.length,
+            );
             const cmd = attrsToCommand(cmdAttrs);
             void cmd;
 
             // Successfully parsed command PDV; handle request commands.
-            this.handleCommand(cmd, pdv.contextId, contexts, pendingStore, tenantId, actions);
+            this.handleCommand(
+              cmd,
+              pdv.contextId,
+              contexts,
+              pendingStore,
+              tenantId,
+              actions,
+            );
           } else {
             const pending = pendingStore.get(pdv.contextId);
             if (pending) {
@@ -358,14 +411,19 @@ export class DicomScpService {
     }
 
     // Unsupported command: respond with failed C-FIND-ish general failure
-    actions.sendPdu(buildCommandSetPData({
-      commandField: COMMAND_FIELD.C_STORE_RSP,
-      messageIdBeingRespondedTo: cmd.messageId,
-      affectedSopClassUid: cmd.affectedSopClassUid,
-      affectedSopInstanceUid: cmd.affectedSopInstanceUid,
-      status: STATUS.UL_UNRECOGNIZED_PDU,
-      commandDataSetType: 0x0101,
-    }, contextId));
+    actions.sendPdu(
+      buildCommandSetPData(
+        {
+          commandField: COMMAND_FIELD.C_STORE_RSP,
+          messageIdBeingRespondedTo: cmd.messageId,
+          affectedSopClassUid: cmd.affectedSopClassUid,
+          affectedSopInstanceUid: cmd.affectedSopInstanceUid,
+          status: STATUS.UL_UNRECOGNIZED_PDU,
+          commandDataSetType: 0x0101,
+        },
+        contextId,
+      ),
+    );
     void tenantId;
   }
 
@@ -376,7 +434,9 @@ export class DicomScpService {
   ) {
     const sopClass = cmd.affectedSopClassUid || "";
     const sopInstance = cmd.affectedSopInstanceUid || crypto.randomUUID();
-    const supported = sopClass.startsWith(SUPPORTED_STORE_ABSTRACT_SYNTAX_PREFIX);
+    const supported = sopClass.startsWith(
+      SUPPORTED_STORE_ABSTRACT_SYNTAX_PREFIX,
+    );
     let status: number = supported ? STATUS.SUCCESS : STATUS.UNKNOWN_SOP_CLASS;
 
     const respond = () => {
@@ -444,20 +504,39 @@ function pickTransferSyntax(provider: string[]): string | undefined {
   return provider[0];
 }
 
-function attrsToCommand(attrs: Array<{ tag: string; vr: string; value: unknown }>): DimseCommand {
+function attrsToCommand(
+  attrs: Array<{ tag: string; vr: string; value: unknown }>,
+): DimseCommand {
   const cmd: DimseCommand = { commandField: 0 };
   for (const a of attrs) {
     const v = a.value;
     switch (a.tag) {
-      case "00000100": cmd.commandField = Number(v) || 0; break;
-      case "00000110": cmd.messageId = Number(v); break;
-      case "00000120": cmd.messageIdBeingRespondedTo = Number(v); break;
-      case "00000002": cmd.affectedSopClassUid = String(v); break;
-      case "00001000": cmd.affectedSopInstanceUid = String(v); break;
-      case "00000800": cmd.commandDataSetType = Number(v); break;
-      case "00000700": cmd.priority = Number(v); break;
-      case "00000900": cmd.status = Number(v); break;
-      default: cmd[a.tag] = v;
+      case "00000100":
+        cmd.commandField = Number(v) || 0;
+        break;
+      case "00000110":
+        cmd.messageId = Number(v);
+        break;
+      case "00000120":
+        cmd.messageIdBeingRespondedTo = Number(v);
+        break;
+      case "00000002":
+        cmd.affectedSopClassUid = String(v);
+        break;
+      case "00001000":
+        cmd.affectedSopInstanceUid = String(v);
+        break;
+      case "00000800":
+        cmd.commandDataSetType = Number(v);
+        break;
+      case "00000700":
+        cmd.priority = Number(v);
+        break;
+      case "00000900":
+        cmd.status = Number(v);
+        break;
+      default:
+        cmd[a.tag] = v;
     }
   }
   return cmd;
@@ -471,9 +550,7 @@ export { unwrapP10 };
  * `DICOM_TLS_CA`). Throws when the DICOM TLS profile is requested but the
  * required server certificate/key are not configured.
  */
-export function loadScpTlsOptions(
-  env: NodeJS.ProcessEnv,
-): tls.TlsOptions {
+export function loadScpTlsOptions(env: NodeJS.ProcessEnv): tls.TlsOptions {
   const certPath = env.DICOM_TLS_CERT;
   const keyPath = env.DICOM_TLS_KEY;
   if (!certPath || !keyPath) {

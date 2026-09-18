@@ -62,7 +62,11 @@ describe("RequestLoggerInterceptor", () => {
       )
       .subscribe(() => {
         const meta = loggerSpy.mock.calls[0][1] as any;
-        expect(meta).toMatchObject({ userId: "u1", tenantId: "t1", role: "DOCTOR" });
+        expect(meta).toMatchObject({
+          userId: "u1",
+          tenantId: "t1",
+          role: "DOCTOR",
+        });
         done();
       });
   });

@@ -96,9 +96,18 @@ class Doc {
     this.y -= n;
   }
 
-  text(x: number, y: number, s: string, size = 9, color = "0 0 0", bold = false): void {
+  text(
+    x: number,
+    y: number,
+    s: string,
+    size = 9,
+    color = "0 0 0",
+    bold = false,
+  ): void {
     const font = bold ? "F2" : "F1";
-    this.ops.push(`BT /${font} ${size} Tf ${color} rg ${x} ${y} Td (${esc(s)}) Tj ET`);
+    this.ops.push(
+      `BT /${font} ${size} Tf ${color} rg ${x} ${y} Td (${esc(s)}) Tj ET`,
+    );
   }
 
   rect(x: number, y: number, w: number, h: number, color: string): void {
@@ -132,7 +141,15 @@ class Doc {
     return lines.length ? lines : [""];
   }
 
-  textBlock(x: number, s: string, maxW: number, size: number, color = "0 0 0", bold = false, lineGap = 11): void {
+  textBlock(
+    x: number,
+    s: string,
+    maxW: number,
+    size: number,
+    color = "0 0 0",
+    bold = false,
+    lineGap = 11,
+  ): void {
     for (const line of this.wrapLines(s, maxW, size)) {
       this.text(x, this.y, line, size, color, bold);
       this.y -= lineGap;
@@ -228,7 +245,11 @@ export interface PurchaseOrderPdfData {
     bankAccount?: string | null;
     bankBranch?: string | null;
   } | null;
-  store?: { name?: string; code?: string | null; location?: string | null } | null;
+  store?: {
+    name?: string;
+    code?: string | null;
+    location?: string | null;
+  } | null;
   purchaseRequest?: {
     requestNumber?: string;
     justification?: string | null;
@@ -272,7 +293,15 @@ interface TenantPdfData {
 // Shared visual blocks
 // ---------------------------------------------------------------------------
 
-function buildAddress(t: { addressLine1?: string | null; addressLine2?: string | null; city?: string | null; district?: string | null; province?: string | null; country?: string | null; postalCode?: string | null }): string {
+function buildAddress(t: {
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  district?: string | null;
+  province?: string | null;
+  country?: string | null;
+  postalCode?: string | null;
+}): string {
   return [
     t.addressLine1,
     t.addressLine2,
@@ -284,7 +313,11 @@ function buildAddress(t: { addressLine1?: string | null; addressLine2?: string |
     .join(", ");
 }
 
-function drawPageHeader(doc: Doc, tenant: TenantPdfData | null, title: string): void {
+function drawPageHeader(
+  doc: Doc,
+  tenant: TenantPdfData | null,
+  title: string,
+): void {
   // Accent top band
   doc.rect(0, PAGE_H - 6, PAGE_W, 6, ACCENT);
   doc.y = PAGE_H - MARGIN;
@@ -301,7 +334,8 @@ function drawPageHeader(doc: Doc, tenant: TenantPdfData | null, title: string): 
   }
 
   const regParts: string[] = [];
-  if (tenant?.registrationNumber) regParts.push(`Reg: ${tenant.registrationNumber}`);
+  if (tenant?.registrationNumber)
+    regParts.push(`Reg: ${tenant.registrationNumber}`);
   if (tenant?.panNumber) regParts.push(`PAN: ${tenant.panNumber}`);
   if (tenant?.vatNumber) regParts.push(`VAT: ${tenant.vatNumber}`);
   if (regParts.length) {
@@ -326,7 +360,12 @@ function drawPageHeader(doc: Doc, tenant: TenantPdfData | null, title: string): 
   doc.gap(14);
 }
 
-function drawMetaField(doc: Doc, x: number, label: string, value: string): void {
+function drawMetaField(
+  doc: Doc,
+  x: number,
+  label: string,
+  value: string,
+): void {
   doc.text(x, doc.y, label, 7.5, GRAY);
   doc.gap(10);
   doc.text(x, doc.y, value || "-", 10, "0 0 0");
@@ -352,22 +391,54 @@ interface TableCol {
   padLeft: number;
 }
 
-function buildItemTable(doc: Doc, order: PurchaseOrderPdfData, tenant: TenantPdfData | null, currency: string): void {
-  const showHsCol = order.items.some((i) => i.hsCode && String(i.hsCode).trim());
-  const showReceivedCol = order.items.some((i) => Number(i.receivedQuantity) > 0);
+function buildItemTable(
+  doc: Doc,
+  order: PurchaseOrderPdfData,
+  tenant: TenantPdfData | null,
+  currency: string,
+): void {
+  const showHsCol = order.items.some(
+    (i) => i.hsCode && String(i.hsCode).trim(),
+  );
+  const showReceivedCol = order.items.some(
+    (i) => Number(i.receivedQuantity) > 0,
+  );
 
   const columns: TableCol[] = [
     { label: "SN", w: 18, align: "left", padLeft: 4 },
     { label: "Code", w: 42, align: "left", padLeft: 4 },
-    ...(showHsCol ? [{ label: "HS Code", w: 38, align: "left", padLeft: 4 } satisfies TableCol] : []),
+    ...(showHsCol
+      ? [
+          {
+            label: "HS Code",
+            w: 38,
+            align: "left",
+            padLeft: 4,
+          } satisfies TableCol,
+        ]
+      : []),
     { label: "Item Description", w: 92, align: "left", padLeft: 4 },
     { label: "Category", w: 32, align: "left", padLeft: 4 },
     { label: "Unit", w: 24, align: "left", padLeft: 4 },
     { label: "Qty", w: 26, align: "right", padLeft: 4 },
-    ...(showReceivedCol ? [{ label: "Received", w: 26, align: "right", padLeft: 4 } satisfies TableCol] : []),
+    ...(showReceivedCol
+      ? [
+          {
+            label: "Received",
+            w: 26,
+            align: "right",
+            padLeft: 4,
+          } satisfies TableCol,
+        ]
+      : []),
     { label: "Unit Price", w: 44, align: "right", padLeft: 4 },
     { label: "Disc", w: 32, align: "right", padLeft: 4 },
-    { label: `VAT ${order.items.some((i) => Number(i.taxAmount) > 0) ? "" : "(%)"}`, w: 22, align: "right", padLeft: 4 },
+    {
+      label: `VAT ${order.items.some((i) => Number(i.taxAmount) > 0) ? "" : "(%)"}`,
+      w: 22,
+      align: "right",
+      padLeft: 4,
+    },
     { label: "VAT Amt", w: 42, align: "right", padLeft: 4 },
     { label: "Line Total", w: 50, align: "right", padLeft: 4 },
   ];
@@ -384,7 +455,10 @@ function buildItemTable(doc: Doc, order: PurchaseOrderPdfData, tenant: TenantPdf
   const renderHeader = () => {
     doc.rect(left, doc.y - 2, colW, 15, HDR_FILL);
     columns.forEach((c, i) => {
-      const x = c.align === "right" ? xs[i] + c.w - 4 - doc.textW(c.label, 7.5) : xs[i] + c.padLeft;
+      const x =
+        c.align === "right"
+          ? xs[i] + c.w - 4 - doc.textW(c.label, 7.5)
+          : xs[i] + c.padLeft;
       doc.text(x, doc.y + 9, c.label, 7.5, ACCENT, true);
     });
     doc.y -= 17;
@@ -426,9 +500,9 @@ function buildItemTable(doc: Doc, order: PurchaseOrderPdfData, tenant: TenantPdf
 
     const rowH = Math.max(16, descLines.length * 10 + 6);
 
-if (rowPush(rowH)) {
-    // page break performed, header re-drawn
-  }
+    if (rowPush(rowH)) {
+      // page break performed, header re-drawn
+    }
 
     const top = doc.y;
     doc.rect(left, top - 2, colW, rowH, sn % 2 === 1 ? LIGHT : "1 1 1");
@@ -456,11 +530,20 @@ if (rowPush(rowH)) {
       if (i === descIndex) {
         let ty = top + 2;
         for (const line of descLines) {
-          doc.text(xs[descIndex] + c.padLeft, ty, line, line.length > 40 ? 7.5 : 8.5, "0 0 0");
+          doc.text(
+            xs[descIndex] + c.padLeft,
+            ty,
+            line,
+            line.length > 40 ? 7.5 : 8.5,
+            "0 0 0",
+          );
           ty += 10;
         }
       } else {
-        const x = c.align === "right" ? xs[i] + c.w - 4 - doc.textW(cell, 8.5) : xs[i] + c.padLeft;
+        const x =
+          c.align === "right"
+            ? xs[i] + c.w - 4 - doc.textW(cell, 8.5)
+            : xs[i] + c.padLeft;
         doc.text(x, top + 5, cell, 8.5, "0 0 0");
       }
     });
@@ -477,16 +560,33 @@ if (rowPush(rowH)) {
 // Financial summary
 // ---------------------------------------------------------------------------
 
-function drawFinancialSummary(doc: Doc, order: PurchaseOrderPdfData, currency: string): void {
+function drawFinancialSummary(
+  doc: Doc,
+  order: PurchaseOrderPdfData,
+  currency: string,
+): void {
   const right = PAGE_W - MARGIN;
   const labelX = right - 250;
   const valueX = right - 60;
-  const rows: Array<{ label: string; value: string; bold?: boolean; header?: boolean }> = [
+  const rows: Array<{
+    label: string;
+    value: string;
+    bold?: boolean;
+    header?: boolean;
+  }> = [
     { label: "Subtotal", value: fmtMoney(order.subtotal, currency) },
-    { label: "Total Discount", value: `(${fmtMoney(order.discountAmount, currency)})` },
-    { label: "Taxable Amount", value: fmtMoney(order.taxableAmount, currency), header: true },
     {
-      label: order.taxPercent != null ? `VAT (${Number(order.taxPercent)}%)` : "VAT",
+      label: "Total Discount",
+      value: `(${fmtMoney(order.discountAmount, currency)})`,
+    },
+    {
+      label: "Taxable Amount",
+      value: fmtMoney(order.taxableAmount, currency),
+      header: true,
+    },
+    {
+      label:
+        order.taxPercent != null ? `VAT (${Number(order.taxPercent)}%)` : "VAT",
       value: fmtMoney(order.taxAmount, currency),
     },
     ...(order.tdsAmount != null && Number(order.tdsAmount) > 0
@@ -496,12 +596,26 @@ function drawFinancialSummary(doc: Doc, order: PurchaseOrderPdfData, currency: s
       ? [{ label: "Freight", value: fmtMoney(order.freightAmount, currency) }]
       : []),
     ...(Number(order.insuranceAmount) > 0
-      ? [{ label: "Insurance", value: fmtMoney(order.insuranceAmount, currency) }]
+      ? [
+          {
+            label: "Insurance",
+            value: fmtMoney(order.insuranceAmount, currency),
+          },
+        ]
       : []),
     ...(Number(order.otherCharges) > 0
-      ? [{ label: "Other Charges", value: fmtMoney(order.otherCharges, currency) }]
+      ? [
+          {
+            label: "Other Charges",
+            value: fmtMoney(order.otherCharges, currency),
+          },
+        ]
       : []),
-    { label: "GRAND TOTAL", value: fmtMoney(order.grandTotal ?? order.totalAmount, currency), bold: true },
+    {
+      label: "GRAND TOTAL",
+      value: fmtMoney(order.grandTotal ?? order.totalAmount, currency),
+      bold: true,
+    },
   ];
 
   doc.rect(labelX - 6, doc.y - 4, 140, 8, LIGHT);
@@ -512,8 +626,22 @@ function drawFinancialSummary(doc: Doc, order: PurchaseOrderPdfData, currency: s
     if (row.header) {
       doc.line(labelX, doc.y + 3, right, doc.y + 3, 0.5);
     }
-    doc.text(labelX, doc.y, row.label, row.bold ? 10 : 9, row.bold ? ACCENT : "0 0 0", row.bold);
-    doc.text(valueX, doc.y, row.value, row.bold ? 10 : 9, row.bold ? ACCENT : "0 0 0", row.bold);
+    doc.text(
+      labelX,
+      doc.y,
+      row.label,
+      row.bold ? 10 : 9,
+      row.bold ? ACCENT : "0 0 0",
+      row.bold,
+    );
+    doc.text(
+      valueX,
+      doc.y,
+      row.value,
+      row.bold ? 10 : 9,
+      row.bold ? ACCENT : "0 0 0",
+      row.bold,
+    );
     doc.y -= 13;
     if (row.bold) doc.gap(2);
   }
@@ -550,7 +678,12 @@ export function buildPurchaseOrderPdf(
       "PO Type",
       order.poType ? titleCase(order.poType) : "-",
     ]);
-    if (order.expectedDate) metaRows.push([metaMidX, "Required Delivery", fmtDate(order.expectedDate)]);
+    if (order.expectedDate)
+      metaRows.push([
+        metaMidX,
+        "Required Delivery",
+        fmtDate(order.expectedDate),
+      ]);
     const rev = `REV-${String(order.revision ?? 1).padStart(2, "0")}`;
     metaRows.push([metaRightX, "Revision", rev]);
   }
@@ -578,7 +711,10 @@ export function buildPurchaseOrderPdf(
     ["Organization", tenant?.name || ""],
     ["Address", buildAddress(tenant || {})],
     ["Contact", [tenant?.phone, tenant?.email].filter(Boolean).join(" | ")],
-    ["PAN / VAT", [tenant?.panNumber, tenant?.vatNumber].filter(Boolean).join(" / ")],
+    [
+      "PAN / VAT",
+      [tenant?.panNumber, tenant?.vatNumber].filter(Boolean).join(" / "),
+    ],
     ["Reg. No.", tenant?.registrationNumber || ""],
   ];
   for (const [label, value] of buyerLines) {
@@ -605,7 +741,12 @@ export function buildPurchaseOrderPdf(
     ["VAT", order.supplier?.vatNumber || ""],
     ["Reg. No.", order.supplier?.registrationNumber || ""],
     ["Category", order.supplier?.category || ""],
-    ["Bank", [order.supplier?.bankName, order.supplier?.bankBranch].filter(Boolean).join(" | ")],
+    [
+      "Bank",
+      [order.supplier?.bankName, order.supplier?.bankBranch]
+        .filter(Boolean)
+        .join(" | "),
+    ],
     ["A/c No.", order.supplier?.bankAccount || ""],
   ];
   let vendorLinesUsed = 0;
@@ -614,7 +755,14 @@ export function buildPurchaseOrderPdf(
     if (doc.y - 12 < FOOTER_Y + 24 + 24) {
       doc.newPage();
       drawPageHeader(doc, tenant, "PURCHASE ORDER (continued)");
-      doc.text(rightX + 2, doc.y, "VENDOR / SUPPLIER (continued)", 8, ACCENT, true);
+      doc.text(
+        rightX + 2,
+        doc.y,
+        "VENDOR / SUPPLIER (continued)",
+        8,
+        ACCENT,
+        true,
+      );
       doc.y -= 12;
     }
     doc.text(rightX + 2, doc.y, label, 7.5, GRAY);
@@ -634,7 +782,12 @@ export function buildPurchaseOrderPdf(
       ["Request #", order.purchaseRequest.requestNumber],
       ["Requested By", nameOf(order.purchaseRequest.requestedBy) || ""],
       ["Department", order.purchaseRequest.department || ""],
-      ["Priority", order.purchaseRequest.priority ? titleCase(order.purchaseRequest.priority) : ""],
+      [
+        "Priority",
+        order.purchaseRequest.priority
+          ? titleCase(order.purchaseRequest.priority)
+          : "",
+      ],
       ["Needed By", fmtDate(order.purchaseRequest.neededBy)],
     ];
     for (const [label, value] of refRows) {
@@ -672,7 +825,8 @@ export function buildPurchaseOrderPdf(
       if (item.expiryRequired) flags.push("Expiry required");
       if (item.sterilityRequired) flags.push("Sterility required");
       if (item.coldChainRequired) flags.push("Cold chain required");
-      if (item.temperatureRequirement) flags.push(`Temp: ${item.temperatureRequirement}`);
+      if (item.temperatureRequirement)
+        flags.push(`Temp: ${item.temperatureRequirement}`);
       if (item.warrantyRequired) flags.push("Warranty");
       if (item.calibrationRequired) flags.push("Calibration certificate");
       if (item.installationRequired) flags.push("Installation");
@@ -682,7 +836,12 @@ export function buildPurchaseOrderPdf(
         doc.newPage();
         drawPageHeader(doc, tenant, "PURCHASE ORDER (continued)");
       }
-      doc.textBlock(MARGIN, `${item.itemName}: ${flags.join(", ")}`, doc.usableW - 12, 8.5);
+      doc.textBlock(
+        MARGIN,
+        `${item.itemName}: ${flags.join(", ")}`,
+        doc.usableW - 12,
+        8.5,
+      );
       doc.gap(2);
     }
   }
@@ -722,11 +881,18 @@ export function buildPurchaseOrderPdf(
   // 9. Delivery & logistics
   const delivBits: string[] = [];
   if (order.store?.name) {
-    delivBits.push(`Store: ${[order.store.name, order.store.location].filter(Boolean).join(" - ")}`);
+    delivBits.push(
+      `Store: ${[order.store.name, order.store.location].filter(Boolean).join(" - ")}`,
+    );
   }
-  if (order.deliveryAddress) delivBits.push(`Deliver to: ${order.deliveryAddress}`);
-  if (order.expectedDate) delivBits.push(`Required by: ${fmtDate(order.expectedDate)}`);
-  if (order.supplier?.shippingAddress && order.supplier.shippingAddress !== order.deliveryAddress)
+  if (order.deliveryAddress)
+    delivBits.push(`Deliver to: ${order.deliveryAddress}`);
+  if (order.expectedDate)
+    delivBits.push(`Required by: ${fmtDate(order.expectedDate)}`);
+  if (
+    order.supplier?.shippingAddress &&
+    order.supplier.shippingAddress !== order.deliveryAddress
+  )
     delivBits.push(`Supplier shipping: ${order.supplier.shippingAddress}`);
   if (delivBits.length) {
     if (doc.y - 40 < FOOTER_Y + 24) {
@@ -754,9 +920,17 @@ export function buildPurchaseOrderPdf(
         (s, it) => s + (Number(it.quantity) || 0),
         0,
       );
-      const invoiceRef = grn.invoiceNumber ? ` Invoice: ${grn.invoiceNumber}` : "";
+      const invoiceRef = grn.invoiceNumber
+        ? ` Invoice: ${grn.invoiceNumber}`
+        : "";
       doc.text(MARGIN, doc.y, `${grn.grnNumber}`, 9, "0 0 0", true);
-      doc.text(right - 140, doc.y, `Received ${fmtDate(grn.receivedDate)}${invoiceRef} · Qty ${receivedQty}`, 8.5, GRAY);
+      doc.text(
+        right - 140,
+        doc.y,
+        `Received ${fmtDate(grn.receivedDate)}${invoiceRef} · Qty ${receivedQty}`,
+        8.5,
+        GRAY,
+      );
       doc.y -= 12;
     }
   }
@@ -768,7 +942,12 @@ export function buildPurchaseOrderPdf(
       drawPageHeader(doc, tenant, "PURCHASE ORDER (continued)");
     }
     drawSectionHeader(doc, "PURCHASE JUSTIFICATION");
-    doc.textBlock(MARGIN, order.purchaseRequest.justification, doc.usableW - 12, 9);
+    doc.textBlock(
+      MARGIN,
+      order.purchaseRequest.justification,
+      doc.usableW - 12,
+      9,
+    );
     doc.gap(2);
   }
 
@@ -867,9 +1046,15 @@ export function buildPurchaseOrderPdf(
 
   const pageCount = doc.pages.length;
   doc.pages.forEach((ops, i) => {
-    ops.push(`${MARGIN} ${FOOTER_Y + 22} m ${right} ${FOOTER_Y + 22} l 0.4 w S`);
-    const pageLabel = footerLine.replace("{PAGE}", String(i + 1)).replace("{TOTAL}", String(pageCount));
-    ops.push(`BT /F1 7 Tf 0.5 0.5 0.5 rg ${MARGIN} ${FOOTER_Y} Td (${esc(pageLabel)}) Tj ET`);
+    ops.push(
+      `${MARGIN} ${FOOTER_Y + 22} m ${right} ${FOOTER_Y + 22} l 0.4 w S`,
+    );
+    const pageLabel = footerLine
+      .replace("{PAGE}", String(i + 1))
+      .replace("{TOTAL}", String(pageCount));
+    ops.push(
+      `BT /F1 7 Tf 0.5 0.5 0.5 rg ${MARGIN} ${FOOTER_Y} Td (${esc(pageLabel)}) Tj ET`,
+    );
   });
 
   // Serialize multi-page PDF
@@ -902,7 +1087,9 @@ export function buildPurchaseOrderPdf(
     const contentId = contentIds[i];
     const pageId = pageIds[i];
     const stream = ops.join("\n");
-    addObj(`<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`);
+    addObj(
+      `<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`,
+    );
     addObj(
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${contentId} 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>`,
     );
@@ -913,7 +1100,8 @@ export function buildPurchaseOrderPdf(
 
   const xref = Buffer.byteLength(pdf, "latin1");
   pdf += `xref\n0 ${offsets.length + 1}\n0000000000 65535 f \n`;
-  for (const off of offsets) pdf += `${String(off).padStart(10, "0")} 00000 n \n`;
+  for (const off of offsets)
+    pdf += `${String(off).padStart(10, "0")} 00000 n \n`;
   pdf += `trailer\n<< /Size ${offsets.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(pdf, "latin1");
 }

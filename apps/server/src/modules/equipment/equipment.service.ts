@@ -154,7 +154,11 @@ export class EquipmentService {
     });
   }
 
-  async recordService(tenantId: string, equipmentId: string, dto: CreateLogDto) {
+  async recordService(
+    tenantId: string,
+    equipmentId: string,
+    dto: CreateLogDto,
+  ) {
     const item = await this.findEquipmentById(tenantId, equipmentId);
     const log = await this.prisma.equipmentLog.create({
       data: {
@@ -171,7 +175,11 @@ export class EquipmentService {
     });
     await this.prisma.equipmentItem.update({
       where: { id: equipmentId },
-      data: { lastServiceDate: new Date(), status: item.status === "OUT_OF_SERVICE" ? "OUT_OF_SERVICE" : "OPERATIONAL" },
+      data: {
+        lastServiceDate: new Date(),
+        status:
+          item.status === "OUT_OF_SERVICE" ? "OUT_OF_SERVICE" : "OPERATIONAL",
+      },
     });
     return log;
   }

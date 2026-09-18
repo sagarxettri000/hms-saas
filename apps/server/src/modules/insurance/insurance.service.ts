@@ -229,7 +229,9 @@ export class InsuranceService {
       if (body.approvedAmount !== undefined) {
         const approved = Number(body.approvedAmount);
         if (!Number.isFinite(approved) || approved < 0)
-          throw new BadRequestException("Approved amount must be a valid number");
+          throw new BadRequestException(
+            "Approved amount must be a valid number",
+          );
         if (approved > Number(claim.claimAmount))
           throw new BadRequestException(
             "Approved amount cannot exceed claim amount",

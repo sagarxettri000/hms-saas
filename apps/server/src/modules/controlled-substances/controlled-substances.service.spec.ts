@@ -47,10 +47,14 @@ describe("ControlledSubstancesService", () => {
   describe("remove", () => {
     it("throws when the entry does not exist", async () => {
       const prisma = {
-        controlledSubstanceLog: { findFirst: jest.fn().mockResolvedValue(null) },
+        controlledSubstanceLog: {
+          findFirst: jest.fn().mockResolvedValue(null),
+        },
       };
       const service = makeService(prisma as any);
-      await expect(service.remove("t1", "l-x")).rejects.toThrow(NotFoundException);
+      await expect(service.remove("t1", "l-x")).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it("deletes an existing entry", async () => {

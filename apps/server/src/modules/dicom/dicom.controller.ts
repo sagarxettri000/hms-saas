@@ -26,7 +26,11 @@ import {
   TenantScoped,
 } from "../../common/decorators/permissions.decorator";
 import { PermissionAction } from "@hms/shared";
-import { DicomService, DicomUploadFile, StudySearchParams } from "./dicom.service";
+import {
+  DicomService,
+  DicomUploadFile,
+  StudySearchParams,
+} from "./dicom.service";
 import { DicomWebService } from "./dicomweb.service";
 import { DicomMwlService } from "./net/dicom-mwl.service";
 import { DicomScpService } from "./net/dicom-scp.service";
@@ -84,7 +88,9 @@ export class DicomController {
         radiologyOrderId,
       });
       const ingested = (result as any).ingested ?? [];
-      const studyIds = [...new Set((ingested as any[]).map((i) => i.study?.id).filter(Boolean))] as string[];
+      const studyIds = [
+        ...new Set((ingested as any[]).map((i) => i.study?.id).filter(Boolean)),
+      ] as string[];
       this.atna.recordImport(user.tenantId, user.id, studyIds, {
         count: ingested.length,
         accession: (result as any).accessionNumber ?? undefined,
@@ -136,14 +142,24 @@ export class DicomController {
   ) {
     const user = req.user as any;
     if (!body.orderId) throw new BadRequestException("orderId is required");
-    return this.dicomService.associateStudy(user.tenantId, studyId, body.orderId, user.id);
+    return this.dicomService.associateStudy(
+      user.tenantId,
+      studyId,
+      body.orderId,
+      user.id,
+    );
   }
 
   @Post("dicom/studies/:studyId/unassociate")
   @HttpCode(200)
   @Permissions(PermissionAction.EDIT)
-  @ApiOperation({ summary: "Remove the link between a DICOM study and its radiology order" })
-  async unassociateStudy(@Param("studyId") studyId: string, @Req() req: Request) {
+  @ApiOperation({
+    summary: "Remove the link between a DICOM study and its radiology order",
+  })
+  async unassociateStudy(
+    @Param("studyId") studyId: string,
+    @Req() req: Request,
+  ) {
     const user = req.user as any;
     return this.dicomService.unassociateStudy(user.tenantId, studyId, user.id);
   }
@@ -151,23 +167,37 @@ export class DicomController {
   @Post("dicom/studies/:studyId/orders")
   @HttpCode(201)
   @Permissions(PermissionAction.CREATE)
-  @ApiOperation({ summary: "Create a radiology order from an orphan DICOM study" })
+  @ApiOperation({
+    summary: "Create a radiology order from an orphan DICOM study",
+  })
   async createOrderFromStudy(
     @Param("studyId") studyId: string,
-    @Body() body: { bodyPart?: string; clinicalHistory?: string; referringDoctorId?: string },
+    @Body()
+    body: {
+      bodyPart?: string;
+      clinicalHistory?: string;
+      referringDoctorId?: string;
+    },
     @Req() req: Request,
   ) {
     const user = req.user as any;
-    return this.dicomService.createOrderFromStudy(user.tenantId, studyId, {
-      bodyPart: body.bodyPart,
-      clinicalHistory: body.clinicalHistory,
-      referringDoctorId: body.referringDoctorId,
-    }, user.id);
+    return this.dicomService.createOrderFromStudy(
+      user.tenantId,
+      studyId,
+      {
+        bodyPart: body.bodyPart,
+        clinicalHistory: body.clinicalHistory,
+        referringDoctorId: body.referringDoctorId,
+      },
+      user.id,
+    );
   }
 
   @Get("dicom/studies/:studyId/instances/:instanceId/wado")
   @Permissions(PermissionAction.VIEW)
-  @ApiOperation({ summary: "WADO-URI-like retrieval of a single DICOM instance" })
+  @ApiOperation({
+    summary: "WADO-URI-like retrieval of a single DICOM instance",
+  })
   async wadoByInstance(
     @Param("studyId") studyId: string,
     @Param("instanceId") instanceId: string,
@@ -191,12 +221,19 @@ export class DicomController {
   @Post("dicomweb/studies")
   @HttpCode(200)
   @Permissions(PermissionAction.CREATE)
-  @ApiOperation({ summary: "STOW-RS: store DICOM instances (multipart/related)" })
+  @ApiOperation({
+    summary: "STOW-RS: store DICOM instances (multipart/related)",
+  })
   async stow(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const user = req.user as any;
     const contentType = String(req.headers["content-type"] || "");
     const body = await readRawBody(req);
-    const result = await this.dicomWeb.stow(user.tenantId, user.id, body, contentType);
+    const result = await this.dicomWeb.stow(
+      user.tenantId,
+      user.id,
+      body,
+      contentType,
+    );
     res.set({ "Content-Type": "application/dicom+json" });
     return result;
   }
@@ -204,7 +241,9 @@ export class DicomController {
   @Post("dicomweb/studies/:studyUid")
   @HttpCode(200)
   @Permissions(PermissionAction.CREATE)
-  @ApiOperation({ summary: "STOW-RS: store instances into a study (multipart/related)" })
+  @ApiOperation({
+    summary: "STOW-RS: store instances into a study (multipart/related)",
+  })
   async stowIntoStudy(
     @Param("studyUid") studyUid: string,
     @Req() req: Request,
@@ -213,7 +252,13 @@ export class DicomController {
     const user = req.user as any;
     const contentType = String(req.headers["content-type"] || "");
     const body = await readRawBody(req);
-    const result = await this.dicomWeb.stow(user.tenantId, user.id, body, contentType, studyUid);
+    const result = await this.dicomWeb.stow(
+      user.tenantId,
+      user.id,
+      body,
+      contentType,
+      studyUid,
+    );
     res.set({ "Content-Type": "application/dicom+json" });
     return result;
   }
@@ -252,7 +297,12 @@ export class DicomController {
   @ApiOperation({ summary: "QIDO-RS: query instances across all studies" })
   qidoInstances(@Query() query: Record<string, string>, @Req() req: Request) {
     const user = req.user as any;
-    return this.dicomWeb.qidoInstances(user.tenantId, undefined, undefined, query);
+    return this.dicomWeb.qidoInstances(
+      user.tenantId,
+      undefined,
+      undefined,
+      query,
+    );
   }
 
   @Get("dicomweb/studies/:studyUid/series/:seriesUid/instances")
@@ -276,7 +326,12 @@ export class DicomController {
       sendMultipart(res, parts);
       return;
     }
-    const result = await this.dicomWeb.qidoInstances(user.tenantId, studyUid, seriesUid, query);
+    const result = await this.dicomWeb.qidoInstances(
+      user.tenantId,
+      studyUid,
+      seriesUid,
+      query,
+    );
     res.set({ "Content-Type": "application/dicom+json" });
     res.send(JSON.stringify(result));
   }
@@ -285,22 +340,34 @@ export class DicomController {
   @Get("dicomweb/studies/:studyUid/metadata")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "WADO-RS: study metadata (application/dicom+json)" })
-  async metadataStudy(@Param("studyUid") studyUid: string, @Req() req: Request) {
+  async metadataStudy(
+    @Param("studyUid") studyUid: string,
+    @Req() req: Request,
+  ) {
     const user = req.user as any;
     return this.dicomWeb.metadataStudy(user.tenantId, studyUid);
   }
 
   @Get("dicomweb/series/:seriesUid/metadata")
   @Permissions(PermissionAction.VIEW)
-  @ApiOperation({ summary: "WADO-RS: series metadata (application/dicom+json)" })
-  async metadataSeries(@Param("seriesUid") seriesUid: string, @Req() req: Request) {
+  @ApiOperation({
+    summary: "WADO-RS: series metadata (application/dicom+json)",
+  })
+  async metadataSeries(
+    @Param("seriesUid") seriesUid: string,
+    @Req() req: Request,
+  ) {
     const user = req.user as any;
     return this.dicomWeb.metadataSeries(user.tenantId, seriesUid);
   }
 
-  @Get("dicomweb/studies/:studyUid/series/:seriesUid/instances/:instanceUid/metadata")
+  @Get(
+    "dicomweb/studies/:studyUid/series/:seriesUid/instances/:instanceUid/metadata",
+  )
   @Permissions(PermissionAction.VIEW)
-  @ApiOperation({ summary: "WADO-RS: instance metadata (application/dicom+json)" })
+  @ApiOperation({
+    summary: "WADO-RS: instance metadata (application/dicom+json)",
+  })
   async metadataInstance(
     @Param("studyUid") studyUid: string,
     @Param("seriesUid") seriesUid: string,
@@ -308,13 +375,20 @@ export class DicomController {
     @Req() req: Request,
   ) {
     const user = req.user as any;
-    return this.dicomWeb.metadataInstance(user.tenantId, studyUid, seriesUid, instanceUid);
+    return this.dicomWeb.metadataInstance(
+      user.tenantId,
+      studyUid,
+      seriesUid,
+      instanceUid,
+    );
   }
 
   // WADO-RS object/bulk retrieval
   @Get("dicomweb/studies/:studyUid")
   @Permissions(PermissionAction.VIEW)
-  @ApiOperation({ summary: "WADO-RS: retrieve study (multipart) or metadata (JSON)" })
+  @ApiOperation({
+    summary: "WADO-RS: retrieve study (multipart) or metadata (JSON)",
+  })
   async retrieveStudy(
     @Param("studyUid") studyUid: string,
     @Headers("accept") accept: string,
@@ -323,7 +397,10 @@ export class DicomController {
   ) {
     const user = req.user as any;
     if ((accept || "").includes("multipart/related")) {
-      const { parts } = await this.dicomWeb.retrieveStudy(user.tenantId, studyUid);
+      const { parts } = await this.dicomWeb.retrieveStudy(
+        user.tenantId,
+        studyUid,
+      );
       sendMultipart(res, parts);
       return;
     }
@@ -334,7 +411,10 @@ export class DicomController {
 
   @Get("dicomweb/studies/:studyUid/series/:seriesUid")
   @Permissions(PermissionAction.VIEW)
-  @ApiOperation({ summary: "WADO-RS: retrieve series instances (multipart) or metadata (JSON)" })
+  @ApiOperation({
+    summary:
+      "WADO-RS: retrieve series instances (multipart) or metadata (JSON)",
+  })
   async retrieveSeries(
     @Param("studyUid") studyUid: string,
     @Param("seriesUid") seriesUid: string,
@@ -344,7 +424,11 @@ export class DicomController {
   ) {
     const user = req.user as any;
     if ((accept || "").includes("multipart/related")) {
-      const { parts } = await this.dicomWeb.retrieveSeriesInstances(user.tenantId, studyUid, seriesUid);
+      const { parts } = await this.dicomWeb.retrieveSeriesInstances(
+        user.tenantId,
+        studyUid,
+        seriesUid,
+      );
       sendMultipart(res, parts);
       return;
     }
@@ -364,12 +448,19 @@ export class DicomController {
     @Res() res: Response,
   ) {
     const user = req.user as any;
-    const { data, contentType } = await this.dicomWeb.wadoInstance(user.tenantId, {
-      studyInstanceUid: studyUid,
-      seriesInstanceUid: seriesUid,
-      instanceUid,
-    });
-    this.atna.recordAccess(user.tenantId, user.id, `${studyUid}/${seriesUid}/${instanceUid}`);
+    const { data, contentType } = await this.dicomWeb.wadoInstance(
+      user.tenantId,
+      {
+        studyInstanceUid: studyUid,
+        seriesInstanceUid: seriesUid,
+        instanceUid,
+      },
+    );
+    this.atna.recordAccess(
+      user.tenantId,
+      user.id,
+      `${studyUid}/${seriesUid}/${instanceUid}`,
+    );
     res.set({
       "Content-Type": contentType,
       "Content-Disposition": 'inline; filename="instance.dcm"',
@@ -380,13 +471,26 @@ export class DicomController {
   @Get("dicomweb/wado")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "WADO-URI: retrieve a DICOM object" })
-  async wadoUri(@Query() query: Record<string, string>, @Req() req: Request, @Res() res: Response) {
+  async wadoUri(
+    @Query() query: Record<string, string>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
     const user = req.user as any;
-    const { data, contentType } = await this.dicomWeb.wadoUri(user.tenantId, query);
+    const { data, contentType } = await this.dicomWeb.wadoUri(
+      user.tenantId,
+      query,
+    );
     this.atna.recordAccess(
       user.tenantId,
       user.id,
-      String(query.objectUID ?? query.uid ?? query.sopInstanceUID ?? query.identifier ?? "wado"),
+      String(
+        query.objectUID ??
+          query.uid ??
+          query.sopInstanceUID ??
+          query.identifier ??
+          "wado",
+      ),
     );
     res.set({
       "Content-Type": contentType,
@@ -409,22 +513,40 @@ export class DicomController {
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Register a remote DICOM node (PACS/AE)" })
   createNode(
-    @Body() body: { name: string; aeTitle: string; hostname: string; port?: number; isLocal?: boolean; tls?: boolean },
+    @Body()
+    body: {
+      name: string;
+      aeTitle: string;
+      hostname: string;
+      port?: number;
+      isLocal?: boolean;
+      tls?: boolean;
+    },
     @Req() req: Request,
   ) {
     const user = req.user as any;
     const created = this.dicomService.createNode(user.tenantId, body);
-    this.atna.emit(user.tenantId, user.id, {
-      outcome: "0",
-      action: "C",
-      eventIdCode: "110100",
-      eventIdLabel: "Application Activity",
-      eventTypeLabel: "DICOM node registered",
-      initiator: { userId: user.id, role: "110164", roleLabel: "User" },
-      objects: [
-        { id: body.name || body.aeTitle, role: ATNA_CODES.ROLE_RESOURCE, roleLabel: "Resource" },
-      ],
-    }, "DICOM_NODE", body.name);
+    this.atna.emit(
+      user.tenantId,
+      user.id,
+      {
+        outcome: "0",
+        action: "C",
+        eventIdCode: "110100",
+        eventIdLabel: "Application Activity",
+        eventTypeLabel: "DICOM node registered",
+        initiator: { userId: user.id, role: "110164", roleLabel: "User" },
+        objects: [
+          {
+            id: body.name || body.aeTitle,
+            role: ATNA_CODES.ROLE_RESOURCE,
+            roleLabel: "Resource",
+          },
+        ],
+      },
+      "DICOM_NODE",
+      body.name,
+    );
     return created;
   }
 
@@ -434,22 +556,36 @@ export class DicomController {
   @ApiOperation({ summary: "Update a DICOM node" })
   updateNode(
     @Param("id") id: string,
-    @Body() body: { name?: string; aeTitle?: string; hostname?: string; port?: number; isLocal?: boolean; tls?: boolean },
+    @Body()
+    body: {
+      name?: string;
+      aeTitle?: string;
+      hostname?: string;
+      port?: number;
+      isLocal?: boolean;
+      tls?: boolean;
+    },
     @Req() req: Request,
   ) {
     const user = req.user as any;
     const updated = this.dicomService.updateNode(user.tenantId, id, body);
-    this.atna.emit(user.tenantId, user.id, {
-      outcome: "0",
-      action: "U",
-      eventIdCode: "110100",
-      eventIdLabel: "Application Activity",
-      eventTypeLabel: "DICOM node updated",
-      initiator: { userId: user.id, role: "110164", roleLabel: "User" },
-      objects: [
-        { id: id, role: ATNA_CODES.ROLE_RESOURCE, roleLabel: "Resource" },
-      ],
-    }, "DICOM_NODE", id);
+    this.atna.emit(
+      user.tenantId,
+      user.id,
+      {
+        outcome: "0",
+        action: "U",
+        eventIdCode: "110100",
+        eventIdLabel: "Application Activity",
+        eventTypeLabel: "DICOM node updated",
+        initiator: { userId: user.id, role: "110164", roleLabel: "User" },
+        objects: [
+          { id: id, role: ATNA_CODES.ROLE_RESOURCE, roleLabel: "Resource" },
+        ],
+      },
+      "DICOM_NODE",
+      id,
+    );
     return updated;
   }
 
@@ -460,24 +596,33 @@ export class DicomController {
   deleteNode(@Param("id") id: string, @Req() req: Request) {
     const user = req.user as any;
     const removed = this.dicomService.deleteNode(user.tenantId, id);
-    this.atna.emit(user.tenantId, user.id, {
-      outcome: "0",
-      action: "D",
-      eventIdCode: "110100",
-      eventIdLabel: "Application Activity",
-      eventTypeLabel: "DICOM node removed",
-      initiator: { userId: user.id, role: "110164", roleLabel: "User" },
-      objects: [
-        { id: id, role: ATNA_CODES.ROLE_RESOURCE, roleLabel: "Resource" },
-      ],
-    }, "DICOM_NODE", id);
+    this.atna.emit(
+      user.tenantId,
+      user.id,
+      {
+        outcome: "0",
+        action: "D",
+        eventIdCode: "110100",
+        eventIdLabel: "Application Activity",
+        eventTypeLabel: "DICOM node removed",
+        initiator: { userId: user.id, role: "110164", roleLabel: "User" },
+        objects: [
+          { id: id, role: ATNA_CODES.ROLE_RESOURCE, roleLabel: "Resource" },
+        ],
+      },
+      "DICOM_NODE",
+      id,
+    );
     return removed;
   }
 
   @Post("dicom/nodes/:id/echo")
   @HttpCode(200)
   @Permissions(PermissionAction.VIEW)
-  @ApiOperation({ summary: "Perform a DICOM C-ECHO against a configured node (full association)" })
+  @ApiOperation({
+    summary:
+      "Perform a DICOM C-ECHO against a configured node (full association)",
+  })
   async echoNode(@Param("id") id: string, @Req() req: Request) {
     const user = req.user as any;
     const result = await this.dicomScu.echoNode(user.tenantId, id);
@@ -497,13 +642,14 @@ export class DicomController {
     @Req() req: Request,
   ) {
     const user = req.user as any;
-    const results = this.dicomScu.sendStudyToNode(user.tenantId, id, body.studyId);
-    this.atna.recordExport(
+    const results = this.dicomScu.sendStudyToNode(
       user.tenantId,
-      user.id,
       id,
-      [{ id: body.studyId, role: ATNA_CODES.ROLE_STUDY, roleLabel: "Study" }],
+      body.studyId,
     );
+    this.atna.recordExport(user.tenantId, user.id, id, [
+      { id: body.studyId, role: ATNA_CODES.ROLE_STUDY, roleLabel: "Study" },
+    ]);
     return results;
   }
 
@@ -538,7 +684,8 @@ export class DicomController {
     const user = req.user as any;
     const nodeId = this.dicomScp.getNodeId();
     await this.dicomScp.stop();
-    if (nodeId) this.atna.recordAppLifecycle(user.tenantId, user.id, nodeId, false);
+    if (nodeId)
+      this.atna.recordAppLifecycle(user.tenantId, user.id, nodeId, false);
     return { running: false };
   }
 
@@ -559,14 +706,21 @@ export class DicomController {
       limit: query.limit ? Number(query.limit) : undefined,
       offset: query.offset ? Number(query.offset) : undefined,
     });
-    this.atna.recordAccess(user.tenantId, user.id, "ModalityWorklist", "MWL query");
+    this.atna.recordAccess(
+      user.tenantId,
+      user.id,
+      "ModalityWorklist",
+      "MWL query",
+    );
     return result;
   }
 
   @Post("dicom/mwl/:orderId/performed")
   @HttpCode(200)
   @Permissions(PermissionAction.EDIT)
-  @ApiOperation({ summary: "Report a scheduled order as performed (images captured)" })
+  @ApiOperation({
+    summary: "Report a scheduled order as performed (images captured)",
+  })
   mwlPerformed(@Param("orderId") orderId: string, @Req() req: Request) {
     const user = req.user as any;
     return this.dicomMwl.markPerformed(user.tenantId, orderId);
@@ -575,7 +729,9 @@ export class DicomController {
   @Post("dicom/mwl/:orderId/completed")
   @HttpCode(200)
   @Permissions(PermissionAction.EDIT)
-  @ApiOperation({ summary: "Mark a worklist order as completed (images uploaded)" })
+  @ApiOperation({
+    summary: "Mark a worklist order as completed (images uploaded)",
+  })
   mwlCompleted(@Param("orderId") orderId: string, @Req() req: Request) {
     const user = req.user as any;
     return this.dicomMwl.markCompleted(user.tenantId, orderId);

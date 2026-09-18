@@ -50,7 +50,12 @@ export class PreauthorizationsService {
 
   async findAll(
     tenantId: string,
-    params: { status?: string; patientId?: string; page?: number; limit?: number },
+    params: {
+      status?: string;
+      patientId?: string;
+      page?: number;
+      limit?: number;
+    },
   ) {
     const page = Number(params.page) || 1;
     const limit = Number(params.limit) || 50;
@@ -78,7 +83,12 @@ export class PreauthorizationsService {
     return record;
   }
 
-  async update(tenantId: string, id: string, dto: UpdatePreauthDto, userId: string) {
+  async update(
+    tenantId: string,
+    id: string,
+    dto: UpdatePreauthDto,
+    userId: string,
+  ) {
     const existing = await this.findById(tenantId, id);
     const data: any = {};
     if (dto.treatment !== undefined) data.treatment = dto.treatment;
@@ -95,7 +105,12 @@ export class PreauthorizationsService {
     return this.findById(tenantId, existing.id);
   }
 
-  async decide(tenantId: string, id: string, decision: string, approvedAmount?: number) {
+  async decide(
+    tenantId: string,
+    id: string,
+    decision: string,
+    approvedAmount?: number,
+  ) {
     const existing = await this.findById(tenantId, id);
     const status = decision.toUpperCase();
     if (!ALLOWED_STATUSES.includes(status)) {
@@ -103,7 +118,10 @@ export class PreauthorizationsService {
     }
     const data: any = { status, decisionDate: new Date() };
     if (status === "APPROVED") {
-      data.approvedAmount = approvedAmount != null ? Number(approvedAmount) : existing.estimatedCost;
+      data.approvedAmount =
+        approvedAmount != null
+          ? Number(approvedAmount)
+          : existing.estimatedCost;
     } else if (status === "DENIED") {
       data.approvedAmount = null;
     }

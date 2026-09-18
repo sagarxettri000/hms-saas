@@ -1,10 +1,4 @@
-import {
-  Controller,
-  Get,
-  Query,
-  Req,
-  UseGuards,
-} from "@nestjs/common";
+import { Controller, Get, Query, Req, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CatalogService } from "./catalog.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";

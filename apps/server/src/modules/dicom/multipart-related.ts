@@ -18,7 +18,9 @@ export function parseMultipartRelated(
 ): Promise<MultipartPart[]> {
   const boundary = extractBoundary(contentType);
   if (!boundary) {
-    throw new BadRequestException("Content-Type must include a boundary parameter");
+    throw new BadRequestException(
+      "Content-Type must include a boundary parameter",
+    );
   }
 
   const delimiter = Buffer.from(`--${boundary}`);
@@ -32,15 +34,15 @@ export function parseMultipartRelated(
 
     // Boundary delimiter is followed by either `--` (close) or an EOL.
     const afterBoundary = partStart + delimiter.length;
-    if (body.subarray(afterBoundary, afterBoundary + 2).toString("latin1") === "--") {
+    if (
+      body.subarray(afterBoundary, afterBoundary + 2).toString("latin1") ===
+      "--"
+    ) {
       break;
     }
 
     let headerStart = afterBoundary;
-    if (
-      body[headerStart] === 0x0d &&
-      body[headerStart + 1] === 0x0a
-    ) {
+    if (body[headerStart] === 0x0d && body[headerStart + 1] === 0x0a) {
       headerStart += 2;
     } else if (body[headerStart] === 0x0a) {
       headerStart += 1;
@@ -110,12 +112,10 @@ function parseHeaders(block: Buffer): Record<string, string> {
 /**
  * Fully drain the raw request body stream into a Buffer.
  */
-export function readRawBody(
-  req: {
-    on: (event: string, callback: (chunk: Buffer) => void) => unknown;
-    once: (event: string, callback: () => void) => unknown;
-  },
-): Promise<Buffer> {
+export function readRawBody(req: {
+  on: (event: string, callback: (chunk: Buffer) => void) => unknown;
+  once: (event: string, callback: () => void) => unknown;
+}): Promise<Buffer> {
   const chunks: Buffer[] = [];
   return new Promise<Buffer>((resolve, reject) => {
     req.on("data", (chunk: Buffer) => chunks.push(chunk));

@@ -46,7 +46,9 @@ export class OtService {
         select: { id: true },
       });
       if (staff.length !== staffIds.length)
-        throw new BadRequestException("Surgical staff not found in this tenant");
+        throw new BadRequestException(
+          "Surgical staff not found in this tenant",
+        );
     }
 
     if (dto.encounterId) {
@@ -133,9 +135,15 @@ export class OtService {
           patient: {
             select: { id: true, firstName: true, lastName: true, mrn: true },
           },
-          surgeon: { include: { user: { select: { firstName: true, lastName: true } } } },
-          assistant: { include: { user: { select: { firstName: true, lastName: true } } } },
-          anesthetist: { include: { user: { select: { firstName: true, lastName: true } } } },
+          surgeon: {
+            include: { user: { select: { firstName: true, lastName: true } } },
+          },
+          assistant: {
+            include: { user: { select: { firstName: true, lastName: true } } },
+          },
+          anesthetist: {
+            include: { user: { select: { firstName: true, lastName: true } } },
+          },
         },
         orderBy: { scheduledDate: "desc" },
         skip: (page - 1) * limit,
@@ -152,9 +160,15 @@ export class OtService {
       where: { id, tenantId },
       include: {
         patient: true,
-        surgeon: { include: { user: { select: { firstName: true, lastName: true } } } },
-        assistant: { include: { user: { select: { firstName: true, lastName: true } } } },
-        anesthetist: { include: { user: { select: { firstName: true, lastName: true } } } },
+        surgeon: {
+          include: { user: { select: { firstName: true, lastName: true } } },
+        },
+        assistant: {
+          include: { user: { select: { firstName: true, lastName: true } } },
+        },
+        anesthetist: {
+          include: { user: { select: { firstName: true, lastName: true } } },
+        },
       },
     });
     if (!ot) throw new NotFoundException("OT case not found");
@@ -234,9 +248,15 @@ export class OtService {
         patient: {
           select: { id: true, firstName: true, lastName: true, mrn: true },
         },
-        surgeon: { include: { user: { select: { firstName: true, lastName: true } } } },
-        assistant: { include: { user: { select: { firstName: true, lastName: true } } } },
-        anesthetist: { include: { user: { select: { firstName: true, lastName: true } } } },
+        surgeon: {
+          include: { user: { select: { firstName: true, lastName: true } } },
+        },
+        assistant: {
+          include: { user: { select: { firstName: true, lastName: true } } },
+        },
+        anesthetist: {
+          include: { user: { select: { firstName: true, lastName: true } } },
+        },
       },
       orderBy: { scheduledDate: "asc" },
     });

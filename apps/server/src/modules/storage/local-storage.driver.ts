@@ -10,8 +10,11 @@ export class LocalStorageDriver implements StorageDriver {
   private readonly prefix: string;
 
   constructor(config: ConfigService) {
-    this.baseDir = path.resolve(config.get<string>("STORAGE_LOCAL_DIR") || "./storage");
-    this.prefix = config.get<string>("STORAGE_URL_PREFIX") || "/api/v1/storage/file";
+    this.baseDir = path.resolve(
+      config.get<string>("STORAGE_LOCAL_DIR") || "./storage",
+    );
+    this.prefix =
+      config.get<string>("STORAGE_URL_PREFIX") || "/api/v1/storage/file";
     fs.mkdirSync(this.baseDir, { recursive: true });
   }
 
@@ -66,9 +69,11 @@ function mimeFromExt(ext: string): string {
     ".csv": "text/csv",
     ".json": "application/json",
     ".doc": "application/msword",
-    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".docx":
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".xls": "application/vnd.ms-excel",
-    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xlsx":
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".zip": "application/zip",
   };
   return map[ext.toLowerCase()] || "application/octet-stream";

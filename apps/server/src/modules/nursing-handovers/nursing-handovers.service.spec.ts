@@ -20,7 +20,12 @@ describe("NursingHandoversService", () => {
     it("creates a handover with a given shift date", async () => {
       const result = await service.create(
         "t1",
-        { wardId: "w1", wardName: "Ward A", shiftDate: "2026-01-01", notes: "quiet" },
+        {
+          wardId: "w1",
+          wardName: "Ward A",
+          shiftDate: "2026-01-01",
+          notes: "quiet",
+        },
         "u1",
         "Nurse B",
       );

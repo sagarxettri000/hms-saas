@@ -5,10 +5,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 export class QualityChecklistsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(
-    tenantId: string,
-    params: { category?: string },
-  ) {
+  async findAll(tenantId: string, params: { category?: string }) {
     const where: any = { tenantId };
     if (params.category) where.category = params.category;
     return this.prisma.qualityChecklist.findMany({
@@ -32,7 +29,11 @@ export class QualityChecklistsService {
     if (existing) {
       return this.prisma.qualityChecklist.update({
         where: { id: existing.id },
-        data: { checked, checkedBy: checked ? userId : null, checkedAt: checked ? new Date() : null },
+        data: {
+          checked,
+          checkedBy: checked ? userId : null,
+          checkedAt: checked ? new Date() : null,
+        },
       });
     }
     return this.prisma.qualityChecklist.create({

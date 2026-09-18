@@ -29,13 +29,22 @@ function makePrisma(localNode: unknown) {
       findFirst: jest.fn().mockResolvedValue(localNode),
     },
     dicomStudy: {
-      upsert: jest.fn(async ({ create }: any) => ({ id: "study-1", ...create })),
+      upsert: jest.fn(async ({ create }: any) => ({
+        id: "study-1",
+        ...create,
+      })),
     },
     dicomSeries: {
-      upsert: jest.fn(async ({ create }: any) => ({ id: "series-1", ...create })),
+      upsert: jest.fn(async ({ create }: any) => ({
+        id: "series-1",
+        ...create,
+      })),
     },
     dicomInstance: {
-      upsert: jest.fn(async ({ create }: any) => ({ id: "instance-1", ...create })),
+      upsert: jest.fn(async ({ create }: any) => ({
+        id: "instance-1",
+        ...create,
+      })),
       findMany: jest.fn().mockResolvedValue([]),
     },
     patient: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -84,49 +93,41 @@ describe("DICOM network SCP/SCU loopback", () => {
     }
   });
 
-  it(
-    "serves a C-ECHO over a real association",
-    async () => {
-      const dicom = new DicomService(prisma as any, storage as any);
-      scp = new DicomScpService(prisma as any, dicom, storage as any);
-      await scp.start("local-node", "t1");
+  it("serves a C-ECHO over a real association", async () => {
+    const dicom = new DicomService(prisma as any, storage as any);
+    scp = new DicomScpService(prisma as any, dicom, storage as any);
+    await scp.start("local-node", "t1");
 
-      const scu = new DicomScuService(prisma as any, storage as any);
-      const result = await scu.echo("127.0.0.1", port, "HMS_LOCAL");
+    const scu = new DicomScuService(prisma as any, storage as any);
+    const result = await scu.echo("127.0.0.1", port, "HMS_LOCAL");
 
-      expect(result.latencyMs).toBeGreaterThanOrEqual(0);
-      expect(result.status).toBe(0); // STATUS.SUCCESS
-      expect(scp.getStats().echoRequests).toBe(1);
-    },
-    20000,
-  );
+    expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+    expect(result.status).toBe(0); // STATUS.SUCCESS
+    expect(scp.getStats().echoRequests).toBe(1);
+  }, 20000);
 
-  it(
-    "stores an instance via C-STORE and persists it through the upload pipeline",
-    async () => {
-      const dicom = new DicomService(prisma as any, storage as any);
-      scp = new DicomScpService(prisma as any, dicom, storage as any);
-      await scp.start("local-node", "t1");
+  it("stores an instance via C-STORE and persists it through the upload pipeline", async () => {
+    const dicom = new DicomService(prisma as any, storage as any);
+    scp = new DicomScpService(prisma as any, dicom, storage as any);
+    await scp.start("local-node", "t1");
 
-      const scu = new DicomScuService(prisma as any, storage as any);
-      const file = buildDicomP10File();
-      const results = await scu.store("127.0.0.1", port, "HMS_LOCAL", [
-        {
-          sopClassUid: SUPER_SECONDARY_CAPTURE,
-          sopInstanceUid: "1.2.826.0.1.3680043.8.498.202609080021",
-          p10: file,
-        },
-      ]);
+    const scu = new DicomScuService(prisma as any, storage as any);
+    const file = buildDicomP10File();
+    const results = await scu.store("127.0.0.1", port, "HMS_LOCAL", [
+      {
+        sopClassUid: SUPER_SECONDARY_CAPTURE,
+        sopInstanceUid: "1.2.826.0.1.3680043.8.498.202609080021",
+        p10: file,
+      },
+    ]);
 
-      expect(results).toHaveLength(1);
-      expect(results[0].status).toBe(0);
-      expect(scp.getStats().storedInstances).toBe(1);
-      expect(scp.getStats().associations).toBeGreaterThanOrEqual(1);
+    expect(results).toHaveLength(1);
+    expect(results[0].status).toBe(0);
+    expect(scp.getStats().storedInstances).toBe(1);
+    expect(scp.getStats().associations).toBeGreaterThanOrEqual(1);
 
-      // The stored instance should be persisted to storage under the study path.
-      const storedKeys = [...storage.store.keys()];
-      expect(storedKeys.some((k) => k.includes("202609080001"))).toBe(true);
-    },
-    20000,
-  );
+    // The stored instance should be persisted to storage under the study path.
+    const storedKeys = [...storage.store.keys()];
+    expect(storedKeys.some((k) => k.includes("202609080001"))).toBe(true);
+  }, 20000);
 });

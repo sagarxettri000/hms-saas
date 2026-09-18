@@ -135,7 +135,16 @@ export class HrService {
       where: { id: dto.userId, tenantId },
     });
     if (!user) throw new NotFoundException("User not found");
-    const LEAVE_TYPES = ["ANNUAL", "SICK", "CASUAL", "MATERNITY", "PATERNITY", "UNPAID", "COMPENSATORY", "OTHER"];
+    const LEAVE_TYPES = [
+      "ANNUAL",
+      "SICK",
+      "CASUAL",
+      "MATERNITY",
+      "PATERNITY",
+      "UNPAID",
+      "COMPENSATORY",
+      "OTHER",
+    ];
     if (!LEAVE_TYPES.includes(dto.type))
       throw new BadRequestException("Invalid leave type");
 
@@ -195,7 +204,13 @@ export class HrService {
 
   async listStaff(
     tenantId: string,
-    query: { search?: string; departmentId?: string; active?: string; page?: number; limit?: number },
+    query: {
+      search?: string;
+      departmentId?: string;
+      active?: string;
+      page?: number;
+      limit?: number;
+    },
   ) {
     const { search, departmentId, page = 1, limit = 50 } = query;
     const pageNum = Math.max(1, Number(page) || 1);
@@ -240,7 +255,8 @@ export class HrService {
       lastName: s.user.lastName,
       email: s.user.email,
       role: s.user.role,
-      isActive: s.user.status !== "INACTIVE" && s.employmentStatus !== "TERMINATED",
+      isActive:
+        s.user.status !== "INACTIVE" && s.employmentStatus !== "TERMINATED",
     }));
 
     return { data, total, page: pageNum, limit: limitNum };
@@ -300,24 +316,24 @@ export class HrService {
       },
     });
 
-      return {
-        ...(await this.prisma.staffProfile.findUnique({
-          where: { id: staff.id },
-          include: {
-            user: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-                role: true,
-                status: true,
-              },
+    return {
+      ...(await this.prisma.staffProfile.findUnique({
+        where: { id: staff.id },
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              role: true,
+              status: true,
             },
-            department: { select: { id: true, name: true } },
           },
-        })),
-        tempPassword: dto.password ? undefined : tempPassword,
-      };
-    }
+          department: { select: { id: true, name: true } },
+        },
+      })),
+      tempPassword: dto.password ? undefined : tempPassword,
+    };
   }
+}

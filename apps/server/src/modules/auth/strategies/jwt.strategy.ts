@@ -144,7 +144,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         where: { id: payload.sid, userId: payload.sub },
         select: { id: true, isActive: true, expiresAt: true, revokedAt: true },
       });
-      if (!session || !session.isActive || (session.expiresAt && session.expiresAt < new Date()) || session.revokedAt) {
+      if (
+        !session ||
+        !session.isActive ||
+        (session.expiresAt && session.expiresAt < new Date()) ||
+        session.revokedAt
+      ) {
         throw new UnauthorizedException("Invalid email or password");
       }
     }

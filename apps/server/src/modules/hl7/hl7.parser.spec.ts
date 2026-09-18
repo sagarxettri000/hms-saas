@@ -1,4 +1,8 @@
-import { buildAckMessage, parseHl7Message, parseHl7Timestamp } from "./hl7.parser";
+import {
+  buildAckMessage,
+  parseHl7Message,
+  parseHl7Timestamp,
+} from "./hl7.parser";
 
 const ADT = [
   "MSH|^~\\&|RIS|HOSPITAL|HMS|NEPAL|20250115123000||ADT^A01|MSG0001|P|2.5",
@@ -37,7 +41,10 @@ describe("hl7.parser", () => {
     });
 
     it("handles repetitions on PID-3", () => {
-      const msg = ADT.replace("MRN000123^^^HOSP^MR", "MRN000123^^^HOSP^MR~ALT001^^^ALT^MR");
+      const msg = ADT.replace(
+        "MRN000123^^^HOSP^MR",
+        "MRN000123^^^HOSP^MR~ALT001^^^ALT^MR",
+      );
       const pid = parseHl7Message(msg).segment("PID")!;
       expect(pid.field(2).length).toBe(2);
       expect(pid.field(2)[1][0]).toBe("ALT001");
@@ -73,7 +80,9 @@ describe("hl7.parser", () => {
       ].join("\r");
       const parsed = parseHl7Message(out);
       expect(parsed.allSegments("OBX").length).toBe(2);
-      expect(parsed.segment("OBX")!.component(2, 0, 1)).toBe("WHITE BLOOD COUNT");
+      expect(parsed.segment("OBX")!.component(2, 0, 1)).toBe(
+        "WHITE BLOOD COUNT",
+      );
     });
   });
 

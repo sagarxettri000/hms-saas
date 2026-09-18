@@ -30,7 +30,9 @@ describe("BloodBankService", () => {
     const prisma: any = {
       bloodDonor: donorModel,
       bloodUnit: unitModel,
-      $transaction: jest.fn((fn: any) => fn({ bloodUnit: unitModel, bloodDonor: donorModel })),
+      $transaction: jest.fn((fn: any) =>
+        fn({ bloodUnit: unitModel, bloodDonor: donorModel }),
+      ),
     };
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -65,11 +67,18 @@ describe("BloodBankService", () => {
       expect(donor.bloodGroup).toBe(expected);
     });
 
-    it.each(["", " ", "XYZ", "C+", 42])("rejects invalid blood group %p", async (raw) => {
-      await expect(
-        service.createDonor(TENANT, { name: "D", bloodGroup: raw as any, phone: "9" }),
-      ).rejects.toThrow(BadRequestException);
-    });
+    it.each(["", " ", "XYZ", "C+", 42])(
+      "rejects invalid blood group %p",
+      async (raw) => {
+        await expect(
+          service.createDonor(TENANT, {
+            name: "D",
+            bloodGroup: raw as any,
+            phone: "9",
+          }),
+        ).rejects.toThrow(BadRequestException);
+      },
+    );
 
     it("rejects unit registration with a display-form blood group that is not valid enum-adjacent", async () => {
       await expect(
@@ -98,7 +107,11 @@ describe("BloodBankService", () => {
 
     it("requires name and phone", async () => {
       await expect(
-        service.createDonor(TENANT, { name: "  ", bloodGroup: "O+", phone: "9" }),
+        service.createDonor(TENANT, {
+          name: "  ",
+          bloodGroup: "O+",
+          phone: "9",
+        }),
       ).rejects.toThrow(BadRequestException);
       await expect(
         service.createDonor(TENANT, { name: "D", bloodGroup: "O+", phone: "" }),
@@ -138,7 +151,11 @@ describe("BloodBankService", () => {
     });
 
     it("writes an audit entry", async () => {
-      await service.createDonor(TENANT, { name: "D", bloodGroup: "O-", phone: "9" }, "user-1");
+      await service.createDonor(
+        TENANT,
+        { name: "D", bloodGroup: "O-", phone: "9" },
+        "user-1",
+      );
       expect(auditLog).toHaveBeenCalledWith(
         TENANT,
         "user-1",
@@ -163,7 +180,9 @@ describe("BloodBankService", () => {
 
     it("filters by blood group in display form", async () => {
       await service.findDonors(TENANT, { bloodGroup: "AB+" });
-      expect(donorModel.findMany.mock.calls[0][0].where.bloodGroup).toBe("AB_POS");
+      expect(donorModel.findMany.mock.calls[0][0].where.bloodGroup).toBe(
+        "AB_POS",
+      );
     });
 
     it("returns a paginated shape with a total", async () => {
@@ -232,7 +251,10 @@ describe("BloodBankService", () => {
         "BloodDonor",
         "d1",
         "UPDATE",
-        expect.objectContaining({ previous: expect.any(Object), changes: { name: "New" } }),
+        expect.objectContaining({
+          previous: expect.any(Object),
+          changes: { name: "New" },
+        }),
       );
     });
   });
@@ -261,10 +283,18 @@ describe("BloodBankService", () => {
     });
 
     it("links the unit to a tenant donor and increments their donation count transactionally", async () => {
-      donorModel.findFirst.mockResolvedValue({ id: "don-1", totalDonations: 2 });
-      await service.registerUnit(TENANT, { bloodGroup: "A_POS", donorId: "don-1" });
+      donorModel.findFirst.mockResolvedValue({
+        id: "don-1",
+        totalDonations: 2,
+      });
+      await service.registerUnit(TENANT, {
+        bloodGroup: "A_POS",
+        donorId: "don-1",
+      });
       expect(unitModel.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ donorId: "don-1" }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ donorId: "don-1" }),
+        }),
       );
       expect(donorModel.update).toHaveBeenCalledWith({
         where: { id: "don-1" },
@@ -273,10 +303,14 @@ describe("BloodBankService", () => {
     });
 
     it("generates sequential unit numbers per tenant", async () => {
-      unitModel.findFirst.mockResolvedValue({ unitNumber: "BLD-20260916-0007" });
+      unitModel.findFirst.mockResolvedValue({
+        unitNumber: "BLD-20260916-0007",
+      });
       await service.registerUnit(TENANT, { bloodGroup: "A_POS" });
 
-      expect(unitModel.create.mock.calls[0][0].data.unitNumber).toMatch(/^BLD-\d{8}-0008$/);
+      expect(unitModel.create.mock.calls[0][0].data.unitNumber).toMatch(
+        /^BLD-\d{8}-0008$/,
+      );
     });
 
     it("audits unit registration", async () => {
@@ -322,7 +356,10 @@ describe("BloodBankService", () => {
 
     it("paginates", async () => {
       unitModel.count.mockResolvedValue(45);
-      const r = await service.findUnits(TENANT, { page: "2", limit: "20" } as any);
+      const r = await service.findUnits(TENANT, {
+        page: "2",
+        limit: "20",
+      } as any);
       expect(unitModel.findMany.mock.calls[0][0].skip).toBe(20);
       expect(r.totalPages).toBe(3);
     });
@@ -358,7 +395,12 @@ describe("BloodBankService", () => {
     it("issues an available unit and records who issued it", async () => {
       unitModel.findFirst.mockResolvedValue(unit);
       unitModel.update.mockResolvedValue({ ...unit, status: "ISSUED" });
-      await service.issueUnit(TENANT, "u1", { issuedTo: "patient-9" }, "user-4");
+      await service.issueUnit(
+        TENANT,
+        "u1",
+        { issuedTo: "patient-9" },
+        "user-4",
+      );
       expect(unitModel.update).toHaveBeenCalledWith({
         where: { id: "u1" },
         data: expect.objectContaining({ status: "ISSUED", issuedBy: "user-4" }),
@@ -369,7 +411,12 @@ describe("BloodBankService", () => {
 
   describe("discardUnit", () => {
     it("requires a reason and records it", async () => {
-      const unit = { id: "u1", tenantId: TENANT, unitNumber: "BLD-1", testResults: null };
+      const unit = {
+        id: "u1",
+        tenantId: TENANT,
+        unitNumber: "BLD-1",
+        testResults: null,
+      };
       unitModel.findFirst.mockResolvedValue(unit);
       unitModel.update.mockResolvedValue({ ...unit, status: "DISCARDED" });
 

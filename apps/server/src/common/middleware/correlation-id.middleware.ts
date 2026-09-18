@@ -18,9 +18,7 @@ function sanitizeCorrelationId(value: unknown): string | null {
 export class CorrelationIdMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
     const incoming = req.headers[CORRELATION_HEADER];
-    const correlationId =
-      sanitizeCorrelationId(incoming) ??
-      randomUUID();
+    const correlationId = sanitizeCorrelationId(incoming) ?? randomUUID();
     (req as any).correlationId = correlationId;
     res.setHeader(CORRELATION_HEADER, correlationId);
     next();

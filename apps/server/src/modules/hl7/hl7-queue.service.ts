@@ -1,15 +1,15 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Queue, Worker, Job, QueueEvents } from 'bullmq';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Hl7Service } from './hl7.service';
-import { Hl7ProcessResult, Hl7ProcessOptions } from './hl7.types';
-import { parseHl7Message } from './hl7.parser';
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Queue, Worker, Job, QueueEvents } from "bullmq";
+import { InjectQueue } from "@nestjs/bullmq";
+import { Hl7Service } from "./hl7.service";
+import { Hl7ProcessResult, Hl7ProcessOptions } from "./hl7.types";
+import { parseHl7Message } from "./hl7.parser";
 
 export interface Hl7IngestJobData {
   raw: string;
   options: Hl7ProcessOptions;
   attempt: number;
-  source: 'http' | 'mllp';
+  source: "http" | "mllp";
   messageControlId: string;
 }
 
@@ -26,15 +26,17 @@ export class Hl7QueueService implements OnModuleInit {
   private workers: Worker[] = [];
 
   constructor(
-    @InjectQueue('hl7-ingest') private readonly ingestQueue: Queue,
-    @InjectQueue('hl7-retry') private readonly retryQueue: Queue,
-    @InjectQueue('hl7-dead-letter') private readonly deadLetterQueue: Queue,
+    @InjectQueue("hl7-ingest") private readonly ingestQueue: Queue,
+    @InjectQueue("hl7-retry") private readonly retryQueue: Queue,
+    @InjectQueue("hl7-dead-letter") private readonly deadLetterQueue: Queue,
     private readonly hl7Service: Hl7Service,
   ) {}
 
   async onModuleInit() {
     if (this.checkRedisAvailability() === false) {
-      this.logger.warn('REDIS_HOST not configured - HL7 queue disabled, messages processed synchronously');
+      this.logger.warn(
+        "REDIS_HOST not configured - HL7 queue disabled, messages processed synchronously",
+      );
       return;
     }
     this.setupWorkers();
@@ -43,7 +45,7 @@ export class Hl7QueueService implements OnModuleInit {
 
   private getConnectionOptions() {
     return {
-      host: process.env.REDIS_HOST || 'localhost',
+      host: process.env.REDIS_HOST || "localhost",
       port: Number(process.env.REDIS_PORT) || 6379,
       password: process.env.REDIS_PASSWORD || undefined,
       db: Number(process.env.REDIS_DB) || 0,
@@ -55,7 +57,7 @@ export class Hl7QueueService implements OnModuleInit {
     const connection = this.getConnectionOptions();
 
     const ingestWorker = new Worker(
-      'hl7-ingest',
+      "hl7-ingest",
       async (job: Job<Hl7IngestJobData>) => this.processIngestJob(job),
       {
         connection,
@@ -65,7 +67,7 @@ export class Hl7QueueService implements OnModuleInit {
     );
 
     const retryWorker = new Worker(
-      'hl7-retry',
+      "hl7-retry",
       async (job: Job<Hl7IngestJobData>) => this.processRetryJob(job),
       {
         connection,
@@ -75,7 +77,7 @@ export class Hl7QueueService implements OnModuleInit {
     );
 
     const dlqWorker = new Worker(
-      'hl7-dead-letter',
+      "hl7-dead-letter",
       async (job: Job<Hl7IngestJobData>) => this.processDeadLetterJob(job),
       {
         connection,
@@ -85,30 +87,32 @@ export class Hl7QueueService implements OnModuleInit {
 
     this.workers = [ingestWorker, retryWorker, dlqWorker];
 
-    ingestWorker.on('failed', (job, err) => this.handleJobFailure(job, err));
-    retryWorker.on('failed', (job, err) => this.handleRetryFailure(job, err));
+    ingestWorker.on("failed", (job, err) => this.handleJobFailure(job, err));
+    retryWorker.on("failed", (job, err) => this.handleRetryFailure(job, err));
   }
 
   private async setupQueueEvents() {
     const connection = this.getConnectionOptions();
 
-    const ingestEvents = new QueueEvents('hl7-ingest', { connection });
-    const retryEvents = new QueueEvents('hl7-retry', { connection });
-    const dlqEvents = new QueueEvents('hl7-dead-letter', { connection });
+    const ingestEvents = new QueueEvents("hl7-ingest", { connection });
+    const retryEvents = new QueueEvents("hl7-retry", { connection });
+    const dlqEvents = new QueueEvents("hl7-dead-letter", { connection });
 
-    ingestEvents.on('completed', ({ jobId, returnvalue }) => {
-      this.logger.debug(`HL7 ingest job ${jobId} completed: ${JSON.stringify(returnvalue)}`);
+    ingestEvents.on("completed", ({ jobId, returnvalue }) => {
+      this.logger.debug(
+        `HL7 ingest job ${jobId} completed: ${JSON.stringify(returnvalue)}`,
+      );
     });
 
-    ingestEvents.on('failed', ({ jobId, failedReason }) => {
+    ingestEvents.on("failed", ({ jobId, failedReason }) => {
       this.logger.warn(`HL7 ingest job ${jobId} failed: ${failedReason}`);
     });
 
-    retryEvents.on('completed', ({ jobId }) => {
+    retryEvents.on("completed", ({ jobId }) => {
       this.logger.log(`HL7 retry job ${jobId} re-queued for processing`);
     });
 
-    dlqEvents.on('added', ({ jobId }) => {
+    dlqEvents.on("added", ({ jobId }) => {
       this.logger.error(`HL7 message moved to dead-letter queue: ${jobId}`);
     });
   }
@@ -116,9 +120,9 @@ export class Hl7QueueService implements OnModuleInit {
   async enqueueMessage(
     raw: string,
     options: Hl7ProcessOptions,
-    source: 'http' | 'mllp' = 'http',
+    source: "http" | "mllp" = "http",
   ): Promise<string> {
-    let messageControlId = '';
+    let messageControlId = "";
     try {
       const parsed = parseHl7Message(raw);
       messageControlId = parsed.messageControlId;
@@ -126,7 +130,9 @@ export class Hl7QueueService implements OnModuleInit {
       // ignore parse errors
     }
 
-    const jobId = messageControlId ? `sync-${messageControlId}` : `sync-${Date.now()}`;
+    const jobId = messageControlId
+      ? `sync-${messageControlId}`
+      : `sync-${Date.now()}`;
 
     if (this.checkRedisAvailability() === false) {
       await this.processSingleMessage(raw, options, messageControlId, jobId);
@@ -135,10 +141,10 @@ export class Hl7QueueService implements OnModuleInit {
 
     try {
       const job = await this.ingestQueue.add(
-        'process-hl7',
+        "process-hl7",
         { raw, options, attempt: 1, source, messageControlId },
         {
-          priority: source === 'mllp' ? 10 : 5,
+          priority: source === "mllp" ? 10 : 5,
           removeOnComplete: true,
           removeOnFail: false,
         },
@@ -146,7 +152,9 @@ export class Hl7QueueService implements OnModuleInit {
       return job.id!;
     } catch (err) {
       this.redisAvailable = false;
-      this.logger.warn(`Redis unavailable, processing synchronously: ${(err as Error).message}`);
+      this.logger.warn(
+        `Redis unavailable, processing synchronously: ${(err as Error).message}`,
+      );
       await this.processSingleMessage(raw, options, messageControlId, jobId);
       return jobId;
     }
@@ -171,19 +179,25 @@ export class Hl7QueueService implements OnModuleInit {
     try {
       const result = await this.hl7Service.processMessage(raw, options);
       this.logger.log(
-        `Synchronous HL7 processing for ${messageControlId || jobId}: ${result.accepted ? 'accepted' : 'rejected'}`,
+        `Synchronous HL7 processing for ${messageControlId || jobId}: ${result.accepted ? "accepted" : "rejected"}`,
       );
     } catch (err) {
-      this.logger.error(`Synchronous HL7 processing failed for ${messageControlId || jobId}: ${(err as Error).message}`);
+      this.logger.error(
+        `Synchronous HL7 processing failed for ${messageControlId || jobId}: ${(err as Error).message}`,
+      );
     }
   }
 
-  private async processIngestJob(job: Job<Hl7IngestJobData>): Promise<Hl7JobResult> {
+  private async processIngestJob(
+    job: Job<Hl7IngestJobData>,
+  ): Promise<Hl7JobResult> {
     const { raw, options } = job.data;
     const result = await this.hl7Service.processMessage(raw, options);
 
-    if (!result.accepted && result.actions.some((a) => a.type === 'ERROR')) {
-      throw new Error(`HL7 processing failed: ${result.actions.map((a) => a.detail).join(', ')}`);
+    if (!result.accepted && result.actions.some((a) => a.type === "ERROR")) {
+      throw new Error(
+        `HL7 processing failed: ${result.actions.map((a) => a.detail).join(", ")}`,
+      );
     }
 
     return {
@@ -193,17 +207,21 @@ export class Hl7QueueService implements OnModuleInit {
     };
   }
 
-  private async processRetryJob(job: Job<Hl7IngestJobData>): Promise<Hl7JobResult> {
+  private async processRetryJob(
+    job: Job<Hl7IngestJobData>,
+  ): Promise<Hl7JobResult> {
     const { raw, options, attempt } = job.data;
     const nextAttempt = attempt + 1;
 
     if (nextAttempt > this.maxRetries) {
       await this.moveToDeadLetter(job.data);
-      throw new Error(`Max retries (${this.maxRetries}) exceeded, moved to DLQ`);
+      throw new Error(
+        `Max retries (${this.maxRetries}) exceeded, moved to DLQ`,
+      );
     }
 
     await this.ingestQueue.add(
-      'process-hl7',
+      "process-hl7",
       { ...job.data, attempt: nextAttempt },
       {
         delay: this.calculateBackoff(nextAttempt),
@@ -213,14 +231,14 @@ export class Hl7QueueService implements OnModuleInit {
 
     const placeholderResult: Hl7ProcessResult = {
       accepted: false,
-      messageType: '',
-      eventType: '',
-      messageControlId: '',
-      version: '',
+      messageType: "",
+      eventType: "",
+      messageControlId: "",
+      version: "",
       actions: [],
     };
 
-    return { accepted: false, result: placeholderResult, messageControlId: '' };
+    return { accepted: false, result: placeholderResult, messageControlId: "" };
   }
 
   private async processDeadLetterJob(job: Job<Hl7IngestJobData>) {
@@ -230,14 +248,19 @@ export class Hl7QueueService implements OnModuleInit {
     return { archived: true };
   }
 
-  private async handleJobFailure(job: Job<Hl7IngestJobData> | undefined, err: Error) {
+  private async handleJobFailure(
+    job: Job<Hl7IngestJobData> | undefined,
+    err: Error,
+  ) {
     if (!job) return;
 
-    this.logger.warn(`Ingest job ${job.id} failed: ${err.message}, scheduling retry`);
+    this.logger.warn(
+      `Ingest job ${job.id} failed: ${err.message}, scheduling retry`,
+    );
 
     if (job.attemptsMade < this.maxRetries) {
       await this.retryQueue.add(
-        'retry-hl7',
+        "retry-hl7",
         { ...job.data, attempt: job.attemptsMade + 1 },
         { delay: this.calculateBackoff(job.attemptsMade + 1) },
       );
@@ -246,14 +269,21 @@ export class Hl7QueueService implements OnModuleInit {
     }
   }
 
-  private async handleRetryFailure(job: Job<Hl7IngestJobData> | undefined, err: Error) {
+  private async handleRetryFailure(
+    job: Job<Hl7IngestJobData> | undefined,
+    err: Error,
+  ) {
     if (!job) return;
-    this.logger.error(`Retry job ${job.id} failed: ${err.message}, moving to DLQ`);
+    this.logger.error(
+      `Retry job ${job.id} failed: ${err.message}, moving to DLQ`,
+    );
     await this.moveToDeadLetter(job.data);
   }
 
   private async moveToDeadLetter(data: Hl7IngestJobData) {
-    await this.deadLetterQueue.add('archive-hl7', data, { removeOnComplete: true });
+    await this.deadLetterQueue.add("archive-hl7", data, {
+      removeOnComplete: true,
+    });
   }
 
   private calculateBackoff(attempt: number): number {
@@ -269,8 +299,14 @@ export class Hl7QueueService implements OnModuleInit {
       return {
         ingest: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 },
         retry: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 },
-        deadLetter: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 },
-        mode: 'sync' as const,
+        deadLetter: {
+          waiting: 0,
+          active: 0,
+          completed: 0,
+          failed: 0,
+          delayed: 0,
+        },
+        mode: "sync" as const,
       };
     }
 
@@ -285,64 +321,84 @@ export class Hl7QueueService implements OnModuleInit {
         ingest,
         retry,
         deadLetter: dlq,
-        mode: 'redis' as const,
+        mode: "redis" as const,
       };
     } catch (err) {
       this.redisAvailable = false;
-      this.logger.warn(`Redis unavailable for stats: ${(err as Error).message}`);
+      this.logger.warn(
+        `Redis unavailable for stats: ${(err as Error).message}`,
+      );
       return {
         ingest: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 },
         retry: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 },
-        deadLetter: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 },
-        mode: 'sync' as const,
+        deadLetter: {
+          waiting: 0,
+          active: 0,
+          completed: 0,
+          failed: 0,
+          delayed: 0,
+        },
+        mode: "sync" as const,
       };
     }
   }
 
   async getJobStatus(jobId: string) {
     if (this.checkRedisAvailability() === false) {
-      return { queue: 'ingest', jobId, state: 'completed', mode: 'sync' as const };
+      return {
+        queue: "ingest",
+        jobId,
+        state: "completed",
+        mode: "sync" as const,
+      };
     }
 
     try {
       const job = await this.ingestQueue.getJob(jobId);
       if (!job) {
         const retryJob = await this.retryQueue.getJob(jobId);
-        if (retryJob) return { queue: 'retry', jobId, state: await retryJob.getState() };
+        if (retryJob)
+          return { queue: "retry", jobId, state: await retryJob.getState() };
         const dlqJob = await this.deadLetterQueue.getJob(jobId);
-        if (dlqJob) return { queue: 'dead-letter', jobId, state: await dlqJob.getState() };
+        if (dlqJob)
+          return {
+            queue: "dead-letter",
+            jobId,
+            state: await dlqJob.getState(),
+          };
         return null;
       }
-      return { queue: 'ingest', jobId, state: await job.getState() };
+      return { queue: "ingest", jobId, state: await job.getState() };
     } catch (err) {
       this.redisAvailable = false;
-      this.logger.warn(`Redis unavailable for job status: ${(err as Error).message}`);
-      return { queue: 'ingest', jobId, state: 'completed', mode: 'sync' as const };
+      this.logger.warn(
+        `Redis unavailable for job status: ${(err as Error).message}`,
+      );
+      return {
+        queue: "ingest",
+        jobId,
+        state: "completed",
+        mode: "sync" as const,
+      };
     }
   }
 
   async pauseProcessing() {
     if (this.checkRedisAvailability() === false) {
-      this.logger.log('HL7 processing pause requested (sync mode, no-op)');
+      this.logger.log("HL7 processing pause requested (sync mode, no-op)");
       return;
     }
-    await Promise.all([
-      this.ingestQueue.pause(),
-      this.retryQueue.pause(),
-    ]);
-    this.logger.log('HL7 processing paused');
+    await Promise.all([this.ingestQueue.pause(), this.retryQueue.pause()]);
+    this.logger.log("HL7 processing paused");
   }
 
   async resumeProcessing() {
     if (this.checkRedisAvailability() === false) {
-      this.logger.log('HL7 processing resume requested (sync mode, no-op)');
+      this.logger.log("HL7 processing resume requested (sync mode, no-op)");
       return;
     }
-    await Promise.all([
-      this.ingestQueue.resume(),
-      this.retryQueue.resume(),
-    ]);
-    this.logger.log('HL7 processing resumed');
+    await Promise.all([this.ingestQueue.resume(), this.retryQueue.resume()]);
+    this.logger.log("HL7 processing resumed");
   }
 
   async onModuleDestroy() {

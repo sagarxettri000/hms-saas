@@ -47,7 +47,12 @@ const order: any = {
     },
   ],
   samples: [
-    { specimenType: "Whole Blood", barcode: "BC-123456", collectedAt: new Date("2026-09-15T06:30:00Z"), status: "COLLECTED" },
+    {
+      specimenType: "Whole Blood",
+      barcode: "BC-123456",
+      collectedAt: new Date("2026-09-15T06:30:00Z"),
+      status: "COLLECTED",
+    },
   ],
   approvedByName: "Dr. Pathologist",
 };

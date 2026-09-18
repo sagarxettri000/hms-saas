@@ -20,9 +20,9 @@ describe("ExportsService", () => {
       { status: "PAID", count: 2, amount: 800, collected: 800 },
       { status: "OVERDUE", count: 1, amount: 200, collected: 0 },
     ]),
-    doctorWorkload: jest.fn().mockResolvedValue([
-      { doctorId: "d1", name: "Dr Ram", count: 5 },
-    ]),
+    doctorWorkload: jest
+      .fn()
+      .mockResolvedValue([{ doctorId: "d1", name: "Dr Ram", count: 5 }]),
   };
   const service = new ExportsService(prisma as any, reports as any);
 
@@ -58,7 +58,12 @@ describe("ExportsService", () => {
     prisma.invoice.findMany.mockResolvedValue([
       {
         invoiceNumber: "INV-1",
-        patient: { firstName: "Ram", middleName: null, lastName: "Sharma", mrn: "MRN-1" },
+        patient: {
+          firstName: "Ram",
+          middleName: null,
+          lastName: "Sharma",
+          mrn: "MRN-1",
+        },
         issuedDate: new Date("2026-08-01"),
         totalAmount: 500,
         paidAmount: 500,
@@ -78,7 +83,12 @@ describe("ExportsService", () => {
       {
         labOrder: {
           orderNumber: "LAB-1",
-          patient: { mrn: "MRN-1", firstName: "Ram", middleName: null, lastName: "Sharma" },
+          patient: {
+            mrn: "MRN-1",
+            firstName: "Ram",
+            middleName: null,
+            lastName: "Sharma",
+          },
         },
         testName: "Glucose",
         result: null,
@@ -98,10 +108,20 @@ describe("ExportsService", () => {
     prisma.prescription.findMany.mockResolvedValue([
       {
         id: "RX-1",
-        patient: { mrn: "MRN-1", firstName: "Ram", middleName: null, lastName: "Sharma" },
+        patient: {
+          mrn: "MRN-1",
+          firstName: "Ram",
+          middleName: null,
+          lastName: "Sharma",
+        },
         status: "ACTIVE",
         items: [
-          { medicineName: "Paracetamol", dosage: "500mg", frequency: "TDS", duration: "5 days" },
+          {
+            medicineName: "Paracetamol",
+            dosage: "500mg",
+            frequency: "TDS",
+            duration: "5 days",
+          },
         ],
       },
     ]);
@@ -116,7 +136,9 @@ describe("ExportsService", () => {
     const text = pdf.toString("latin1");
     expect(text).toContain("%PDF-1.4");
     expect(text).toContain("%%EOF");
-    expect(reports.getSummary).toHaveBeenCalledWith("t1", { from: "2026-08-01" });
+    expect(reports.getSummary).toHaveBeenCalledWith("t1", {
+      from: "2026-08-01",
+    });
   });
 
   it("produces a valid PDF for doctor workload", async () => {
@@ -130,9 +152,7 @@ describe("ExportsService", () => {
 
 describe("pdf.util", () => {
   it("wraps CSV cells containing delimiters", () => {
-    const csv = toCsv([
-      ["a,b", 'say "hi"', "ok"],
-    ]);
+    const csv = toCsv([["a,b", 'say "hi"', "ok"]]);
     expect(csv).toBe('"a,b","say ""hi""",ok');
   });
 

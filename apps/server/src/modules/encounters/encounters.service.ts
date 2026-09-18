@@ -99,8 +99,7 @@ export class EncountersService {
       const appointment = await this.prisma.appointment.findFirst({
         where: { id: dto.appointmentId, tenantId },
       });
-      if (!appointment)
-        throw new NotFoundException("Appointment not found");
+      if (!appointment) throw new NotFoundException("Appointment not found");
       if (appointment.patientId !== dto.patientId)
         throw new BadRequestException(
           "Appointment does not belong to this patient",
@@ -189,14 +188,16 @@ export class EncountersService {
     await this.logAudit(tenantId, userId, "CREATE", "Encounter", encounter.id);
 
     if (encounter.doctorUserId) {
-      this.notifications.create(tenantId, {
-        userId: encounter.doctorUserId,
-        title: "New Encounter Started",
-        body: `Consultation started for patient ${patient.firstName} ${patient.lastName}`,
-        type: "ENCOUNTER_STARTED",
-        referenceType: "Encounter",
-        referenceId: encounter.id,
-      }).catch(() => {});
+      this.notifications
+        .create(tenantId, {
+          userId: encounter.doctorUserId,
+          title: "New Encounter Started",
+          body: `Consultation started for patient ${patient.firstName} ${patient.lastName}`,
+          type: "ENCOUNTER_STARTED",
+          referenceType: "Encounter",
+          referenceId: encounter.id,
+        })
+        .catch(() => {});
     }
 
     return encounter;
@@ -254,7 +255,12 @@ export class EncountersService {
 
   async listFollowUps(
     tenantId: string,
-    params: { status?: string; doctorId?: string; search?: string; limit?: number } = {},
+    params: {
+      status?: string;
+      doctorId?: string;
+      search?: string;
+      limit?: number;
+    } = {},
   ) {
     const limit = Math.min(200, Number(params.limit) || 50);
     const today = new Date();
@@ -453,7 +459,9 @@ export class EncountersService {
           where: { id: encounter.appointmentId },
           data: { status: "COMPLETED", completedAt: new Date() },
         })
-        .catch((err) => console.warn(`Failed to update appointment status: ${err.message}`));
+        .catch((err) =>
+          console.warn(`Failed to update appointment status: ${err.message}`),
+        );
     }
 
     return result;
@@ -478,8 +486,7 @@ export class EncountersService {
         where: { id: encounterId, tenantId },
         select: { id: true, patientId: true },
       });
-      if (!encounter)
-        throw new NotFoundException("Encounter not found");
+      if (!encounter) throw new NotFoundException("Encounter not found");
       if (encounter.patientId !== dto.patientId)
         throw new BadRequestException(
           "Encounter does not belong to this patient",
@@ -498,52 +505,65 @@ export class EncountersService {
         );
     }
 
-    return this.prisma.vital.create({
-      data: {
-        tenantId,
-        patientId: dto.patientId,
-        encounterId,
-        admissionId,
-        temperature: dto.temperature,
-        pulse: dto.pulse,
-        respiratoryRate: dto.respiratoryRate,
-        bloodPressureSystolic: dto.bloodPressureSystolic,
-        bloodPressureDiastolic: dto.bloodPressureDiastolic,
-        oxygenSaturation: dto.oxygenSaturation,
-        height: dto.height,
-        weight: dto.weight,
-        painScore: dto.painScore,
-        bloodGlucose: dto.bloodGlucose,
-        notes: dto.notes,
-        recordedBy: userId,
-      },
-    }).then((vital) => {
-      const critical: string[] = [];
-      if (dto.temperature && dto.temperature > 103) critical.push(`High temperature (${dto.temperature}°F)`);
-      if (dto.oxygenSaturation && dto.oxygenSaturation < 90) critical.push(`Low SpO2 (${dto.oxygenSaturation}%)`);
-      if (dto.pulse && (dto.pulse < 50 || dto.pulse > 130)) critical.push(`Abnormal pulse (${dto.pulse} bpm)`);
-      if (dto.bloodGlucose && dto.bloodGlucose > 300) critical.push(`High blood glucose (${dto.bloodGlucose} mg/dL)`);
+    return this.prisma.vital
+      .create({
+        data: {
+          tenantId,
+          patientId: dto.patientId,
+          encounterId,
+          admissionId,
+          temperature: dto.temperature,
+          pulse: dto.pulse,
+          respiratoryRate: dto.respiratoryRate,
+          bloodPressureSystolic: dto.bloodPressureSystolic,
+          bloodPressureDiastolic: dto.bloodPressureDiastolic,
+          oxygenSaturation: dto.oxygenSaturation,
+          height: dto.height,
+          weight: dto.weight,
+          painScore: dto.painScore,
+          bloodGlucose: dto.bloodGlucose,
+          notes: dto.notes,
+          recordedBy: userId,
+        },
+      })
+      .then((vital) => {
+        const critical: string[] = [];
+        if (dto.temperature && dto.temperature > 103)
+          critical.push(`High temperature (${dto.temperature}°F)`);
+        if (dto.oxygenSaturation && dto.oxygenSaturation < 90)
+          critical.push(`Low SpO2 (${dto.oxygenSaturation}%)`);
+        if (dto.pulse && (dto.pulse < 50 || dto.pulse > 130))
+          critical.push(`Abnormal pulse (${dto.pulse} bpm)`);
+        if (dto.bloodGlucose && dto.bloodGlucose > 300)
+          critical.push(`High blood glucose (${dto.bloodGlucose} mg/dL)`);
 
-      if (critical.length > 0 && encounterId) {
-        const encounter = this.prisma.encounter.findFirst({
-          where: { id: encounterId, tenantId },
-          select: { doctorUserId: true, patient: { select: { firstName: true, lastName: true } } },
-        });
-        encounter.then((enc) => {
-          if (enc?.doctorUserId) {
-            this.notifications.create(tenantId, {
-              userId: enc.doctorUserId,
-              title: "Critical Vital Alert",
-              body: `${enc.patient.firstName} ${enc.patient.lastName}: ${critical.join(", ")}`,
-              type: "VITAL_ALERT",
-              referenceType: "Vital",
-              referenceId: vital.id,
-            }).catch(() => {});
-          }
-        }).catch(() => {});
-      }
-      return vital;
-    });
+        if (critical.length > 0 && encounterId) {
+          const encounter = this.prisma.encounter.findFirst({
+            where: { id: encounterId, tenantId },
+            select: {
+              doctorUserId: true,
+              patient: { select: { firstName: true, lastName: true } },
+            },
+          });
+          encounter
+            .then((enc) => {
+              if (enc?.doctorUserId) {
+                this.notifications
+                  .create(tenantId, {
+                    userId: enc.doctorUserId,
+                    title: "Critical Vital Alert",
+                    body: `${enc.patient.firstName} ${enc.patient.lastName}: ${critical.join(", ")}`,
+                    type: "VITAL_ALERT",
+                    referenceType: "Vital",
+                    referenceId: vital.id,
+                  })
+                  .catch(() => {});
+              }
+            })
+            .catch(() => {});
+        }
+        return vital;
+      });
   }
 
   async getVitals(tenantId: string, patientId: string) {
@@ -577,7 +597,8 @@ export class EncountersService {
     );
     if (allergyWarnings.length > 0 && !dto.overrideAllergyWarning) {
       throw new BadRequestException({
-        message: "Prescription contains a medicine matching a documented patient allergy",
+        message:
+          "Prescription contains a medicine matching a documented patient allergy",
         code: "ALLERGY_INTERACTION",
         warnings: allergyWarnings,
       });
@@ -589,8 +610,7 @@ export class EncountersService {
         const encounter = await tx.encounter.findFirst({
           where: { id: dto.encounterId, tenantId },
         });
-        if (!encounter)
-          throw new NotFoundException("Encounter not found");
+        if (!encounter) throw new NotFoundException("Encounter not found");
         if (encounter.patientId !== dto.patientId)
           throw new BadRequestException(
             "Encounter does not belong to this patient",
@@ -651,21 +671,29 @@ export class EncountersService {
       prescription.id,
     );
 
-    this.prisma.user.findMany({
-      where: { tenantId, role: { in: ["PHARMACIST", "PHARMACY_TECHNICIAN"] as any } },
-      select: { id: true },
-    }).then((pharmacists) => {
-      for (const pharmacist of pharmacists) {
-        this.notifications.create(tenantId, {
-          userId: pharmacist.id,
-          title: "New Prescription Pending",
-          body: `A new prescription has been created and is pending approval`,
-          type: "PRESCRIPTION_CREATED",
-          referenceType: "Prescription",
-          referenceId: prescription.id,
-        }).catch(() => {});
-      }
-    }).catch(() => {});
+    this.prisma.user
+      .findMany({
+        where: {
+          tenantId,
+          role: { in: ["PHARMACIST", "PHARMACY_TECHNICIAN"] as any },
+        },
+        select: { id: true },
+      })
+      .then((pharmacists) => {
+        for (const pharmacist of pharmacists) {
+          this.notifications
+            .create(tenantId, {
+              userId: pharmacist.id,
+              title: "New Prescription Pending",
+              body: `A new prescription has been created and is pending approval`,
+              type: "PRESCRIPTION_CREATED",
+              referenceType: "Prescription",
+              referenceId: prescription.id,
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
 
     return this.prisma.prescription.findUnique({
       where: { id: prescription.id },
@@ -677,7 +705,12 @@ export class EncountersService {
     tenantId: string,
     id: string,
     userId?: string,
-    signature?: { data?: string; consentText?: string; ipAddress?: string; userAgent?: string },
+    signature?: {
+      data?: string;
+      consentText?: string;
+      ipAddress?: string;
+      userAgent?: string;
+    },
   ) {
     const prescription = await this.prisma.prescription.findFirst({
       where: { id, tenantId },
@@ -781,8 +814,7 @@ export class EncountersService {
     const where: any = { tenantId };
     if (patientId) where.patientId = patientId;
     if (doctorId) where.doctorId = doctorId;
-    if (status)
-      where.status = String(status).toUpperCase().replace(/\-/g, "_");
+    if (status) where.status = String(status).toUpperCase().replace(/\-/g, "_");
     if (search)
       where.OR = [
         { advice: { contains: search, mode: "insensitive" } },
@@ -863,13 +895,23 @@ export class EncountersService {
     tenantId: string,
     patientId: string,
     items: CreatePrescriptionDto["items"],
-  ): Promise<Array<{ allergen: string; severity: string | null; matchedMedicine: string }>> {
+  ): Promise<
+    Array<{
+      allergen: string;
+      severity: string | null;
+      matchedMedicine: string;
+    }>
+  > {
     const allergies = await this.prisma.patientAllergy.findMany({
       where: { tenantId, patientId },
     });
     if (allergies.length === 0) return [];
 
-    const warnings: Array<{ allergen: string; severity: string | null; matchedMedicine: string }> = [];
+    const warnings: Array<{
+      allergen: string;
+      severity: string | null;
+      matchedMedicine: string;
+    }> = [];
 
     const normalize = (value?: string) => value?.toLowerCase().trim() ?? "";
 
@@ -878,7 +920,9 @@ export class EncountersService {
       if (!allergen) continue;
 
       for (const item of items) {
-        const names = [item.medicineName, item.genericName, item.brandName].map(normalize);
+        const names = [item.medicineName, item.genericName, item.brandName].map(
+          normalize,
+        );
         if (names.some((name) => name && name.includes(allergen))) {
           warnings.push({
             allergen: allergy.allergen,

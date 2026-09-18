@@ -64,7 +64,11 @@ export class HematologyService {
 
   async ensureCatalog(tenantId: string) {
     const existing = await this.prisma.labTest.findMany({
-      where: { tenantId, discipline: "HEMATOLOGY", code: { in: HEMATOLOGY_CATALOG.map((t) => t.code) } },
+      where: {
+        tenantId,
+        discipline: "HEMATOLOGY",
+        code: { in: HEMATOLOGY_CATALOG.map((t) => t.code) },
+      },
       select: { code: true },
     });
     const have = new Set(existing.map((t) => t.code));
@@ -95,7 +99,9 @@ export class HematologyService {
         });
       }
 
-      const panel = await tx.labTestPanel.findFirst({ where: { tenantId, code: HEMATOLOGY_PANEL.code } });
+      const panel = await tx.labTestPanel.findFirst({
+        where: { tenantId, code: HEMATOLOGY_PANEL.code },
+      });
       if (!panel) {
         await tx.labTestPanel.create({
           data: {
@@ -116,7 +122,7 @@ export class HematologyService {
     return this.findCatalog(tenantId);
   }
 
-async findCatalog(tenantId: string) {
+  async findCatalog(tenantId: string) {
     const tests = tenantId
       ? await this.prisma.labTest.findMany({
           where: { tenantId, discipline: "HEMATOLOGY", isActive: true },
@@ -138,7 +144,12 @@ async findCatalog(tenantId: string) {
 
     return {
       panel: panel
-        ? { id: panel.id, name: panel.name, code: panel.code, price: Number(panel.price) }
+        ? {
+            id: panel.id,
+            name: panel.name,
+            code: panel.code,
+            price: Number(panel.price),
+          }
         : null,
       tests: tests.map((t) => this.serializeTest(t)),
     };
@@ -148,7 +159,9 @@ async findCatalog(tenantId: string) {
     let ranges: HematologyRange[] = [];
     if (t.referenceRanges) {
       try {
-        ranges = Array.isArray(t.referenceRanges) ? (t.referenceRanges as HematologyRange[]) : [];
+        ranges = Array.isArray(t.referenceRanges)
+          ? (t.referenceRanges as HematologyRange[])
+          : [];
       } catch {
         ranges = [];
       }
@@ -173,7 +186,11 @@ async findCatalog(tenantId: string) {
 
   // ---------- Orders ----------
 
-  async createOrder(tenantId: string, dto: CreateHematologyOrderDto, userId?: string) {
+  async createOrder(
+    tenantId: string,
+    dto: CreateHematologyOrderDto,
+    userId?: string,
+  ) {
     const patient = await this.prisma.patient.findFirst({
       where: { id: dto.patientId, tenantId, deletedAt: null },
     });
@@ -186,23 +203,32 @@ async findCatalog(tenantId: string) {
       });
       if (!encounter) throw new NotFoundException("Encounter not found");
       if (encounter.patientId !== dto.patientId) {
-        throw new BadRequestException("Encounter does not belong to this patient");
+        throw new BadRequestException(
+          "Encounter does not belong to this patient",
+        );
       }
     }
 
     if (dto.doctorId) {
-      const doctor = await this.prisma.doctorProfile.findFirst({ where: { id: dto.doctorId, tenantId } });
+      const doctor = await this.prisma.doctorProfile.findFirst({
+        where: { id: dto.doctorId, tenantId },
+      });
       if (!doctor) throw new NotFoundException("Doctor not found");
     }
 
     const catalog = await this.ensureCatalog(tenantId);
     const memberIds = new Map<string, string>();
     for (const t of catalog.tests) {
-      if (HEMATOLOGY_PANEL.memberCodes.includes(t.code ?? "")) memberIds.set(t.code!, t.id);
+      if (HEMATOLOGY_PANEL.memberCodes.includes(t.code ?? ""))
+        memberIds.set(t.code!, t.id);
     }
-    const missing = HEMATOLOGY_PANEL.memberCodes.filter((c) => !memberIds.has(c));
+    const missing = HEMATOLOGY_PANEL.memberCodes.filter(
+      (c) => !memberIds.has(c),
+    );
     if (missing.length > 0) {
-      throw new BadRequestException(`Hematology catalog incomplete: ${missing.join(", ")}`);
+      throw new BadRequestException(
+        `Hematology catalog incomplete: ${missing.join(", ")}`,
+      );
     }
 
     const orderNumber = await this.generateOrderNumber(tenantId);
@@ -264,7 +290,9 @@ async findCatalog(tenantId: string) {
 
     const andClauses: any[] = [{ OR: hematologyItemsFilter }];
     if (params.search) {
-      andClauses.push({ orderNumber: { contains: params.search, mode: "insensitive" } });
+      andClauses.push({
+        orderNumber: { contains: params.search, mode: "insensitive" },
+      });
     }
     if (params.from || params.to) {
       const range: any = {};
@@ -283,7 +311,9 @@ async findCatalog(tenantId: string) {
       this.prisma.labOrder.findMany({
         where,
         include: {
-          patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+          patient: {
+            select: { id: true, firstName: true, lastName: true, mrn: true },
+          },
           items: true,
         },
         orderBy: { orderedAt: "desc" },
@@ -315,7 +345,17 @@ async findCatalog(tenantId: string) {
         },
         encounter: true,
         items: {
-          include: { labTest: { select: { id: true, code: true, method: true, precision: true, referenceRanges: true } } },
+          include: {
+            labTest: {
+              select: {
+                id: true,
+                code: true,
+                method: true,
+                precision: true,
+                referenceRanges: true,
+              },
+            },
+          },
         },
         samples: true,
       },
@@ -326,7 +366,11 @@ async findCatalog(tenantId: string) {
     const items = order.items.map((it: any) => {
       const ranges = this.parseRanges(it.labTest?.referenceRanges);
       const resolved = resolveReferenceRange(
-        { ranges, unit: it.unit ?? it.labTest?.unit ?? "", code: it.labTest?.code ?? undefined },
+        {
+          ranges,
+          unit: it.unit ?? it.labTest?.unit ?? "",
+          code: it.labTest?.code ?? undefined,
+        },
         patientSex,
       );
       return this.serializeItem(it, resolved);
@@ -352,7 +396,18 @@ async findCatalog(tenantId: string) {
           },
         },
         items: {
-          include: { labTest: { select: { id: true, code: true, method: true, precision: true, referenceRanges: true, unit: true } } },
+          include: {
+            labTest: {
+              select: {
+                id: true,
+                code: true,
+                method: true,
+                precision: true,
+                referenceRanges: true,
+                unit: true,
+              },
+            },
+          },
         },
         samples: true,
       },
@@ -363,13 +418,19 @@ async findCatalog(tenantId: string) {
     const [verifiedBy, approvedBy, reportedBy] = await Promise.all([
       order.verifiedBy ? this.findUserName(order.verifiedBy) : null,
       order.approvedBy ? this.findUserName(order.approvedBy) : null,
-      order.reportedAt && order.approvedBy ? this.findUserName(order.approvedBy) : null,
+      order.reportedAt && order.approvedBy
+        ? this.findUserName(order.approvedBy)
+        : null,
     ]);
 
     const items = order.items.map((it: any) => {
       const ranges = this.parseRanges(it.labTest?.referenceRanges);
       const resolved = resolveReferenceRange(
-        { ranges, unit: it.unit ?? it.labTest?.unit ?? "", code: it.labTest?.code ?? undefined },
+        {
+          ranges,
+          unit: it.unit ?? it.labTest?.unit ?? "",
+          code: it.labTest?.code ?? undefined,
+        },
         patientSex,
       );
       return this.serializeItem(it, resolved);
@@ -391,7 +452,14 @@ async findCatalog(tenantId: string) {
       approvedByName: approvedBy,
       clinicalNote: order.clinicalNote,
       patient: {
-        name: [order.patient?.firstName, order.patient?.middleName, order.patient?.lastName].filter(Boolean).join(" ") || "",
+        name:
+          [
+            order.patient?.firstName,
+            order.patient?.middleName,
+            order.patient?.lastName,
+          ]
+            .filter(Boolean)
+            .join(" ") || "",
         mrn: order.patient?.mrn,
         hospitalNumber: order.patient?.hospitalNumber,
         gender: order.patient?.gender,
@@ -419,9 +487,18 @@ async findCatalog(tenantId: string) {
       unit: item.unit || "",
       precision: item.precision ?? item.labTest?.precision ?? 2,
       method: item.method || item.labTest?.method || "",
-      referenceRange: item.referenceRange || rangeDisplay(resolved) || (resolved ? `${resolved.label}${resolved.note ? ` (${resolved.note})` : ""}` : ""),
+      referenceRange:
+        item.referenceRange ||
+        rangeDisplay(resolved) ||
+        (resolved
+          ? `${resolved.label}${resolved.note ? ` (${resolved.note})` : ""}`
+          : ""),
       rangeLabel: item.rangeLabel || resolved?.label || "",
-      flag: item.isCritical ? "CRITICAL" : item.isAbnormal ? "ABNORMAL" : "NORMAL",
+      flag: item.isCritical
+        ? "CRITICAL"
+        : item.isAbnormal
+          ? "ABNORMAL"
+          : "NORMAL",
       isAbnormal: Boolean(item.isAbnormal),
       isCritical: Boolean(item.isCritical),
       status: item.status,
@@ -444,34 +521,60 @@ async findCatalog(tenantId: string) {
       where: { id: itemId, labOrderId: orderId },
       include: {
         labOrder: { include: { patient: { select: { gender: true } } } },
-        labTest: { select: { id: true, code: true, method: true, precision: true, unit: true, referenceRanges: true } },
+        labTest: {
+          select: {
+            id: true,
+            code: true,
+            method: true,
+            precision: true,
+            unit: true,
+            referenceRanges: true,
+          },
+        },
       },
     });
     if (!item) throw new NotFoundException("Lab order item not found");
-    if (item.labOrder.tenantId !== tenantId) throw new NotFoundException("Lab order not found");
+    if (item.labOrder.tenantId !== tenantId)
+      throw new NotFoundException("Lab order not found");
 
     const orderStatus = item.labOrder.status as string;
     if (BLOCKED_STATUSES.includes(orderStatus)) {
-      throw new BadRequestException(`Cannot enter results on a ${orderStatus.toLowerCase()} order`);
+      throw new BadRequestException(
+        `Cannot enter results on a ${orderStatus.toLowerCase()} order`,
+      );
     }
     if (IMMUTABLE_STATUSES.includes(orderStatus)) {
-      throw new BadRequestException("Results are finalized for this order and cannot be edited");
+      throw new BadRequestException(
+        "Results are finalized for this order and cannot be edited",
+      );
     }
 
-    if (dto.resultValue !== undefined && dto.resultValue !== null && Number.isNaN(Number(dto.resultValue))) {
+    if (
+      dto.resultValue !== undefined &&
+      dto.resultValue !== null &&
+      Number.isNaN(Number(dto.resultValue))
+    ) {
       throw new BadRequestException("Invalid numeric result value");
     }
 
     const patientSex = (item.labOrder.patient?.gender as string) || null;
     const ranges = this.parseRanges(item.labTest?.referenceRanges);
     const resolved = resolveReferenceRange(
-      { ranges, unit: item.unit ?? item.labTest?.unit ?? "", code: item.labTest?.code ?? undefined },
+      {
+        ranges,
+        unit: item.unit ?? item.labTest?.unit ?? "",
+        code: item.labTest?.code ?? undefined,
+      },
       patientSex,
     );
 
     let isAbnormal = false;
     let isCritical = false;
-    if (Number.isFinite(Number(dto.resultValue)) && dto.resultValue !== null && dto.resultValue !== undefined) {
+    if (
+      Number.isFinite(Number(dto.resultValue)) &&
+      dto.resultValue !== null &&
+      dto.resultValue !== undefined
+    ) {
       const flag = evaluateFlag(Number(dto.resultValue), resolved);
       isAbnormal = flag.isAbnormal;
       isCritical = flag.isCritical;
@@ -510,12 +613,17 @@ async findCatalog(tenantId: string) {
         (resolved.unit ? ` ${resolved.unit}` : "");
     }
 
-    const updated = await this.prisma.labOrderItem.update({ where: { id: itemId }, data });
+    const updated = await this.prisma.labOrderItem.update({
+      where: { id: itemId },
+      data,
+    });
 
-    await this.prisma.labOrder.update({
-      where: { id: orderId },
-      data: { status: "RESULT_READY", processedAt: new Date() },
-    }).catch((err) => this.logger.warn("lab order status update failed", err));
+    await this.prisma.labOrder
+      .update({
+        where: { id: orderId },
+        data: { status: "RESULT_READY", processedAt: new Date() },
+      })
+      .catch((err) => this.logger.warn("lab order status update failed", err));
 
     if (isCritical) {
       await this.alertCriticalResult(tenantId, orderId, updated);
@@ -536,7 +644,9 @@ async findCatalog(tenantId: string) {
       where: { labOrderId: id, status: { not: "RESULT_ENTERED" } },
     });
     if (incomplete > 0) {
-      throw new BadRequestException("All panel results must be entered before verification");
+      throw new BadRequestException(
+        "All panel results must be entered before verification",
+      );
     }
     return this.laboratory.transitionStatus(tenantId, id, "VERIFIED", userId);
   }
@@ -555,16 +665,39 @@ async findCatalog(tenantId: string) {
     const order = await this.prisma.labOrder.findFirst({
       where: { id, tenantId },
       include: {
-        patient: { select: { firstName: true, middleName: true, lastName: true, mrn: true, hospitalNumber: true, gender: true, dateOfBirth: true } },
+        patient: {
+          select: {
+            firstName: true,
+            middleName: true,
+            lastName: true,
+            mrn: true,
+            hospitalNumber: true,
+            gender: true,
+            dateOfBirth: true,
+          },
+        },
         items: {
-          include: { labTest: { select: { id: true, code: true, method: true, precision: true, referenceRanges: true, unit: true } } },
+          include: {
+            labTest: {
+              select: {
+                id: true,
+                code: true,
+                method: true,
+                precision: true,
+                referenceRanges: true,
+                unit: true,
+              },
+            },
+          },
         },
         samples: true,
       },
     });
     if (!order) throw new NotFoundException("Lab order not found");
 
-    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+    });
     if (!tenant) throw new NotFoundException("Tenant not found");
 
     const patientSex = (order.patient?.gender as string) || null;
@@ -575,13 +708,17 @@ async findCatalog(tenantId: string) {
 
     let generatedBy: string | undefined;
     if (userId) {
-      generatedBy = await this.findUserName(userId) ?? undefined;
+      generatedBy = (await this.findUserName(userId)) ?? undefined;
     }
 
     const items = order.items.map((it: any) => {
       const ranges = this.parseRanges(it.labTest?.referenceRanges);
       const resolved = resolveReferenceRange(
-        { ranges, unit: it.unit ?? it.labTest?.unit ?? "", code: it.labTest?.code ?? undefined },
+        {
+          ranges,
+          unit: it.unit ?? it.labTest?.unit ?? "",
+          code: it.labTest?.code ?? undefined,
+        },
         patientSex,
       );
       return {
@@ -647,27 +784,39 @@ async findCatalog(tenantId: string) {
       select: { firstName: true, middleName: true, lastName: true },
     });
     if (!user) return null;
-    return [user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ");
+    return [user.firstName, user.middleName, user.lastName]
+      .filter(Boolean)
+      .join(" ");
   }
 
-  private async alertCriticalResult(tenantId: string, orderId: string, item: any) {
+  private async alertCriticalResult(
+    tenantId: string,
+    orderId: string,
+    item: any,
+  ) {
     try {
       const order = await this.prisma.labOrder.findUnique({
         where: { id: orderId },
-        include: { patient: { select: { firstName: true, lastName: true, mrn: true } } },
+        include: {
+          patient: { select: { firstName: true, lastName: true, mrn: true } },
+        },
       });
       if (!order) return;
       const targets: string[] = [];
       if (order.doctorId) targets.push(order.doctorId);
       for (const userId of new Set(targets.filter(Boolean))) {
-        this.notifications.create(tenantId, {
-          userId,
-          title: "CRITICAL Hematology Result",
-          body: `Critical ${item.testName} result for ${order.patient?.firstName ?? ""} ${order.patient?.lastName ?? ""} (MRN ${order.patient?.mrn ?? "N/A"}). Value: ${item.resultValue ?? item.result ?? "N/A"} ${item.unit ?? ""}`,
-          type: "CRITICAL_LAB_RESULT",
-          referenceType: "LabOrder",
-          referenceId: orderId,
-        }).catch((err) => this.logger.warn("critical result notification failed", err));
+        this.notifications
+          .create(tenantId, {
+            userId,
+            title: "CRITICAL Hematology Result",
+            body: `Critical ${item.testName} result for ${order.patient?.firstName ?? ""} ${order.patient?.lastName ?? ""} (MRN ${order.patient?.mrn ?? "N/A"}). Value: ${item.resultValue ?? item.result ?? "N/A"} ${item.unit ?? ""}`,
+            type: "CRITICAL_LAB_RESULT",
+            referenceType: "LabOrder",
+            referenceId: orderId,
+          })
+          .catch((err) =>
+            this.logger.warn("critical result notification failed", err),
+          );
       }
     } catch {}
   }
@@ -698,13 +847,17 @@ async findCatalog(tenantId: string) {
     if (!userId) return;
     try {
       await this.prisma.auditLog.create({
-        data: { tenantId, userId, entity, entityId, action: action as any, metadata },
+        data: {
+          tenantId,
+          userId,
+          entity,
+          entityId,
+          action: action as any,
+          metadata,
+        },
       });
     } catch (error) {
       this.logger.warn(`Failed to write audit log: ${error}`);
     }
   }
 }
-
-
-

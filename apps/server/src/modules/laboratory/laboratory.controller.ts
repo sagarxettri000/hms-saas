@@ -201,7 +201,11 @@ export class LaboratoryController {
   @Get("orders/:id/pdf")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Download lab report PDF" })
-  async downloadReportPdf(@Param("id") id: string, @Req() req: any, @Res() res: any) {
+  async downloadReportPdf(
+    @Param("id") id: string,
+    @Req() req: any,
+    @Res() res: any,
+  ) {
     const buffer = await this.laboratoryService.generateReportPdf(
       req.user.tenantId,
       id,

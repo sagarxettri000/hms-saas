@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 
 export interface CreateControlledLogDto {
@@ -13,7 +17,12 @@ export interface CreateControlledLogDto {
 export class ControlledSubstancesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(tenantId: string, dto: CreateControlledLogDto, userId: string, userName?: string) {
+  async create(
+    tenantId: string,
+    dto: CreateControlledLogDto,
+    userId: string,
+    userName?: string,
+  ) {
     if (!dto.drug) throw new BadRequestException("Drug is required");
     const qty = Number(dto.quantity);
     if (!Number.isFinite(qty) || qty < 1) {
@@ -39,7 +48,8 @@ export class ControlledSubstancesService {
     const page = Number(params.page) || 1;
     const limit = Number(params.limit) || 100;
     const where: any = { tenantId };
-    if (params.drug) where.drug = { contains: params.drug, mode: "insensitive" };
+    if (params.drug)
+      where.drug = { contains: params.drug, mode: "insensitive" };
     const [data, total] = await Promise.all([
       this.prisma.controlledSubstanceLog.findMany({
         where,

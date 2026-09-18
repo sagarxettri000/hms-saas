@@ -24,7 +24,10 @@ const PRIVATE_IPV4_RANGES: Array<[number, number]> = [
 
 function ipv4ToInt(parts: string): number | null {
   const octets = parts.split(".").map(Number);
-  if (octets.length !== 4 || octets.some((o) => Number.isNaN(o) || o < 0 || o > 255)) {
+  if (
+    octets.length !== 4 ||
+    octets.some((o) => Number.isNaN(o) || o < 0 || o > 255)
+  ) {
     return null;
   }
   return (
@@ -45,7 +48,12 @@ function isBlockedIPv6(address: string): boolean {
   const normalized = lower.includes("%") ? lower.split("%")[0] : lower;
   if (normalized === "::1" || normalized === "::") return true; // loopback / unspecified
   if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true; // unique local
-  if (normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb")) {
+  if (
+    normalized.startsWith("fe8") ||
+    normalized.startsWith("fe9") ||
+    normalized.startsWith("fea") ||
+    normalized.startsWith("feb")
+  ) {
     return true; // link-local
   }
   return false;
@@ -56,7 +64,11 @@ function isBlockedHostname(hostname: string): boolean {
   if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local")) {
     return true;
   }
-  if (h === "metadata.google.internal" || h === "metadata" || h.endsWith(".internal")) {
+  if (
+    h === "metadata.google.internal" ||
+    h === "metadata" ||
+    h.endsWith(".internal")
+  ) {
     return true;
   }
   if (isIP(h)) {
@@ -72,7 +84,9 @@ async function assertSafeWebhookUrl(urlValue: string): Promise<void> {
     throw new BadRequestException("Webhook URL must use http or https");
   }
   if (isBlockedHostname(parsed.hostname)) {
-    throw new BadRequestException("Webhook URL resolves to a restricted address");
+    throw new BadRequestException(
+      "Webhook URL resolves to a restricted address",
+    );
   }
   let addresses: string[];
   try {
@@ -85,7 +99,9 @@ async function assertSafeWebhookUrl(urlValue: string): Promise<void> {
     isIP(addr) === 4 ? isBlockedIPv4(addr) : isBlockedIPv6(addr),
   );
   if (blocked) {
-    throw new BadRequestException("Webhook URL resolves to a restricted address");
+    throw new BadRequestException(
+      "Webhook URL resolves to a restricted address",
+    );
   }
 }
 

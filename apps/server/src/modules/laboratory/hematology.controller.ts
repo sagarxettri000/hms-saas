@@ -62,7 +62,13 @@ const APPROVERS: UserRole[] = [
 
 @ApiTags("Hematology")
 @Controller("hematology")
-@UseGuards(JwtAuthGuard, PermissionsGuard, TenantGuard, RolesGuard, ForbidRolesGuard)
+@UseGuards(
+  JwtAuthGuard,
+  PermissionsGuard,
+  TenantGuard,
+  RolesGuard,
+  ForbidRolesGuard,
+)
 @TenantScoped()
 @ApiBearerAuth()
 export class HematologyController {
@@ -70,7 +76,9 @@ export class HematologyController {
 
   @Get("catalog")
   @Permissions(PermissionAction.VIEW)
-  @ApiOperation({ summary: "Hematology catalogue (CBC components with reference data)" })
+  @ApiOperation({
+    summary: "Hematology catalogue (CBC components with reference data)",
+  })
   findCatalog(@Req() req: any) {
     return this.hematologyService.findCatalog(req.user.tenantId);
   }
@@ -78,7 +86,9 @@ export class HematologyController {
   @Post("ensure-catalog")
   @Permissions(PermissionAction.EDIT)
   @Roles(...PERFORMERS)
-  @ApiOperation({ summary: "Idempotently (re)create the hematology catalogue for this tenant" })
+  @ApiOperation({
+    summary: "Idempotently (re)create the hematology catalogue for this tenant",
+  })
   ensureCatalog(@Req() req: any) {
     return this.hematologyService.ensureCatalog(req.user.tenantId);
   }
@@ -86,9 +96,15 @@ export class HematologyController {
   @Post("orders")
   @Permissions(PermissionAction.CREATE)
   @Roles(...ORDERERS)
-  @ApiOperation({ summary: "Create a CBC hematology order (expands panel to components)" })
+  @ApiOperation({
+    summary: "Create a CBC hematology order (expands panel to components)",
+  })
   createOrder(@Body() dto: CreateHematologyOrderDto, @Req() req: any) {
-    return this.hematologyService.createOrder(req.user.tenantId, dto, req.user.id);
+    return this.hematologyService.createOrder(
+      req.user.tenantId,
+      dto,
+      req.user.id,
+    );
   }
 
   @Get("orders")
@@ -158,7 +174,11 @@ export class HematologyController {
   @Get("orders/:id/pdf")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Hematology report PDF" })
-  async downloadReportPdf(@Param("id") id: string, @Req() req: any, @Res() res: any) {
+  async downloadReportPdf(
+    @Param("id") id: string,
+    @Req() req: any,
+    @Res() res: any,
+  ) {
     const buffer = await this.hematologyService.generateReportPdf(
       req.user.tenantId,
       id,

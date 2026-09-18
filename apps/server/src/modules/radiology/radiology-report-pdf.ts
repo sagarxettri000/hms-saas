@@ -3,7 +3,10 @@ const PAGE_H = 841.89;
 const MARGIN = 40;
 
 function esc(s: string): string {
-  return String(s).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  return String(s)
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
 }
 
 function txt(s: string): string {
@@ -13,10 +16,15 @@ function txt(s: string): string {
 function dateTimeStr(d: unknown): string {
   if (!d) return "";
   const dt = new Date(d as any);
-  return isNaN(dt.getTime()) ? "" : dt.toLocaleString("en-US", {
-    year: "numeric", month: "short", day: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
+  return isNaN(dt.getTime())
+    ? ""
+    : dt.toLocaleString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
 }
 
 function dateStr(d: unknown): string {
@@ -29,13 +37,23 @@ class PdfPage {
   lines: string[] = [];
   private py: number;
 
-  constructor(private pageW = PAGE_W, private pageH = PAGE_H, private margin = MARGIN) {
+  constructor(
+    private pageW = PAGE_W,
+    private pageH = PAGE_H,
+    private margin = MARGIN,
+  ) {
     this.py = pageH - margin;
   }
 
-  get y() { return this.py; }
-  get bottom() { return 60; }
-  get usableW() { return this.pageW - this.margin * 2; }
+  get y() {
+    return this.py;
+  }
+  get bottom() {
+    return 60;
+  }
+  get usableW() {
+    return this.pageW - this.margin * 2;
+  }
 
   text(x: number, y: number, value: string, size = 10, color = "0 0 0") {
     this.lines.push("BT");
@@ -56,10 +74,21 @@ class PdfPage {
     this.lines.push(`${x1} ${y1} m ${x2} ${y2} l 0.6 w S`);
   }
 
-  gap(n: number) { this.py -= n; }
-  moveTo(y: number) { this.py = y; }
+  gap(n: number) {
+    this.py -= n;
+  }
+  moveTo(y: number) {
+    this.py = y;
+  }
 
-  wrapText(x: number, maxWidth: number, text: string, size: number, color: string, lineHeight = 13) {
+  wrapText(
+    x: number,
+    maxWidth: number,
+    text: string,
+    size: number,
+    color: string,
+    lineHeight = 13,
+  ) {
     const words = text.split(" ");
     let line = "";
     for (const w of words) {
@@ -97,11 +126,19 @@ function assemblePdf(pages: PdfPage[]): Buffer {
   const contentObjs: number[] = [];
   for (const p of pages) {
     const stream = p.lines.join("\n");
-    const contentIdx = add2(`<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`);
+    const contentIdx = add2(
+      `<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`,
+    );
     contentObjs.push(contentIdx);
-    const fontIdx = add2("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-    const boldIdx = add2("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
-    const pageIdx = add2(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${contentIdx} 0 R /Resources << /Font << /F1 ${fontIdx} 0 R /FB ${boldIdx} 0 R >> >> >>`);
+    const fontIdx = add2(
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    );
+    const boldIdx = add2(
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+    );
+    const pageIdx = add2(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${contentIdx} 0 R /Resources << /Font << /F1 ${fontIdx} 0 R /FB ${boldIdx} 0 R >> >> >>`,
+    );
     pageObjs.push(pageIdx);
   }
 
@@ -123,7 +160,9 @@ function assemblePdf(pages: PdfPage[]): Buffer {
 
   for (const p of pages) {
     const stream = p.lines.join("\n");
-    add(`<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`);
+    add(
+      `<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`,
+    );
     contentIds.push(n);
     add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
     fontIds.push(n);
@@ -133,7 +172,9 @@ function assemblePdf(pages: PdfPage[]): Buffer {
 
   const pageObjNums: number[] = [];
   for (let i = 0; i < pages.length; i++) {
-    add(`<< /Type /Page /Parent 1 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${contentIds[i]} 0 R /Resources << /Font << /F1 ${fontIds[i]} 0 R /FB ${boldIds[i]} 0 R >> >> >>`);
+    add(
+      `<< /Type /Page /Parent 1 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${contentIds[i]} 0 R /Resources << /Font << /F1 ${fontIds[i]} 0 R /FB ${boldIds[i]} 0 R >> >> >>`,
+    );
     pageObjNums.push(n);
   }
 
@@ -152,15 +193,20 @@ function assemblePdf(pages: PdfPage[]): Buffer {
   addF(`<< /Type /Pages /Kids [${pageKids}] /Count ${pages.length} >>`);
   for (let i = 0; i < pages.length; i++) {
     const stream = pages[i].lines.join("\n");
-    addF(`<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`);
+    addF(
+      `<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`,
+    );
     addF("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
     addF("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
-    addF(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${fn - 2} 0 R /Resources << /Font << /F1 ${fn - 1} 0 R /FB ${fn} 0 R >> >> >>`);
+    addF(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${fn - 2} 0 R /Resources << /Font << /F1 ${fn - 1} 0 R /FB ${fn} 0 R >> >> >>`,
+    );
   }
 
   const xref = Buffer.byteLength(final, "latin1");
   final += `xref\n0 ${fn + 1}\n0000000000 65535 f \n`;
-  for (const off2 of finalOff) final += `${String(off2).padStart(10, "0")} 00000 n \n`;
+  for (const off2 of finalOff)
+    final += `${String(off2).padStart(10, "0")} 00000 n \n`;
   final += `trailer\n<< /Size ${fn + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(final, "latin1");
 }
@@ -203,8 +249,14 @@ export function buildRadiologyReportPdf(data: RadiologyReportData): Buffer {
   // Header
   p.text(MARGIN, p.y, data.hospitalName, 16, "0.12 0.24 0.4");
   p.gap(14);
-  if (data.hospitalAddr) { p.text(MARGIN, p.y, data.hospitalAddr, 9, "0.35 0.35 0.35"); p.gap(11); }
-  if (data.hospitalContact) { p.text(MARGIN, p.y, data.hospitalContact, 8, "0.4 0.4 0.4"); p.gap(10); }
+  if (data.hospitalAddr) {
+    p.text(MARGIN, p.y, data.hospitalAddr, 9, "0.35 0.35 0.35");
+    p.gap(11);
+  }
+  if (data.hospitalContact) {
+    p.text(MARGIN, p.y, data.hospitalContact, 8, "0.4 0.4 0.4");
+    p.gap(10);
+  }
   p.line(MARGIN, p.y, right, p.y);
   p.gap(6);
 
@@ -227,7 +279,8 @@ export function buildRadiologyReportPdf(data: RadiologyReportData): Buffer {
   if (data.bodyPart) infoRow("Body Part:", data.bodyPart, MARGIN + 260, p.y);
   p.gap(14);
   infoRow("Ordered:", dateTimeStr(data.orderedAt), MARGIN, p.y);
-  if (data.performedAt) infoRow("Performed:", dateTimeStr(data.performedAt), MARGIN + 260, p.y);
+  if (data.performedAt)
+    infoRow("Performed:", dateTimeStr(data.performedAt), MARGIN + 260, p.y);
 
   // Patient
   p.gap(20);
@@ -239,9 +292,13 @@ export function buildRadiologyReportPdf(data: RadiologyReportData): Buffer {
   if (data.patientMrn) infoRow("MRN:", data.patientMrn, MARGIN + 260, p.y);
   p.gap(14);
   if (data.patientGender) infoRow("Gender:", data.patientGender, MARGIN, p.y);
-  if (data.patientDob) infoRow("DOB:", dateStr(data.patientDob), MARGIN + 260, p.y);
+  if (data.patientDob)
+    infoRow("DOB:", dateStr(data.patientDob), MARGIN + 260, p.y);
   p.gap(14);
-  if (data.doctorName) { infoRow("Referring:", data.doctorName, MARGIN, p.y); p.gap(14); }
+  if (data.doctorName) {
+    infoRow("Referring:", data.doctorName, MARGIN, p.y);
+    p.gap(14);
+  }
 
   // Clinical History
   if (data.clinicalHistory) {
@@ -319,7 +376,13 @@ export function buildRadiologyReportPdf(data: RadiologyReportData): Buffer {
   p.moveTo(66);
   p.line(MARGIN, p.y + 16, right, p.y + 16);
   p.gap(4);
-  p.text(MARGIN, p.y, "This is a computer-generated radiology report.", 8, "0.5 0.5 0.5");
+  p.text(
+    MARGIN,
+    p.y,
+    "This is a computer-generated radiology report.",
+    8,
+    "0.5 0.5 0.5",
+  );
   p.text(right, p.y, dateTimeStr(new Date()), 8, "0.5 0.5 0.5");
   p.gap(14);
   p.text(MARGIN, p.y, `Approved for ${data.hospitalName}`, 9, "0.3 0.3 0.3");

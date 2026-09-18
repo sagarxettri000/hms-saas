@@ -11,11 +11,20 @@ jest.mock("jsonwebtoken", () => ({
   sign: jest.fn(),
 }));
 
-function makeService(prisma: any, jwtService: any, mailService: any): AuthService {
-  return new AuthService(prisma, jwtService, mailService, new TwoFactorService({
-    sign: jest.fn(),
-    verify: jest.fn(),
-  } as any));
+function makeService(
+  prisma: any,
+  jwtService: any,
+  mailService: any,
+): AuthService {
+  return new AuthService(
+    prisma,
+    jwtService,
+    mailService,
+    new TwoFactorService({
+      sign: jest.fn(),
+      verify: jest.fn(),
+    } as any),
+  );
 }
 
 describe("AuthService", () => {
@@ -75,7 +84,9 @@ describe("AuthService", () => {
         update: jest.fn(),
       },
       session: {
-        create: jest.fn().mockImplementation(({ data }) => ({ ...data, id: "session-1" })),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) => ({ ...data, id: "session-1" })),
         updateMany: jest.fn(),
         update: jest.fn(),
       },
@@ -105,7 +116,10 @@ describe("AuthService", () => {
     beforeEach(() => {
       jest.clearAllMocks();
       prisma.user.findUnique.mockResolvedValue(mockUser);
-      prisma.session.create.mockResolvedValue({ id: "session-1", token: "mock-access-token" });
+      prisma.session.create.mockResolvedValue({
+        id: "session-1",
+        token: "mock-access-token",
+      });
       (jwt.sign as jest.Mock).mockReturnValue("mock-access-token");
     });
 
@@ -121,7 +135,10 @@ describe("AuthService", () => {
       prisma.user.findUnique.mockResolvedValue(pending);
       let err: any;
       try {
-        await service.login({ email: "test@test.com", password: "Password123" });
+        await service.login({
+          email: "test@test.com",
+          password: "Password123",
+        });
       } catch (e) {
         err = e;
       }
@@ -133,7 +150,10 @@ describe("AuthService", () => {
         service.login({ email: "x@y.z", password: "wrong" }),
       ).rejects.toThrow(`Invalid email or password`);
 
-      prisma.user.findUnique.mockResolvedValue({ ...mockUser, status: "SUSPENDED" });
+      prisma.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        status: "SUSPENDED",
+      });
       await expect(
         service.login({ email: "test@test.com", password: "Password123" }),
       ).rejects.toThrow("Invalid email or password");
@@ -142,7 +162,10 @@ describe("AuthService", () => {
     });
 
     it("rejects wrong password", async () => {
-      const userWrongPass = { ...mockUser, passwordHash: bcrypt.hashSync("OtherPass", 12) };
+      const userWrongPass = {
+        ...mockUser,
+        passwordHash: bcrypt.hashSync("OtherPass", 12),
+      };
       prisma.user.findUnique.mockResolvedValue(userWrongPass);
       await expect(
         service.login({ email: "test@test.com", password: "Password123" }),
@@ -152,7 +175,10 @@ describe("AuthService", () => {
     it("returns accessToken, refreshToken and user with mustChangePassword", async () => {
       const userMustChange = { ...mockUser, mustChangePassword: true };
       prisma.user.findUnique.mockResolvedValue(userMustChange);
-      const result = await service.login({ email: "test@test.com", password: "Password123" });
+      const result = await service.login({
+        email: "test@test.com",
+        password: "Password123",
+      });
       expect(result.accessToken).toBe("mock-access-token");
       expect(result.refreshToken).toBeDefined();
       expect((result as any).user.mustChangePassword).toBe(true);
@@ -197,7 +223,9 @@ describe("AuthService", () => {
 
     it("rejects invalid refresh token", async () => {
       prisma.session.findUnique.mockResolvedValue(null);
-      await expect(service.refreshToken("invalid")).rejects.toThrow(UnauthorizedException);
+      await expect(service.refreshToken("invalid")).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it("rejects expired session", async () => {
@@ -206,11 +234,24 @@ describe("AuthService", () => {
         refreshToken: "valid",
         isActive: true,
         expiresAt: new Date(Date.now() - 1000),
-        user: { id: "u1", role: UserRole.HOSPITAL_ADMIN, tenantId: "t1", email: "e@e.com" },
+        user: {
+          id: "u1",
+          role: UserRole.HOSPITAL_ADMIN,
+          tenantId: "t1",
+          email: "e@e.com",
+        },
       });
-      await expect(service.refreshToken("valid")).rejects.toThrow(UnauthorizedException);
+      await expect(service.refreshToken("valid")).rejects.toThrow(
+        UnauthorizedException,
+      );
       expect(prisma.session.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: "session-1" }, data: expect.objectContaining({ isActive: false, revokedAt: expect.any(Date) }) }),
+        expect.objectContaining({
+          where: { id: "session-1" },
+          data: expect.objectContaining({
+            isActive: false,
+            revokedAt: expect.any(Date),
+          }),
+        }),
       );
     });
 
@@ -220,13 +261,25 @@ describe("AuthService", () => {
         refreshToken: "valid",
         isActive: true,
         expiresAt: new Date(Date.now() + 86400000),
-        user: { id: "u1", role: UserRole.HOSPITAL_ADMIN, tenantId: "t1", email: "e@e.com" },
+        user: {
+          id: "u1",
+          role: UserRole.HOSPITAL_ADMIN,
+          tenantId: "t1",
+          email: "e@e.com",
+        },
       };
       prisma.session.findUnique.mockResolvedValue(mockSession);
       const result = await service.refreshToken("valid");
       expect(result.accessToken).toBe("new-access-token");
       expect(prisma.session.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: "session-1" }, data: expect.objectContaining({ token: "new-access-token", lastActivityAt: expect.any(Date), refreshTokenHash: expect.any(String) }) }),
+        expect.objectContaining({
+          where: { id: "session-1" },
+          data: expect.objectContaining({
+            token: "new-access-token",
+            lastActivityAt: expect.any(Date),
+            refreshTokenHash: expect.any(String),
+          }),
+        }),
       );
     });
   });
@@ -274,7 +327,10 @@ describe("AuthService", () => {
     });
 
     it("creates reset token for existing user", async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: "u1", email: "test@test.com" });
+      prisma.user.findUnique.mockResolvedValue({
+        id: "u1",
+        email: "test@test.com",
+      });
       const result = await service.forgotPassword("test@test.com");
       expect(result.message).toContain("If the email exists");
       expect(prisma.passwordResetToken.create).toHaveBeenCalled();
@@ -330,10 +386,19 @@ describe("AuthService", () => {
       });
       await service.resetPassword({ token: "valid", password: "NewPass123" });
       expect(prisma.user.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: "u1" }, data: expect.objectContaining({ mustChangePassword: false }) }),
+        expect.objectContaining({
+          where: { id: "u1" },
+          data: expect.objectContaining({ mustChangePassword: false }),
+        }),
       );
       expect(prisma.session.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { isActive: true, userId: "u1" }, data: expect.objectContaining({ isActive: false, revokedAt: expect.any(Date) }) }),
+        expect.objectContaining({
+          where: { isActive: true, userId: "u1" },
+          data: expect.objectContaining({
+            isActive: false,
+            revokedAt: expect.any(Date),
+          }),
+        }),
       );
     });
   });
@@ -370,17 +435,32 @@ describe("AuthService", () => {
 
     it("rejects wrong current password", async () => {
       await expect(
-        service.changePassword("u1", { currentPassword: "WrongPass", newPassword: "NewPass123" }),
+        service.changePassword("u1", {
+          currentPassword: "WrongPass",
+          newPassword: "NewPass123",
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
     it("changes password and revokes sessions", async () => {
-      await service.changePassword("u1", { currentPassword: "OldPass123", newPassword: "NewPass123" });
+      await service.changePassword("u1", {
+        currentPassword: "OldPass123",
+        newPassword: "NewPass123",
+      });
       expect(prisma.user.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: "u1" }, data: expect.objectContaining({ mustChangePassword: false }) }),
+        expect.objectContaining({
+          where: { id: "u1" },
+          data: expect.objectContaining({ mustChangePassword: false }),
+        }),
       );
       expect(prisma.session.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { userId: "u1", isActive: true }, data: expect.objectContaining({ isActive: false, revokedAt: expect.any(Date) }) }),
+        expect.objectContaining({
+          where: { userId: "u1", isActive: true },
+          data: expect.objectContaining({
+            isActive: false,
+            revokedAt: expect.any(Date),
+          }),
+        }),
       );
     });
   });

@@ -64,7 +64,9 @@ describe("resolveReferenceRange", () => {
   });
 
   it("returns null for a test with no configured ranges", () => {
-    expect(resolveReferenceRange({ ranges: [], unit: "u", code: "X" }, "MALE")).toBeNull();
+    expect(
+      resolveReferenceRange({ ranges: [], unit: "u", code: "X" }, "MALE"),
+    ).toBeNull();
   });
 
   it("uses the sex-less reference for non sex-specific tests", () => {
@@ -110,7 +112,9 @@ describe("evaluateFlag", () => {
 
 describe("rangeDisplay", () => {
   it("renders low - high", () => {
-    expect(rangeDisplay(resolveReferenceRange(HEMATOLOGY_BY_CODE.TLC, "MALE"))).toBe("4 - 11");
+    expect(
+      rangeDisplay(resolveReferenceRange(HEMATOLOGY_BY_CODE.TLC, "MALE")),
+    ).toBe("4 - 11");
   });
 
   it("renders an empty string for no range", () => {

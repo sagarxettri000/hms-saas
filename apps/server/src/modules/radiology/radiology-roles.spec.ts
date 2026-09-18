@@ -26,7 +26,9 @@ function makeOrder(overrides: Record<string, any> = {}) {
   };
 }
 
-const makeNotify = () => ({ create: jest.fn().mockResolvedValue({ id: "n-1" }) });
+const makeNotify = () => ({
+  create: jest.fn().mockResolvedValue({ id: "n-1" }),
+});
 
 function makePrisma(initialOverride: Record<string, any> = {}) {
   let order = makeOrder(initialOverride);
@@ -102,21 +104,28 @@ function makePrisma(initialOverride: Record<string, any> = {}) {
       create: jest.fn().mockResolvedValue(review),
       findFirst: jest.fn().mockResolvedValue(review),
       findMany: jest.fn().mockResolvedValue([review]),
-      update: jest.fn().mockResolvedValue({ ...review, status: "APPROVED", decidedAt: new Date() }),
+      update: jest.fn().mockResolvedValue({
+        ...review,
+        status: "APPROVED",
+        decidedAt: new Date(),
+      }),
     },
     user: {
-      findMany: jest.fn().mockResolvedValue([
-        { id: "doc-1" },
-        { id: "doc-2" },
-      ]),
+      findMany: jest.fn().mockResolvedValue([{ id: "doc-1" }, { id: "doc-2" }]),
       findFirst: jest.fn().mockImplementation(({ where }) => {
         if (where.id === "bad-user") return null;
-        return { id: where.id ?? "doc-1", role: "RADIOLOGIST", status: "ACTIVE" };
+        return {
+          id: where.id ?? "doc-1",
+          role: "RADIOLOGIST",
+          status: "ACTIVE",
+        };
       }),
       findUnique: jest.fn().mockResolvedValue(null),
     },
     doctorProfile: {
-      findFirst: jest.fn().mockResolvedValue({ id: "doc-1", userId: "referring-user" }),
+      findFirst: jest
+        .fn()
+        .mockResolvedValue({ id: "doc-1", userId: "referring-user" }),
     },
     auditLog: { create: jest.fn().mockResolvedValue({ id: "log-1" }) },
   };
@@ -130,36 +139,72 @@ describe("RadiologyService role separation", () => {
   beforeEach(() => {
     notifications.create.mockClear();
     prisma = makePrisma();
-    service = new RadiologyService(prisma as any, undefined as any, notifications as any);
+    service = new RadiologyService(
+      prisma as any,
+      undefined as any,
+      notifications as any,
+    );
   });
 
   it("rejects report writing for a radiology technician", async () => {
     await expect(
-      service.writeReport("t", "rad-1", { findings: "x" }, "tech-1", "RADIOLOGY_TECHNICIAN"),
+      service.writeReport(
+        "t",
+        "rad-1",
+        { findings: "x" },
+        "tech-1",
+        "RADIOLOGY_TECHNICIAN",
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.radiologyOrder.update).not.toHaveBeenCalled();
   });
 
   it("allows report writing for a radiologist", async () => {
-    await service.writeReport("t", "rad-1", { findings: "Normal study" }, "doc-1", "RADIOLOGIST");
+    await service.writeReport(
+      "t",
+      "rad-1",
+      { findings: "Normal study" },
+      "doc-1",
+      "RADIOLOGIST",
+    );
     expect(prisma.radiologyOrder.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: "REPORTED" }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "REPORTED" }),
+      }),
     );
   });
 
   it("blocks a technician from VERIFIED and APPROVED transitions", async () => {
     await expect(
-      service.transitionStatus("t", "rad-1", "VERIFIED", "tech-1", "RADIOLOGY_TECHNICIAN"),
+      service.transitionStatus(
+        "t",
+        "rad-1",
+        "VERIFIED",
+        "tech-1",
+        "RADIOLOGY_TECHNICIAN",
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     await expect(
-      service.transitionStatus("t", "rad-1", "APPROVED", "tech-1", "RADIOLOGY_TECHNICIAN"),
+      service.transitionStatus(
+        "t",
+        "rad-1",
+        "APPROVED",
+        "tech-1",
+        "RADIOLOGY_TECHNICIAN",
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("allows a technician to perform non-reporting transitions", async () => {
     prisma = makePrisma({ status: "ORDERED" });
     service = new RadiologyService(prisma as any);
-    await service.transitionStatus("t", "rad-1", "SCHEDULED", "tech-1", "RADIOLOGY_TECHNICIAN");
+    await service.transitionStatus(
+      "t",
+      "rad-1",
+      "SCHEDULED",
+      "tech-1",
+      "RADIOLOGY_TECHNICIAN",
+    );
     expect(prisma.radiologyOrder.update).toHaveBeenCalled();
   });
 
@@ -167,12 +212,20 @@ describe("RadiologyService role separation", () => {
     prisma = makePrisma({ status: "REPORTED", reportedAt: new Date() });
     service = new RadiologyService(prisma as any);
     await expect(
-      service.transitionStatus("t", "rad-1", "VERIFIED", "doc-1", "RADIOLOGIST"),
+      service.transitionStatus(
+        "t",
+        "rad-1",
+        "VERIFIED",
+        "doc-1",
+        "RADIOLOGIST",
+      ),
     ).resolves.toBeDefined();
   });
 
   it("keeps legacy callers without actor context working", async () => {
-    await expect(service.writeReport("t", "rad-1", { report: "ok" })).resolves.toBeDefined();
+    await expect(
+      service.writeReport("t", "rad-1", { report: "ok" }),
+    ).resolves.toBeDefined();
   });
 
   it("auto-assigns a radiologist when an order is scheduled and has no assignee", async () => {
@@ -182,13 +235,25 @@ describe("RadiologyService role separation", () => {
     prisma.radiologyOrder.findMany = jest.fn().mockResolvedValue([]);
     prisma.radiologyOrder.findFirst = jest
       .fn()
-      .mockResolvedValueOnce({ id: "rad-1", status: "ORDERED", assignedRadiologistId: null })
+      .mockResolvedValueOnce({
+        id: "rad-1",
+        status: "ORDERED",
+        assignedRadiologistId: null,
+      })
       .mockResolvedValueOnce(null);
-    await service.transitionStatus("t", "rad-1", "SCHEDULED", "tech-1", "RADIOLOGY_TECHNICIAN");
+    await service.transitionStatus(
+      "t",
+      "rad-1",
+      "SCHEDULED",
+      "tech-1",
+      "RADIOLOGY_TECHNICIAN",
+    );
     // wait for the fire-and-forget autofill
     await new Promise((r) => setTimeout(r, 20));
     expect(prisma.radiologyOrder.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ assignedRadiologistId: "doc-1" }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ assignedRadiologistId: "doc-1" }),
+      }),
     );
   });
 });
@@ -197,18 +262,37 @@ describe("RadiologyService keyword critical scanning", () => {
   it("suggests critical when the findings mention a critical keyword", async () => {
     const prisma = makePrisma();
     const service = new RadiologyService(prisma as any);
-    await service.writeReport("t", "rad-1", { findings: "Large right pneumothorax seen", impression: "Needs urgent review" }, "doc-1", "RADIOLOGIST");
+    await service.writeReport(
+      "t",
+      "rad-1",
+      {
+        findings: "Large right pneumothorax seen",
+        impression: "Needs urgent review",
+      },
+      "doc-1",
+      "RADIOLOGIST",
+    );
     expect(prisma.radiologyOrder.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ criticalSuggested: true }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ criticalSuggested: true }),
+      }),
     );
   });
 
   it("does not suggest critical for a benign report", async () => {
     const prisma = makePrisma();
     const service = new RadiologyService(prisma as any);
-    await service.writeReport("t", "rad-1", { findings: "No acute abnormality" }, "doc-1", "RADIOLOGIST");
+    await service.writeReport(
+      "t",
+      "rad-1",
+      { findings: "No acute abnormality" },
+      "doc-1",
+      "RADIOLOGIST",
+    );
     expect(prisma.radiologyOrder.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ criticalSuggested: false }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ criticalSuggested: false }),
+      }),
     );
   });
 });
@@ -218,7 +302,13 @@ describe("RadiologyService addendum / revisions", () => {
     const prisma = makePrisma({ reportedAt: new Date() });
     const service = new RadiologyService(prisma as any);
     await expect(
-      service.addRevision("t", "rad-1", { findings: "x" }, "tech-1", "RADIOLOGY_TECHNICIAN"),
+      service.addRevision(
+        "t",
+        "rad-1",
+        { findings: "x" },
+        "tech-1",
+        "RADIOLOGY_TECHNICIAN",
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -226,21 +316,38 @@ describe("RadiologyService addendum / revisions", () => {
     const prisma = makePrisma({ reportedAt: null });
     const service = new RadiologyService(prisma as any);
     await expect(
-      service.addRevision("t", "rad-1", { findings: "x" }, "doc-1", "RADIOLOGIST"),
+      service.addRevision(
+        "t",
+        "rad-1",
+        { findings: "x" },
+        "doc-1",
+        "RADIOLOGIST",
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it("creates a revision and bumps the report version", async () => {
     const prisma = makePrisma({ reportedAt: new Date(), reportVersion: 2 });
     const service = new RadiologyService(prisma as any);
-    await service.addRevision("t", "rad-1", { findings: "New impression", reason: "Patient re-presented" }, "doc-1", "RADIOLOGIST");
+    await service.addRevision(
+      "t",
+      "rad-1",
+      { findings: "New impression", reason: "Patient re-presented" },
+      "doc-1",
+      "RADIOLOGIST",
+    );
     expect(prisma.radiologyReportRevision.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ version: 3, reason: "Patient re-presented" }),
+        data: expect.objectContaining({
+          version: 3,
+          reason: "Patient re-presented",
+        }),
       }),
     );
     expect(prisma.radiologyOrder.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ reportVersion: 3 }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ reportVersion: 3 }),
+      }),
     );
   });
 
@@ -250,7 +357,9 @@ describe("RadiologyService addendum / revisions", () => {
     const result = await service.listRevisions("t", "rad-1");
     expect(result.revisions).toHaveLength(1);
     expect(prisma.radiologyReportRevision.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ radiologyOrderId: "rad-1" }) }),
+      expect.objectContaining({
+        where: expect.objectContaining({ radiologyOrderId: "rad-1" }),
+      }),
     );
   });
 
@@ -258,7 +367,9 @@ describe("RadiologyService addendum / revisions", () => {
     const prisma = makePrisma();
     prisma.radiologyOrder.findFirst = jest.fn().mockResolvedValue(null);
     const service = new RadiologyService(prisma as any);
-    await expect(service.listRevisions("t", "missing")).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.listRevisions("t", "missing")).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
 
@@ -271,30 +382,69 @@ describe("RadiologyService critical flag", () => {
     const prisma = makePrisma();
     const service = new RadiologyService(prisma as any);
     await expect(
-      service.setCriticalFlag("t", "rad-1", { isCritical: true }, "tech-1", "RADIOLOGY_TECHNICIAN"),
+      service.setCriticalFlag(
+        "t",
+        "rad-1",
+        { isCritical: true },
+        "tech-1",
+        "RADIOLOGY_TECHNICIAN",
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("flags the order and notifies the referring doctor", async () => {
     const prisma = makePrisma();
-    const service = new RadiologyService(prisma as any, undefined as any, notifications as any);
-    await service.setCriticalFlag("t", "rad-1", { isCritical: true, note: "Suspected aortic dissection" }, "doc-1", "RADIOLOGIST");
+    const service = new RadiologyService(
+      prisma as any,
+      undefined as any,
+      notifications as any,
+    );
+    await service.setCriticalFlag(
+      "t",
+      "rad-1",
+      { isCritical: true, note: "Suspected aortic dissection" },
+      "doc-1",
+      "RADIOLOGIST",
+    );
     expect(prisma.radiologyOrder.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ isCritical: true, criticalFlaggedBy: "doc-1" }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          isCritical: true,
+          criticalFlaggedBy: "doc-1",
+        }),
+      }),
     );
     expect(notifications.create).toHaveBeenCalledWith(
       "t",
-      expect.objectContaining({ userId: "referring-user", referenceType: "RadiologyOrder" }),
+      expect.objectContaining({
+        userId: "referring-user",
+        referenceType: "RadiologyOrder",
+      }),
     );
   });
 
   it("clears the flag and does not notify", async () => {
     const prisma = makePrisma({ isCritical: true });
-    const service = new RadiologyService(prisma as any, undefined as any, notifications as any);
-    await service.setCriticalFlag("t", "rad-1", { isCritical: false }, "doc-1", "RADIOLOGIST");
+    const service = new RadiologyService(
+      prisma as any,
+      undefined as any,
+      notifications as any,
+    );
+    await service.setCriticalFlag(
+      "t",
+      "rad-1",
+      { isCritical: false },
+      "doc-1",
+      "RADIOLOGIST",
+    );
     expect(notifications.create).not.toHaveBeenCalled();
     expect(prisma.radiologyOrder.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ isCritical: false, criticalFlaggedBy: null }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          isCritical: false,
+          criticalFlaggedBy: null,
+        }),
+      }),
     );
   });
 });
@@ -309,7 +459,9 @@ describe("RadiologyService assignment", () => {
       .mockResolvedValue({ assignedRadiologistId: "doc-1" });
     await service.assignRadiologist("t", "rad-1");
     expect(prisma.radiologyOrder.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ assignedRadiologistId: "doc-2" }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ assignedRadiologistId: "doc-2" }),
+      }),
     );
   });
 
@@ -318,7 +470,9 @@ describe("RadiologyService assignment", () => {
     const service = new RadiologyService(prisma as any);
     await service.assignRadiologist("t", "rad-1", "doc-2");
     expect(prisma.radiologyOrder.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ assignedRadiologistId: "doc-2" }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ assignedRadiologistId: "doc-2" }),
+      }),
     );
   });
 
@@ -326,9 +480,9 @@ describe("RadiologyService assignment", () => {
     const prisma = makePrisma();
     prisma.user.findFirst = jest.fn().mockResolvedValue(null);
     const service = new RadiologyService(prisma as any);
-    await expect(service.assignRadiologist("t", "rad-1", "bad-user")).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.assignRadiologist("t", "rad-1", "bad-user"),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 
@@ -344,10 +498,15 @@ describe("RadiologyService TAT metrics", () => {
     expect(result.overall.cases).toBe(3);
     expect(result.overall.avgReportHours).toBe(2.2);
     expect(result.perRadiologist).toHaveLength(3);
-    const doc1 = result.perRadiologist.find((p: any) => p.radiologistId === "doc-1")!;
+    const doc1 = result.perRadiologist.find(
+      (p: any) => p.radiologistId === "doc-1",
+    )!;
     expect(doc1.name).toBe("A One");
     expect(doc1.avgReportHours).toBe(2);
-    expect(result.perRadiologist.find((p: any) => p.name === "Unassigned")!.avgVerifyHours).toBeNull();
+    expect(
+      result.perRadiologist.find((p: any) => p.name === "Unassigned")!
+        .avgVerifyHours,
+    ).toBeNull();
   });
 });
 
@@ -360,7 +519,13 @@ describe("RadiologyService peer review", () => {
     const prisma = makePrisma({ reportedAt: new Date() });
     const service = new RadiologyService(prisma as any);
     await expect(
-      service.requestPeerReview("t", "rad-1", { reviewerId: "doc-2" }, "tech-1", "RADIOLOGY_TECHNICIAN"),
+      service.requestPeerReview(
+        "t",
+        "rad-1",
+        { reviewerId: "doc-2" },
+        "tech-1",
+        "RADIOLOGY_TECHNICIAN",
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -368,7 +533,13 @@ describe("RadiologyService peer review", () => {
     const prisma = makePrisma({ reportedAt: new Date() });
     const service = new RadiologyService(prisma as any);
     await expect(
-      service.requestPeerReview("t", "rad-1", { reviewerId: "doc-1" }, "doc-1", "RADIOLOGIST"),
+      service.requestPeerReview(
+        "t",
+        "rad-1",
+        { reviewerId: "doc-1" },
+        "doc-1",
+        "RADIOLOGIST",
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -376,40 +547,87 @@ describe("RadiologyService peer review", () => {
     const prisma = makePrisma({ reportedAt: null });
     const service = new RadiologyService(prisma as any);
     await expect(
-      service.requestPeerReview("t", "rad-1", { reviewerId: "doc-2" }, "doc-1", "RADIOLOGIST"),
+      service.requestPeerReview(
+        "t",
+        "rad-1",
+        { reviewerId: "doc-2" },
+        "doc-1",
+        "RADIOLOGIST",
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it("creates a review request and notifies the reviewer", async () => {
     const prisma = makePrisma({ reportedAt: new Date() });
     prisma.radiologyPeerReview.findFirst = jest.fn().mockResolvedValue(null);
-    const service = new RadiologyService(prisma as any, undefined as any, notifications as any);
-    await service.requestPeerReview("t", "rad-1", { reviewerId: "doc-2", note: "Please double-check" }, "doc-1", "RADIOLOGIST");
+    const service = new RadiologyService(
+      prisma as any,
+      undefined as any,
+      notifications as any,
+    );
+    await service.requestPeerReview(
+      "t",
+      "rad-1",
+      { reviewerId: "doc-2", note: "Please double-check" },
+      "doc-1",
+      "RADIOLOGIST",
+    );
     expect(prisma.radiologyPeerReview.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ reviewerId: "doc-2", requestedBy: "doc-1" }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reviewerId: "doc-2",
+          requestedBy: "doc-1",
+        }),
+      }),
     );
     expect(notifications.create).toHaveBeenCalled();
   });
 
   it("blocks a non-reviewer from deciding", async () => {
     const prisma = makePrisma();
-    prisma.radiologyPeerReview.findFirst = jest
-      .fn()
-      .mockResolvedValue({ id: "pv-1", reviewerId: "doc-2", requestedBy: "doc-1", status: "REQUESTED", notes: null, radiologyOrderId: "rad-1" });
+    prisma.radiologyPeerReview.findFirst = jest.fn().mockResolvedValue({
+      id: "pv-1",
+      reviewerId: "doc-2",
+      requestedBy: "doc-1",
+      status: "REQUESTED",
+      notes: null,
+      radiologyOrderId: "rad-1",
+    });
     const service = new RadiologyService(prisma as any);
     await expect(
-      service.decidePeerReview("t", "pv-1", { status: "APPROVED" }, "doc-1", "RADIOLOGIST"),
+      service.decidePeerReview(
+        "t",
+        "pv-1",
+        { status: "APPROVED" },
+        "doc-1",
+        "RADIOLOGIST",
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("lets the assigned reviewer approve", async () => {
     const prisma = makePrisma();
-    prisma.radiologyPeerReview.findFirst = jest
-      .fn()
-      .mockResolvedValue({ id: "pv-1", reviewerId: "doc-2", requestedBy: "doc-1", status: "REQUESTED", notes: null, radiologyOrderId: "rad-1" });
-    const service = new RadiologyService(prisma as any, undefined as any, notifications as any);
+    prisma.radiologyPeerReview.findFirst = jest.fn().mockResolvedValue({
+      id: "pv-1",
+      reviewerId: "doc-2",
+      requestedBy: "doc-1",
+      status: "REQUESTED",
+      notes: null,
+      radiologyOrderId: "rad-1",
+    });
+    const service = new RadiologyService(
+      prisma as any,
+      undefined as any,
+      notifications as any,
+    );
     await expect(
-      service.decidePeerReview("t", "pv-1", { status: "APPROVED", note: "Looks good" }, "doc-2", "RADIOLOGIST"),
+      service.decidePeerReview(
+        "t",
+        "pv-1",
+        { status: "APPROVED", note: "Looks good" },
+        "doc-2",
+        "RADIOLOGIST",
+      ),
     ).resolves.toBeDefined();
     expect(prisma.radiologyPeerReview.update).toHaveBeenCalled();
   });

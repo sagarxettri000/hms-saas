@@ -138,7 +138,8 @@ export class DepartmentsService {
         const clash = await this.prisma.department.findUnique({
           where: { tenantId_code: { tenantId, code } },
         });
-        if (clash) throw new ConflictException("Department code already exists");
+        if (clash)
+          throw new ConflictException("Department code already exists");
       }
       data.code = code;
     }
@@ -162,7 +163,9 @@ export class DepartmentsService {
         const guard = new Set<string>();
         while (cursor) {
           if (cursor.id === id) {
-            throw new BadRequestException("Cannot move a department under its own descendant");
+            throw new BadRequestException(
+              "Cannot move a department under its own descendant",
+            );
           }
           if (!cursor.parentId || guard.has(cursor.id)) break;
           guard.add(cursor.id);
@@ -180,8 +183,12 @@ export class DepartmentsService {
       if (!dto.isActive) {
         // Deactivation must not strand active clinical workflows.
         const [users, wards, appointments, services] = await Promise.all([
-          this.prisma.user.count({ where: { departmentId: id, isActive: true } }),
-          this.prisma.ward.count({ where: { departmentId: id, isActive: true } }),
+          this.prisma.user.count({
+            where: { departmentId: id, isActive: true },
+          }),
+          this.prisma.ward.count({
+            where: { departmentId: id, isActive: true },
+          }),
           this.prisma.appointment.count({
             where: {
               departmentId: id,
@@ -197,7 +204,9 @@ export class DepartmentsService {
               },
             },
           }),
-          this.prisma.billingService.count({ where: { departmentId: id, isActive: true } }),
+          this.prisma.billingService.count({
+            where: { departmentId: id, isActive: true },
+          }),
         ]);
         if (users > 0 || wards > 0 || appointments > 0 || services > 0) {
           throw new ConflictException(

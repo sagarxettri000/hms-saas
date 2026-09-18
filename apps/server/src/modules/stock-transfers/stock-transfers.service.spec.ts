@@ -15,7 +15,9 @@ function makeTx(overrides: any = {}) {
     },
     inventoryTransaction: { create: jest.fn() },
     stockTransfer: {
-      create: jest.fn().mockImplementation(({ data }) => ({ ...data, id: "st1" })),
+      create: jest
+        .fn()
+        .mockImplementation(({ data }) => ({ ...data, id: "st1" })),
     },
     ...overrides,
   };
@@ -61,7 +63,11 @@ describe("StockTransfersService", () => {
       const tx = makeTx();
       const service = makeService(makePrisma(tx) as any);
       await expect(
-        service.create("t1", { ...baseDto(), inventoryItemId: undefined }, "u1"),
+        service.create(
+          "t1",
+          { ...baseDto(), inventoryItemId: undefined },
+          "u1",
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -82,9 +88,9 @@ describe("StockTransfersService", () => {
         name: "Paracetamol",
       });
       const service = makeService(prisma as any);
-      await expect(
-        service.create("t1", baseDto(), "u1"),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.create("t1", baseDto(), "u1")).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it("throws ConflictException when source stock is insufficient", async () => {
@@ -106,9 +112,9 @@ describe("StockTransfersService", () => {
         purchaseRate: 10,
       });
       const service = makeService(prisma as any);
-      await expect(
-        service.create("t1", baseDto(), "u1"),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.create("t1", baseDto(), "u1")).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it("moves stock atomically and records a completed transfer", async () => {

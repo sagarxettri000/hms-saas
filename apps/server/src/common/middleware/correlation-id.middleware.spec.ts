@@ -1,4 +1,7 @@
-import { CorrelationIdMiddleware, CORRELATION_HEADER } from "./correlation-id.middleware";
+import {
+  CorrelationIdMiddleware,
+  CORRELATION_HEADER,
+} from "./correlation-id.middleware";
 
 describe("CorrelationIdMiddleware", () => {
   const middleware = new CorrelationIdMiddleware();
@@ -9,7 +12,10 @@ describe("CorrelationIdMiddleware", () => {
     const next = jest.fn();
     middleware.use(req, res, next);
     expect(req.correlationId).toBeTruthy();
-    expect(res.setHeader).toHaveBeenCalledWith(CORRELATION_HEADER, req.correlationId);
+    expect(res.setHeader).toHaveBeenCalledWith(
+      CORRELATION_HEADER,
+      req.correlationId,
+    );
     expect(next).toHaveBeenCalled();
   });
 

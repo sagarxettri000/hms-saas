@@ -11,7 +11,10 @@ function makePrisma() {
   return {
     dicomStudy: {
       findFirst: jest.fn(),
-      update: jest.fn(async (args: any) => ({ id: "study-1", ...(args.data ?? {}) })),
+      update: jest.fn(async (args: any) => ({
+        id: "study-1",
+        ...(args.data ?? {}),
+      })),
     },
     radiologyOrder: {
       findFirst: jest.fn(),
@@ -27,11 +30,22 @@ function makePrisma() {
 describe("DicomService study association", () => {
   it("associates a study with an order and advances the order status", async () => {
     const prisma = makePrisma();
-    prisma.dicomStudy.findFirst.mockResolvedValue({ id: "study-1", radiologyOrderId: null });
-    prisma.radiologyOrder.findFirst.mockResolvedValue({ id: "order-1", status: "ORDERED" });
+    prisma.dicomStudy.findFirst.mockResolvedValue({
+      id: "study-1",
+      radiologyOrderId: null,
+    });
+    prisma.radiologyOrder.findFirst.mockResolvedValue({
+      id: "order-1",
+      status: "ORDERED",
+    });
     const service = new DicomService(prisma as any, makeStorage() as any);
 
-    const result = await service.associateStudy("t", "study-1", "order-1", "u-1");
+    const result = await service.associateStudy(
+      "t",
+      "study-1",
+      "order-1",
+      "u-1",
+    );
 
     expect(result).toEqual({ studyId: "study-1", radiologyOrderId: "order-1" });
     expect(prisma.dicomStudy.update).toHaveBeenCalledWith({
@@ -54,12 +68,17 @@ describe("DicomService study association", () => {
     prisma.dicomStudy.findFirst.mockResolvedValue(null);
     const service = new DicomService(prisma as any, makeStorage() as any);
 
-    await expect(service.associateStudy("t", "bad", "order-1", "u-1")).rejects.toThrow(NotFoundException);
+    await expect(
+      service.associateStudy("t", "bad", "order-1", "u-1"),
+    ).rejects.toThrow(NotFoundException);
   });
 
   it("unassociates a study", async () => {
     const prisma = makePrisma();
-    prisma.dicomStudy.findFirst.mockResolvedValue({ id: "study-1", radiologyOrderId: "order-1" });
+    prisma.dicomStudy.findFirst.mockResolvedValue({
+      id: "study-1",
+      radiologyOrderId: "order-1",
+    });
     const service = new DicomService(prisma as any, makeStorage() as any);
 
     const result = await service.unassociateStudy("t", "study-1", "u-1");
@@ -111,9 +130,9 @@ describe("DicomService study association", () => {
     });
     const service = new DicomService(prisma as any, makeStorage() as any);
 
-    await expect(service.createOrderFromStudy("t", "study-1", {}, "u-1")).rejects.toThrow(
-      BadRequestException,
-    );
+    await expect(
+      service.createOrderFromStudy("t", "study-1", {}, "u-1"),
+    ).rejects.toThrow(BadRequestException);
   });
 
   it("maps DICOM modalities to radiology order modalities", async () => {
@@ -127,7 +146,12 @@ describe("DicomService study association", () => {
     prisma.radiologyOrder.findFirst.mockResolvedValue(null);
     const service = new DicomService(prisma as any, makeStorage() as any);
 
-    const result = await service.createOrderFromStudy("t", "study-1", {}, "u-1");
+    const result = await service.createOrderFromStudy(
+      "t",
+      "study-1",
+      {},
+      "u-1",
+    );
 
     expect(result.modality).toBe("XRAY");
   });

@@ -94,9 +94,7 @@ export const HEMATOLOGY_CATALOG: HematologyTest[] = [
     method: "Automated hematology analyzer",
     precision: 1,
     resultType: "NUMERIC",
-    ranges: [
-      { label: "Adult", low: 4.0, high: 11.0 },
-    ],
+    ranges: [{ label: "Adult", low: 4.0, high: 11.0 }],
     turnaroundTime: 120,
   },
   {
@@ -110,9 +108,7 @@ export const HEMATOLOGY_CATALOG: HematologyTest[] = [
     method: "Automated 5-part differential",
     precision: 1,
     resultType: "NUMERIC",
-    ranges: [
-      { label: "Adult", low: 40, high: 75 },
-    ],
+    ranges: [{ label: "Adult", low: 40, high: 75 }],
     turnaroundTime: 120,
   },
   {
@@ -126,9 +122,7 @@ export const HEMATOLOGY_CATALOG: HematologyTest[] = [
     method: "Automated 5-part differential",
     precision: 1,
     resultType: "NUMERIC",
-    ranges: [
-      { label: "Adult", low: 20, high: 45 },
-    ],
+    ranges: [{ label: "Adult", low: 20, high: 45 }],
     turnaroundTime: 120,
   },
   {
@@ -142,9 +136,7 @@ export const HEMATOLOGY_CATALOG: HematologyTest[] = [
     method: "Automated 5-part differential",
     precision: 1,
     resultType: "NUMERIC",
-    ranges: [
-      { label: "Adult", low: 2, high: 10 },
-    ],
+    ranges: [{ label: "Adult", low: 2, high: 10 }],
     turnaroundTime: 120,
   },
   {
@@ -158,9 +150,7 @@ export const HEMATOLOGY_CATALOG: HematologyTest[] = [
     method: "Automated 5-part differential",
     precision: 1,
     resultType: "NUMERIC",
-    ranges: [
-      { label: "Adult", low: 1, high: 6 },
-    ],
+    ranges: [{ label: "Adult", low: 1, high: 6 }],
     turnaroundTime: 120,
   },
   {
@@ -174,9 +164,7 @@ export const HEMATOLOGY_CATALOG: HematologyTest[] = [
     method: "Automated 5-part differential",
     precision: 1,
     resultType: "NUMERIC",
-    ranges: [
-      { label: "Adult", low: 0, high: 1 },
-    ],
+    ranges: [{ label: "Adult", low: 0, high: 1 }],
     turnaroundTime: 120,
   },
   {
@@ -193,7 +181,13 @@ export const HEMATOLOGY_CATALOG: HematologyTest[] = [
     ranges: [
       { label: "Adult male", low: 13.5, high: 17.5, sex: "MALE" },
       { label: "Adult female", low: 12.0, high: 15.5, sex: "FEMALE" },
-      { label: "Adult (combined)", low: 12.0, high: 16.0, sex: "OTHER", note: "Combined adult reference" },
+      {
+        label: "Adult (combined)",
+        low: 12.0,
+        high: 16.0,
+        sex: "OTHER",
+        note: "Combined adult reference",
+      },
     ],
     turnaroundTime: 120,
   },
@@ -211,7 +205,13 @@ export const HEMATOLOGY_CATALOG: HematologyTest[] = [
     ranges: [
       { label: "Adult male", low: 4.5, high: 5.9, sex: "MALE" },
       { label: "Adult female", low: 4.0, high: 5.3, sex: "FEMALE" },
-      { label: "Adult (combined)", low: 4.0, high: 5.5, sex: "OTHER", note: "Combined adult reference" },
+      {
+        label: "Adult (combined)",
+        low: 4.0,
+        high: 5.5,
+        sex: "OTHER",
+        note: "Combined adult reference",
+      },
     ],
     turnaroundTime: 120,
   },
@@ -229,7 +229,13 @@ export const HEMATOLOGY_CATALOG: HematologyTest[] = [
     ranges: [
       { label: "Adult male", low: 40, high: 54, sex: "MALE" },
       { label: "Adult female", low: 36, high: 48, sex: "FEMALE" },
-      { label: "Adult (combined)", low: 36, high: 50, sex: "OTHER", note: "Combined adult reference" },
+      {
+        label: "Adult (combined)",
+        low: 36,
+        high: 50,
+        sex: "OTHER",
+        note: "Combined adult reference",
+      },
     ],
     turnaroundTime: 120,
   },
@@ -244,9 +250,7 @@ export const HEMATOLOGY_CATALOG: HematologyTest[] = [
     method: "Calculated (RBC indices)",
     precision: 1,
     resultType: "NUMERIC",
-    ranges: [
-      { label: "Adult", low: 80, high: 100 },
-    ],
+    ranges: [{ label: "Adult", low: 80, high: 100 }],
     turnaroundTime: 120,
   },
   {
@@ -260,9 +264,7 @@ export const HEMATOLOGY_CATALOG: HematologyTest[] = [
     method: "Calculated (RBC indices)",
     precision: 1,
     resultType: "NUMERIC",
-    ranges: [
-      { label: "Adult", low: 27, high: 34 },
-    ],
+    ranges: [{ label: "Adult", low: 27, high: 34 }],
     turnaroundTime: 120,
   },
   {
@@ -276,9 +278,7 @@ export const HEMATOLOGY_CATALOG: HematologyTest[] = [
     method: "Calculated (RBC indices)",
     precision: 1,
     resultType: "NUMERIC",
-    ranges: [
-      { label: "Adult", low: 31, high: 36 },
-    ],
+    ranges: [{ label: "Adult", low: 31, high: 36 }],
     turnaroundTime: 120,
   },
   {
@@ -292,9 +292,7 @@ export const HEMATOLOGY_CATALOG: HematologyTest[] = [
     method: "Automated hematology analyzer",
     precision: 0,
     resultType: "NUMERIC",
-    ranges: [
-      { label: "Adult", low: 150, high: 450 },
-    ],
+    ranges: [{ label: "Adult", low: 150, high: 450 }],
     turnaroundTime: 120,
   },
   {
@@ -311,7 +309,13 @@ export const HEMATOLOGY_CATALOG: HematologyTest[] = [
     ranges: [
       { label: "Adult male", low: 0, high: 15, sex: "MALE" },
       { label: "Adult female", low: 0, high: 20, sex: "FEMALE" },
-      { label: "Adult (combined)", low: 0, high: 20, sex: "OTHER", note: "Combined adult reference" },
+      {
+        label: "Adult (combined)",
+        low: 0,
+        high: 20,
+        sex: "OTHER",
+        note: "Combined adult reference",
+      },
     ],
     turnaroundTime: 120,
   },
@@ -376,7 +380,11 @@ export function resolveReferenceRange(
 export function evaluateFlag(
   value: number,
   resolved: ResolvedRange | null,
-): { flag: "NORMAL" | "ABNORMAL" | "CRITICAL"; isAbnormal: boolean; isCritical: boolean } {
+): {
+  flag: "NORMAL" | "ABNORMAL" | "CRITICAL";
+  isAbnormal: boolean;
+  isCritical: boolean;
+} {
   if (!resolved) {
     return { flag: "NORMAL", isAbnormal: false, isCritical: false };
   }
@@ -391,11 +399,13 @@ export function evaluateFlag(
     return { flag: "NORMAL", isAbnormal: false, isCritical: false };
   }
   if (low !== null && value < low) {
-    if (value < low * 0.5) return { flag: "CRITICAL", isAbnormal: true, isCritical: true };
+    if (value < low * 0.5)
+      return { flag: "CRITICAL", isAbnormal: true, isCritical: true };
     return { flag: "ABNORMAL", isAbnormal: true, isCritical: false };
   }
   if (high !== null && value > high) {
-    if (value > high * 2) return { flag: "CRITICAL", isAbnormal: true, isCritical: true };
+    if (value > high * 2)
+      return { flag: "CRITICAL", isAbnormal: true, isCritical: true };
     return { flag: "ABNORMAL", isAbnormal: true, isCritical: false };
   }
   return { flag: "NORMAL", isAbnormal: false, isCritical: false };

@@ -9,24 +9,41 @@ const SHORT_VR = new Set(
   "AE AS AT CS DA DS DT FL FD IS LO LT PN SH SL SS ST TM UI UL US".split(" "),
 );
 
-function shortElement(group: number, element: number, vr: string, value: string): Buffer {
+function shortElement(
+  group: number,
+  element: number,
+  vr: string,
+  value: string,
+): Buffer {
   const tag = Buffer.alloc(4);
   tag.writeUInt16LE(group, 0);
   tag.writeUInt16LE(element, 2);
   let valueBuf = Buffer.from(value, "latin1");
-  if (valueBuf.length % 2) valueBuf = Buffer.concat([valueBuf, Buffer.from([0x00])]);
+  if (valueBuf.length % 2)
+    valueBuf = Buffer.concat([valueBuf, Buffer.from([0x00])]);
   const len = Buffer.alloc(2);
   len.writeUInt16LE(valueBuf.length, 0);
   return Buffer.concat([tag, Buffer.from(vr, "ascii"), len, valueBuf]);
 }
 
-function longElement(group: number, element: number, vr: string, value: Buffer): Buffer {
+function longElement(
+  group: number,
+  element: number,
+  vr: string,
+  value: Buffer,
+): Buffer {
   const tag = Buffer.alloc(4);
   tag.writeUInt16LE(group, 0);
   tag.writeUInt16LE(element, 2);
   const len = Buffer.alloc(4);
   len.writeUInt32LE(value.length, 0);
-  return Buffer.concat([tag, Buffer.from(vr, "ascii"), Buffer.alloc(2), len, value]);
+  return Buffer.concat([
+    tag,
+    Buffer.from(vr, "ascii"),
+    Buffer.alloc(2),
+    len,
+    value,
+  ]);
 }
 
 /**
@@ -35,14 +52,39 @@ function longElement(group: number, element: number, vr: string, value: Buffer):
  */
 export function wrapDatasetInP10(
   dataset: Buffer,
-  opts: { sopClassUid?: string; sopInstanceUid?: string; transferSyntaxUid?: string; implementationClassUid?: string },
+  opts: {
+    sopClassUid?: string;
+    sopInstanceUid?: string;
+    transferSyntaxUid?: string;
+    implementationClassUid?: string;
+  },
 ): Buffer {
   const contentElements: Buffer[] = [
     longElement(0x0002, 0x0001, "OB", Buffer.from([0x00])),
-    shortElement(0x0002, 0x0002, "UI", opts.sopClassUid || "1.2.840.10008.5.1.4.1.1.4"),
-    shortElement(0x0002, 0x0003, "UI", opts.sopInstanceUid || "1.2.826.0.1.3680043.8.498.2026.1"),
-    shortElement(0x0002, 0x0010, "UI", opts.transferSyntaxUid || "1.2.840.10008.1.2"),
-    shortElement(0x0002, 0x0012, "UI", opts.implementationClassUid || IMPLEMENTATION_CLASS_UID),
+    shortElement(
+      0x0002,
+      0x0002,
+      "UI",
+      opts.sopClassUid || "1.2.840.10008.5.1.4.1.1.4",
+    ),
+    shortElement(
+      0x0002,
+      0x0003,
+      "UI",
+      opts.sopInstanceUid || "1.2.826.0.1.3680043.8.498.2026.1",
+    ),
+    shortElement(
+      0x0002,
+      0x0010,
+      "UI",
+      opts.transferSyntaxUid || "1.2.840.10008.1.2",
+    ),
+    shortElement(
+      0x0002,
+      0x0012,
+      "UI",
+      opts.implementationClassUid || IMPLEMENTATION_CLASS_UID,
+    ),
     shortElement(0x0002, 0x0013, "SH", IMPLEMENTATION_VERSION),
   ];
 
@@ -63,7 +105,13 @@ export function wrapDatasetInP10(
   ]);
 
   const preamble = Buffer.alloc(128);
-  return Buffer.concat([preamble, DICM, groupLength, ...contentElements, dataset]);
+  return Buffer.concat([
+    preamble,
+    DICM,
+    groupLength,
+    ...contentElements,
+    dataset,
+  ]);
 }
 
 interface MetaElement {
@@ -99,7 +147,9 @@ function walkMeta(dicom: Buffer): { elements: MetaElement[]; end: number } {
 }
 
 function isPart10(dicom: Buffer): boolean {
-  return dicom.length >= 132 && dicom.subarray(128, 132).toString("ascii") === "DICM";
+  return (
+    dicom.length >= 132 && dicom.subarray(128, 132).toString("ascii") === "DICM"
+  );
 }
 
 /**

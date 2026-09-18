@@ -230,7 +230,9 @@ export class AccountingService {
 
     const openingCash = Number(dto.openingCash ?? 0);
     if (!Number.isFinite(openingCash) || openingCash < 0)
-      throw new BadRequestException("Opening cash must be a non-negative number");
+      throw new BadRequestException(
+        "Opening cash must be a non-negative number",
+      );
 
     return this.prisma.cashSession.create({
       data: {
@@ -307,7 +309,9 @@ export class AccountingService {
 
     const amount = Number(dto.amount);
     if (!Number.isFinite(amount) || amount <= 0)
-      throw new BadRequestException("Handover amount must be a positive number");
+      throw new BadRequestException(
+        "Handover amount must be a positive number",
+      );
 
     const recipient = await this.prisma.user.findFirst({
       where: { id: dto.toUserId, tenantId },

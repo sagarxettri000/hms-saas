@@ -32,7 +32,8 @@ function mapPatient(p: any) {
   const identifier: any[] = [];
   if (p.mrn) identifier.push({ system: "urn:hms:mrn", value: p.mrn });
   if (p.uid) identifier.push({ system: "urn:hms:uid", value: p.uid });
-  if (p.nationalId) identifier.push({ system: "urn:nepal:nid", value: p.nationalId });
+  if (p.nationalId)
+    identifier.push({ system: "urn:nepal:nid", value: p.nationalId });
 
   const resource: any = {
     resourceType: "Patient",
@@ -45,11 +46,17 @@ function mapPatient(p: any) {
       profile: ["http://hl7.org/fhir/StructureDefinition/Patient"],
     },
   };
-  if (p.dateOfBirth) resource.birthDate = p.dateOfBirth.toISOString().slice(0, 10);
+  if (p.dateOfBirth)
+    resource.birthDate = p.dateOfBirth.toISOString().slice(0, 10);
   if (p.phone || p.mobile) {
     resource.telecom = [];
     if (p.phone) resource.telecom.push({ system: "phone", value: p.phone });
-    if (p.mobile) resource.telecom.push({ system: "phone", value: p.mobile, use: "mobile" });
+    if (p.mobile)
+      resource.telecom.push({
+        system: "phone",
+        value: p.mobile,
+        use: "mobile",
+      });
     if (p.email) resource.telecom.push({ system: "email", value: p.email });
   }
   if (p.addressLine1 || p.city || p.country) {
@@ -82,10 +89,10 @@ function mapObservation(item: any, labOrder: any) {
     status: item.isCritical
       ? "final"
       : item.result !== null && item.result !== undefined
-      ? "final"
-      : item.resultValue !== null && item.resultValue !== undefined
-      ? "final"
-      : "preliminary",
+        ? "final"
+        : item.resultValue !== null && item.resultValue !== undefined
+          ? "final"
+          : "preliminary",
     code: {
       coding: [
         {
@@ -123,8 +130,19 @@ function mapObservation(item: any, labOrder: any) {
       },
     ];
   }
-  if (item.isAbnormal) resource.interpretation = [{ coding: [{ system: "urn:hl7-org:v3", code: "A", display: "Abnormal" }] }];
-  if (item.isCritical) resource.interpretation = [{ coding: [{ system: "urn:hl7-org:v3", code: "L", display: "Low" }], text: "Critical" }];
+  if (item.isAbnormal)
+    resource.interpretation = [
+      {
+        coding: [{ system: "urn:hl7-org:v3", code: "A", display: "Abnormal" }],
+      },
+    ];
+  if (item.isCritical)
+    resource.interpretation = [
+      {
+        coding: [{ system: "urn:hl7-org:v3", code: "L", display: "Low" }],
+        text: "Critical",
+      },
+    ];
   if (item.notes) resource.note = [{ text: item.notes }];
 
   return resource;
@@ -153,7 +171,11 @@ function mapDiagnosticReport(labOrder: any) {
   return {
     resourceType: "DiagnosticReport",
     id: labOrder.id,
-    status: labOrder.verifiedAt ? "final" : labOrder.reportedAt ? "final" : "preliminary",
+    status: labOrder.verifiedAt
+      ? "final"
+      : labOrder.reportedAt
+        ? "final"
+        : "preliminary",
     code: {
       text: labOrder.clinicalNote || "Laboratory panel",
     },
@@ -194,7 +216,12 @@ export class FhirService {
 
   async searchPatients(
     tenantId: string,
-    query: { identifier?: string; name?: string; birthdate?: string; _count?: string },
+    query: {
+      identifier?: string;
+      name?: string;
+      birthdate?: string;
+      _count?: string;
+    },
   ) {
     const where: any = { tenantId, deletedAt: null };
     const or: any[] = [];
@@ -253,7 +280,10 @@ export class FhirService {
       where.labOrder = { patientId: query.patient };
     }
     if (query.code) {
-      where.OR = [{ testName: { contains: query.code, mode: "insensitive" } }, { labTestId: query.code }];
+      where.OR = [
+        { testName: { contains: query.code, mode: "insensitive" } },
+        { labTestId: query.code },
+      ];
     }
     if (query.date) {
       const from = new Date(query.date);
@@ -354,7 +384,8 @@ export class FhirService {
             },
             {
               type: "DiagnosticReport",
-              profile: "http://hl7.org/fhir/StructureDefinition/DiagnosticReport",
+              profile:
+                "http://hl7.org/fhir/StructureDefinition/DiagnosticReport",
               searchParam: [
                 { name: "patient", type: "reference" },
                 { name: "status", type: "token" },

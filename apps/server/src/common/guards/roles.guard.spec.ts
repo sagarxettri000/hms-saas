@@ -41,13 +41,17 @@ describe("RolesGuard (disproportionate role allow-list)", () => {
   });
 
   it("rejects when no authenticated user is present", () => {
-    const { context, reflector } = makeContext(undefined, ["FINANCE_MANAGER"] as any);
+    const { context, reflector } = makeContext(undefined, [
+      "FINANCE_MANAGER",
+    ] as any);
     const guard = new RolesGuard(reflector);
     expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
   });
 
   it("rejects when the user has no role", () => {
-    const { context, reflector } = makeContext({ id: "u1" }, ["FINANCE_MANAGER"] as any);
+    const { context, reflector } = makeContext({ id: "u1" }, [
+      "FINANCE_MANAGER",
+    ] as any);
     const guard = new RolesGuard(reflector);
     expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
   });

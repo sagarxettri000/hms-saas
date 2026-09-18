@@ -43,8 +43,8 @@ describe("TenantsService.create onboarding security", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    prisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => Promise<unknown>) =>
-      fn(tx),
+    prisma.$transaction.mockImplementation(
+      async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
     );
   });
 

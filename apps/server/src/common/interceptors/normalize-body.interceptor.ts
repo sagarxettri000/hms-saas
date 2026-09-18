@@ -24,14 +24,16 @@ function normalizeObject(
     if (value === null || value === undefined) continue;
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i++) {
-        if (value[i] && typeof value[i] === "object" && !Array.isArray(value[i])) {
+        if (
+          value[i] &&
+          typeof value[i] === "object" &&
+          !Array.isArray(value[i])
+        ) {
           value[i] = normalizeObject(value[i]);
         }
       }
     } else if (typeof value === "object") {
-      obj[key] = normalizeObject(
-        value as Record<string, unknown>,
-      );
+      obj[key] = normalizeObject(value as Record<string, unknown>);
     }
   }
   return obj;

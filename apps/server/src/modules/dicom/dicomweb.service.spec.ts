@@ -39,12 +39,20 @@ function makePrisma() {
       delete: jest.fn(),
     },
     dicomSeries: {
-      upsert: jest.fn(async ({ create, update }) => ({ id: "series-1", ...create, ...update })),
+      upsert: jest.fn(async ({ create, update }) => ({
+        id: "series-1",
+        ...create,
+        ...update,
+      })),
       findFirst: jest.fn(),
       findMany: jest.fn(),
     },
     dicomInstance: {
-      upsert: jest.fn(async ({ create, update }) => ({ id: "instance-1", ...create, ...update })),
+      upsert: jest.fn(async ({ create, update }) => ({
+        id: "instance-1",
+        ...create,
+        ...update,
+      })),
       findFirst: jest.fn(),
       findMany: jest.fn(),
     },
@@ -58,7 +66,10 @@ function makePrisma() {
   };
 }
 
-function withStoredInstance(prisma: ReturnType<typeof makePrisma>, storage: ReturnType<typeof makeStorage>) {
+function withStoredInstance(
+  prisma: ReturnType<typeof makePrisma>,
+  storage: ReturnType<typeof makeStorage>,
+) {
   const key = "t1/dicom/study-uid/series-uid/instance-uid.dcm";
   const payload = buildDicomP10File();
   storage.store.set(key, payload);
@@ -84,7 +95,10 @@ describe("DICOMweb service", () => {
   beforeEach(() => {
     storage = makeStorage();
     prisma = makePrisma();
-    (global as any).process.env = { ...(global as any).process.env, API_BASE_URL: "https://example.com" };
+    (global as any).process.env = {
+      ...(global as any).process.env,
+      API_BASE_URL: "https://example.com",
+    };
   });
 
   it("rejects STOW with a non-multipart content type", async () => {
@@ -108,12 +122,20 @@ describe("DICOMweb service", () => {
     const file = buildDicomP10File();
     const boundary = "stowBoundary123";
     const body = Buffer.concat([
-      Buffer.from(`--${boundary}\r\nContent-Type: application/dicom\r\nContent-Length: ${file.length}\r\n\r\n`, "utf8"),
+      Buffer.from(
+        `--${boundary}\r\nContent-Type: application/dicom\r\nContent-Length: ${file.length}\r\n\r\n`,
+        "utf8",
+      ),
       file,
       Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"),
     ]);
 
-    const result = await service.stow("t1", "u1", body, `multipart/related; type="application/dicom"; boundary=${boundary}`);
+    const result = await service.stow(
+      "t1",
+      "u1",
+      body,
+      `multipart/related; type="application/dicom"; boundary=${boundary}`,
+    );
 
     expect(result.numberOfInstancesStored).toBeGreaterThanOrEqual(1);
     expect(result["00081198"].Value?.[0]).toBe(result.numberOfInstancesStored);
@@ -124,12 +146,18 @@ describe("DICOMweb service", () => {
     const file = buildDicomP10File();
     const boundary = "abc";
     const body = Buffer.concat([
-      Buffer.from(`--${boundary}\r\nContent-Type: application/dicom\r\nContent-Length: ${file.length}\r\n\r\n`, "utf8"),
+      Buffer.from(
+        `--${boundary}\r\nContent-Type: application/dicom\r\nContent-Length: ${file.length}\r\n\r\n`,
+        "utf8",
+      ),
       file,
       Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"),
     ]);
 
-    const parts = await parseMultipartRelated(body, `multipart/related; boundary=${boundary}`);
+    const parts = await parseMultipartRelated(
+      body,
+      `multipart/related; boundary=${boundary}`,
+    );
     expect(parts).toHaveLength(1);
     expect(parts[0].headers["content-type"]).toBe("application/dicom");
     expect(parts[0].data.equals(file)).toBe(true);
@@ -234,7 +262,11 @@ describe("DICOMweb service", () => {
       new DicomService(prisma as any, storage as any),
     );
 
-    const { parts } = await service.retrieveSeriesInstances("t1", "study-uid", "series-uid");
+    const { parts } = await service.retrieveSeriesInstances(
+      "t1",
+      "study-uid",
+      "series-uid",
+    );
     expect(parts).toHaveLength(1);
     expect(parts[0].data.equals(payload)).toBe(true);
   });
@@ -246,7 +278,10 @@ describe("DICOMweb service", () => {
     const file = buildDicomP10File({ accessionNumber: "ACC-777" });
     const boundary = "accBoundary";
     const body = Buffer.concat([
-      Buffer.from(`--${boundary}\r\nContent-Type: application/dicom\r\nContent-Length: ${file.length}\r\n\r\n`, "utf8"),
+      Buffer.from(
+        `--${boundary}\r\nContent-Type: application/dicom\r\nContent-Length: ${file.length}\r\n\r\n`,
+        "utf8",
+      ),
       file,
       Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"),
     ]);
@@ -257,7 +292,12 @@ describe("DICOMweb service", () => {
       new DicomService(prisma as any, storage as any),
     );
 
-    await service.stow("t1", "u1", body, `multipart/related; type="application/dicom"; boundary=${boundary}`);
+    await service.stow(
+      "t1",
+      "u1",
+      body,
+      `multipart/related; type="application/dicom"; boundary=${boundary}`,
+    );
 
     expect(prisma.radiologyOrder.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({

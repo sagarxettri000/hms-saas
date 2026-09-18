@@ -35,13 +35,25 @@ function makePrisma() {
       delete: jest.fn(),
     },
     dicomSeries: {
-      upsert: jest.fn(async ({ create, update }) => ({ id: "series-1", ...create, ...update })),
+      upsert: jest.fn(async ({ create, update }) => ({
+        id: "series-1",
+        ...create,
+        ...update,
+      })),
       findFirst: jest.fn(),
       findMany: jest.fn(),
     },
     dicomInstance: {
-      upsert: jest.fn(async ({ create, update }) => ({ id: "instance-1", ...create, ...update })),
-      findFirst: jest.fn().mockResolvedValue({ id: "instance-1", storageKey: "t1/dicom/1.2.826.0.1.3680043.8.498.202609080001/1.2.826.0.1.3680043.8.498.202609080011/1.2.826.0.1.3680043.8.498.202609080021.dcm" }),
+      upsert: jest.fn(async ({ create, update }) => ({
+        id: "instance-1",
+        ...create,
+        ...update,
+      })),
+      findFirst: jest.fn().mockResolvedValue({
+        id: "instance-1",
+        storageKey:
+          "t1/dicom/1.2.826.0.1.3680043.8.498.202609080001/1.2.826.0.1.3680043.8.498.202609080011/1.2.826.0.1.3680043.8.498.202609080021.dcm",
+      }),
     },
     radiologyOrder: {
       findFirst: jest.fn().mockResolvedValue(null),
@@ -66,9 +78,15 @@ describe("DICOM ingest end-to-end", () => {
   it("extracts study/series/instance metadata from the generated file", () => {
     const file = buildDicomP10File();
     const meta = extractDicomMetadata(file);
-    expect(meta.study.studyInstanceUid).toBe("1.2.826.0.1.3680043.8.498.202609080001");
-    expect(meta.series.seriesInstanceUid).toBe("1.2.826.0.1.3680043.8.498.202609080011");
-    expect(meta.instance.sopInstanceUid).toBe("1.2.826.0.1.3680043.8.498.202609080021");
+    expect(meta.study.studyInstanceUid).toBe(
+      "1.2.826.0.1.3680043.8.498.202609080001",
+    );
+    expect(meta.series.seriesInstanceUid).toBe(
+      "1.2.826.0.1.3680043.8.498.202609080011",
+    );
+    expect(meta.instance.sopInstanceUid).toBe(
+      "1.2.826.0.1.3680043.8.498.202609080021",
+    );
     expect(meta.study.patient?.patientId).toBe("PT001");
     expect(meta.study.patient?.patientName).toBe("TEST^DICOM");
     expect(meta.instance.rows).toBe(8);
@@ -115,7 +133,14 @@ describe("DICOM ingest end-to-end", () => {
     await service.upload({
       tenantId: "t1",
       userId: "u1",
-      files: [{ buffer: file, originalname: "a.dcm", mimetype: "application/dicom", size: file.length }],
+      files: [
+        {
+          buffer: file,
+          originalname: "a.dcm",
+          mimetype: "application/dicom",
+          size: file.length,
+        },
+      ],
       radiologyOrderId: "rad-1",
     });
 
@@ -139,7 +164,14 @@ describe("DICOM ingest end-to-end", () => {
     await service.upload({
       tenantId: "t1",
       userId: "u1",
-      files: [{ buffer: file, originalname: "a.dcm", mimetype: "application/dicom", size: file.length }],
+      files: [
+        {
+          buffer: file,
+          originalname: "a.dcm",
+          mimetype: "application/dicom",
+          size: file.length,
+        },
+      ],
     });
 
     expect(prisma.radiologyOrder.updateMany).not.toHaveBeenCalled();

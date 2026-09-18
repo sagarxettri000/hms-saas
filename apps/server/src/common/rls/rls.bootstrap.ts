@@ -117,8 +117,13 @@ export class RlsBootstrap implements OnApplicationBootstrap {
   constructor(private readonly prisma: PrismaService) {}
 
   async onApplicationBootstrap() {
-    if (process.env.NODE_ENV === "production" && process.env.ENABLE_RLS !== "true") {
-      console.warn("WARNING: Row-Level Security is DISABLED in production. This is a security risk. Set ENABLE_RLS=true.");
+    if (
+      process.env.NODE_ENV === "production" &&
+      process.env.ENABLE_RLS !== "true"
+    ) {
+      console.warn(
+        "WARNING: Row-Level Security is DISABLED in production. This is a security risk. Set ENABLE_RLS=true.",
+      );
     }
 
     if (process.env.ENABLE_RLS !== "true") {

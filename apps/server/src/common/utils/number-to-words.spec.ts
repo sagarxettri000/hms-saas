@@ -1,4 +1,8 @@
-import { amountInWords, numberToWords, numberToWordsInt } from "./number-to-words";
+import {
+  amountInWords,
+  numberToWords,
+  numberToWordsInt,
+} from "./number-to-words";
 
 describe("numberToWordsInt", () => {
   it("converts 0 and small numbers", () => {
@@ -31,7 +35,9 @@ describe("numberToWords (decimal amount)", () => {
   });
 
   it("splits rupees and paisa from decimal strings", () => {
-    expect(numberToWords("13000.75")).toBe("Thirteen Thousand and Seventy Five Paisa Only");
+    expect(numberToWords("13000.75")).toBe(
+      "Thirteen Thousand and Seventy Five Paisa Only",
+    );
     expect(numberToWords("1.05")).toBe("One and Five Paisa Only");
   });
 

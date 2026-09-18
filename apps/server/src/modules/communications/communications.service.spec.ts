@@ -26,18 +26,28 @@ describe("CommunicationsService", () => {
       enabled: false,
       config: { host: "smtp.x.com" },
     });
-    expect(await service.sendEmail("t1", { to: "a@b.com", subject: "S", html: "" })).toBe(false);
+    expect(
+      await service.sendEmail("t1", { to: "a@b.com", subject: "S", html: "" }),
+    ).toBe(false);
   });
 
   it("skips SMS when the gateway is not configured", async () => {
     integrationSetting.findUnique.mockResolvedValue(null);
-    expect(await service.sendSms("t1", { to: "+9771", message: "Hi" })).toBe(false);
+    expect(await service.sendSms("t1", { to: "+9771", message: "Hi" })).toBe(
+      false,
+    );
   });
 
   it("attempts a real SMTP send when configured", async () => {
     integrationSetting.findUnique.mockResolvedValue({
       enabled: true,
-      config: { host: "smtp.x.com", port: 587, user: "u", password: "p", fromEmail: "n@x.com" },
+      config: {
+        host: "smtp.x.com",
+        port: 587,
+        user: "u",
+        password: "p",
+        fromEmail: "n@x.com",
+      },
     });
     const createTransport = jest
       .spyOn(require("nodemailer"), "createTransport")
@@ -59,10 +69,14 @@ describe("CommunicationsService", () => {
       enabled: true,
       config: { host: "smtp.x.com", user: "u", password: "p" },
     });
-    jest
-      .spyOn(require("nodemailer"), "createTransport")
-      .mockReturnValue({ sendMail: jest.fn().mockRejectedValue(new Error("boom")) });
-    const ok = await service.sendEmail("t1", { to: "a@b.com", subject: "S", html: "" });
+    jest.spyOn(require("nodemailer"), "createTransport").mockReturnValue({
+      sendMail: jest.fn().mockRejectedValue(new Error("boom")),
+    });
+    const ok = await service.sendEmail("t1", {
+      to: "a@b.com",
+      subject: "S",
+      html: "",
+    });
     expect(ok).toBe(false);
   });
 
@@ -71,18 +85,27 @@ describe("CommunicationsService", () => {
       enabled: true,
       config: { apiKey: "k" },
     });
-    expect(await service.sendSms("t1", { to: "+9771", message: "Hi" })).toBe(false);
+    expect(await service.sendSms("t1", { to: "+9771", message: "Hi" })).toBe(
+      false,
+    );
   });
 
   it("calls the generic gateway endpoint", async () => {
     integrationSetting.findUnique.mockResolvedValue({
       enabled: true,
-      config: { apiKey: "k", endpoint: "https://gateway.test/send", senderId: "HMS" },
+      config: {
+        apiKey: "k",
+        endpoint: "https://gateway.test/send",
+        senderId: "HMS",
+      },
     });
     const fetchMock = jest
       .spyOn(globalThis, "fetch")
       .mockResolvedValue({ ok: true } as any);
-    const ok = await service.sendSms("t1", { to: "+9779800000000", message: "Hi" });
+    const ok = await service.sendSms("t1", {
+      to: "+9779800000000",
+      message: "Hi",
+    });
     expect(ok).toBe(true);
     expect(fetchMock).toHaveBeenCalledWith(
       "https://gateway.test/send",
@@ -94,7 +117,12 @@ describe("CommunicationsService", () => {
   it("handles a twilio provider", async () => {
     integrationSetting.findUnique.mockResolvedValue({
       enabled: true,
-      config: { provider: "twilio", apiKey: "ACsid", apiSecret: "tok", senderId: "+1500" },
+      config: {
+        provider: "twilio",
+        apiKey: "ACsid",
+        apiSecret: "tok",
+        senderId: "+1500",
+      },
     });
     const fetchMock = jest
       .spyOn(globalThis, "fetch")

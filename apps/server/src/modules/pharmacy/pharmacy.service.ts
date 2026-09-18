@@ -177,13 +177,25 @@ export class PharmacyService {
     value: PharmacyBillingSettings,
     userId?: string,
   ): Promise<PharmacyBillingSettings> {
-    await this.settings.set(tenantId, PHARMACY_BILLING_SETTING_KEY, value, userId);
-    await this.audit.log(tenantId, userId, "TenantSetting", PHARMACY_BILLING_SETTING_KEY, "UPDATE", {
-      key: PHARMACY_BILLING_SETTING_KEY,
-      scope: "PHARMACY_BILLING",
-      vatNumber: value.vatNumber ?? null,
-      panNumber: value.panNumber ?? null,
-    });
+    await this.settings.set(
+      tenantId,
+      PHARMACY_BILLING_SETTING_KEY,
+      value,
+      userId,
+    );
+    await this.audit.log(
+      tenantId,
+      userId,
+      "TenantSetting",
+      PHARMACY_BILLING_SETTING_KEY,
+      "UPDATE",
+      {
+        key: PHARMACY_BILLING_SETTING_KEY,
+        scope: "PHARMACY_BILLING",
+        vatNumber: value.vatNumber ?? null,
+        panNumber: value.panNumber ?? null,
+      },
+    );
     return value;
   }
 
@@ -349,7 +361,13 @@ export class PharmacyService {
     if (!dto.name || !String(dto.name).trim())
       throw new BadRequestException("Item name is required");
 
-    const ITEM_TYPES = ["MEDICINE", "SUPPLIES", "EQUIPMENT", "CONSUMABLE", "OTHER"];
+    const ITEM_TYPES = [
+      "MEDICINE",
+      "SUPPLIES",
+      "EQUIPMENT",
+      "CONSUMABLE",
+      "OTHER",
+    ];
     const itemType = dto.itemType || "OTHER";
     if (!ITEM_TYPES.includes(itemType))
       throw new BadRequestException("Invalid item type");
@@ -466,7 +484,7 @@ export class PharmacyService {
         orderBy: { currentStock: "asc" },
       });
       const lowStockItems = allItems.filter(
-        (item) => Number(item.currentStock) <= Number(item.reorderLevel)
+        (item) => Number(item.currentStock) <= Number(item.reorderLevel),
       );
       return {
         data: lowStockItems,
@@ -520,11 +538,21 @@ export class PharmacyService {
       if ((dto as any)[field] !== undefined) data[field] = (dto as any)[field];
     }
     if (data.itemType !== undefined) {
-      const ITEM_TYPES = ["MEDICINE", "SUPPLIES", "EQUIPMENT", "CONSUMABLE", "OTHER"];
+      const ITEM_TYPES = [
+        "MEDICINE",
+        "SUPPLIES",
+        "EQUIPMENT",
+        "CONSUMABLE",
+        "OTHER",
+      ];
       if (!ITEM_TYPES.includes(data.itemType))
         throw new BadRequestException("Invalid item type");
     }
-    if (dto.expiryDate !== undefined && dto.expiryDate !== null && dto.expiryDate !== "")
+    if (
+      dto.expiryDate !== undefined &&
+      dto.expiryDate !== null &&
+      dto.expiryDate !== ""
+    )
       data.expiryDate = this.normalizeDate(dto.expiryDate);
     return this.prisma.inventoryItem.update({
       where: { id },
@@ -558,11 +586,12 @@ export class PharmacyService {
     const adjustmentInflow =
       dto.type === "ADJUSTMENT" && dto.direction === "IN";
 
-    const newStock = isInflow || adjustmentInflow
-      ? Number(item.currentStock) + quantity
-      : isOutflow || dto.type === "ADJUSTMENT"
-        ? Number(item.currentStock) - quantity
-        : Number(item.currentStock);
+    const newStock =
+      isInflow || adjustmentInflow
+        ? Number(item.currentStock) + quantity
+        : isOutflow || dto.type === "ADJUSTMENT"
+          ? Number(item.currentStock) - quantity
+          : Number(item.currentStock);
 
     if (newStock < 0)
       throw new ConflictException("Insufficient stock for this transaction");
@@ -582,7 +611,9 @@ export class PharmacyService {
           data: { currentStock: { decrement: quantity } },
         });
         if (claimed.count === 0) {
-          throw new ConflictException("Insufficient stock for this transaction");
+          throw new ConflictException(
+            "Insufficient stock for this transaction",
+          );
         }
         updated = await tx.inventoryItem.findUniqueOrThrow({ where: { id } });
       }
@@ -620,7 +651,15 @@ export class PharmacyService {
 
   // ---------- Prescriptions ----------
 
-  async findPrescriptions(tenantId: string, params: { status?: string; patientId?: string; page?: number; limit?: number }) {
+  async findPrescriptions(
+    tenantId: string,
+    params: {
+      status?: string;
+      patientId?: string;
+      page?: number;
+      limit?: number;
+    },
+  ) {
     const page = Number(params.page) || 1;
     const limit = Math.min(Number(params.limit) || 50, MAX_LIMIT);
 
@@ -633,8 +672,18 @@ export class PharmacyService {
         where,
         include: {
           items: true,
-          patient: { select: { id: true, firstName: true, lastName: true, mrn: true, mobile: true } },
-          doctor: { include: { user: { select: { firstName: true, lastName: true } } } },
+          patient: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              mrn: true,
+              mobile: true,
+            },
+          },
+          doctor: {
+            include: { user: { select: { firstName: true, lastName: true } } },
+          },
         },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,
@@ -734,7 +783,9 @@ export class PharmacyService {
       for (const item of dto.items) {
         const quantity = Number(item.quantity);
         if (!quantity || quantity <= 0)
-          throw new BadRequestException(`Invalid quantity for ${item.medicineName}`);
+          throw new BadRequestException(
+            `Invalid quantity for ${item.medicineName}`,
+          );
 
         let unitPrice = Number(item.unitPrice) || 0;
 
@@ -753,7 +804,7 @@ export class PharmacyService {
           const currentStock = Number(inventoryItem.currentStock);
           if (currentStock < quantity)
             throw new ConflictException(
-              `Insufficient stock for ${item.medicineName}. Available: ${currentStock}, Requested: ${quantity}`
+              `Insufficient stock for ${item.medicineName}. Available: ${currentStock}, Requested: ${quantity}`,
             );
 
           if (!unitPrice) unitPrice = Number(inventoryItem.salesRate) || 0;
@@ -768,7 +819,7 @@ export class PharmacyService {
           });
           if (updated.count === 0)
             throw new ConflictException(
-              `Insufficient stock for ${item.medicineName}`
+              `Insufficient stock for ${item.medicineName}`,
             );
 
           await tx.inventoryTransaction.create({
@@ -780,7 +831,8 @@ export class PharmacyService {
               quantity,
               unitPrice,
               totalValue: unitPrice ? unitPrice * quantity : undefined,
-              batchNumber: item.batchNumber || inventoryItem.batchNumber || undefined,
+              batchNumber:
+                item.batchNumber || inventoryItem.batchNumber || undefined,
               referenceType: "PHARMACY_SALE",
               remarks: `Dispensed to ${patient.firstName} ${patient.lastName}`,
               createdBy: userId,
@@ -827,8 +879,7 @@ export class PharmacyService {
       );
       const totalAmount = Math.max(0, subtotal - invoiceDiscount);
 
-      const paidAmount =
-        !dto.isCredit && dto.paymentMethod ? totalAmount : 0;
+      const paidAmount = !dto.isCredit && dto.paymentMethod ? totalAmount : 0;
       const dueAmount = totalAmount - paidAmount;
       const status =
         dueAmount <= 0 ? "PAID" : dto.isCredit ? "PENDING" : "PARTIAL";
@@ -971,7 +1022,12 @@ export class PharmacyService {
     });
     if (!store) throw new NotFoundException("Store not found");
 
-    let patient: { id: string; firstName: string; lastName: string; mrn?: string | null } | null = null;
+    let patient: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      mrn?: string | null;
+    } | null = null;
     if (dto.patientId) {
       patient = await this.prisma.patient.findFirst({
         where: { id: dto.patientId, tenantId },
@@ -1006,9 +1062,7 @@ export class PharmacyService {
             tenantId,
             storeId: dto.storeId,
             medicineId: item.medicineId,
-            ...(item.batchNumber
-              ? { batchNumber: item.batchNumber }
-              : {}),
+            ...(item.batchNumber ? { batchNumber: item.batchNumber } : {}),
           },
         });
         if (!inventoryItem)
@@ -1028,7 +1082,11 @@ export class PharmacyService {
             })
           : null;
 
-        const unitPrice = Number(item.unitPrice) || Number(inventoryItem.salesRate) || Number(medicine?.salesRate) || 0;
+        const unitPrice =
+          Number(item.unitPrice) ||
+          Number(inventoryItem.salesRate) ||
+          Number(medicine?.salesRate) ||
+          0;
         const taxPercent = Number(item.taxPercent ?? dto.taxPercent ?? 0);
         const discountPercent = Number(item.discountPercent ?? 0);
         const gross = quantity * unitPrice;
@@ -1063,7 +1121,8 @@ export class PharmacyService {
             quantity,
             unitPrice,
             totalValue: unitPrice * quantity,
-            batchNumber: item.batchNumber || inventoryItem.batchNumber || undefined,
+            batchNumber:
+              item.batchNumber || inventoryItem.batchNumber || undefined,
             expiryDate: inventoryItem.expiryDate,
             referenceType: "PHARMACY_SALE",
             remarks: `Sold to ${customerLabel}`,
@@ -1098,8 +1157,7 @@ export class PharmacyService {
       if (totalAmount < 0)
         throw new BadRequestException("Total amount cannot be negative");
 
-      const paidAmount =
-        !dto.isCredit && dto.paymentMethod ? totalAmount : 0;
+      const paidAmount = !dto.isCredit && dto.paymentMethod ? totalAmount : 0;
       const dueAmount = totalAmount - paidAmount;
       const status =
         dueAmount <= 0 ? "PAID" : dto.isCredit ? "PENDING" : "PARTIAL";
@@ -1107,8 +1165,8 @@ export class PharmacyService {
       const invoice = await this.createPharmacyInvoice(tx, tenantId, {
         tenantId,
         patientId: patient ? dto.patientId : undefined,
-        customerName: !patient ? (dto.customerName || undefined) : undefined,
-        customerPhone: !patient ? (dto.customerPhone || undefined) : undefined,
+        customerName: !patient ? dto.customerName || undefined : undefined,
+        customerPhone: !patient ? dto.customerPhone || undefined : undefined,
         type: "PHARMACY",
         status: status as any,
         subtotal,
@@ -1314,7 +1372,13 @@ export class PharmacyService {
 
   async getDispensingHistory(
     tenantId: string,
-    params: { patientId?: string; from?: string; to?: string; page?: number; limit?: number },
+    params: {
+      patientId?: string;
+      from?: string;
+      to?: string;
+      page?: number;
+      limit?: number;
+    },
   ) {
     const page = Number(params.page) || 1;
     const limit = Math.min(Number(params.limit) || 20, 100);
@@ -1324,15 +1388,32 @@ export class PharmacyService {
     if (params.from || params.to) {
       where.updatedAt = {};
       if (params.from) where.updatedAt.gte = new Date(params.from);
-      if (params.to) { const d = new Date(params.to); d.setHours(23, 59, 59, 999); where.updatedAt.lte = d; }
+      if (params.to) {
+        const d = new Date(params.to);
+        d.setHours(23, 59, 59, 999);
+        where.updatedAt.lte = d;
+      }
     }
 
     const [items, total] = await Promise.all([
       this.prisma.prescription.findMany({
         where,
         include: {
-          patient: { select: { id: true, firstName: true, lastName: true, mrn: true, phone: true } },
-          doctor: { select: { id: true, user: { select: { firstName: true, lastName: true } } } },
+          patient: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              mrn: true,
+              phone: true,
+            },
+          },
+          doctor: {
+            select: {
+              id: true,
+              user: { select: { firstName: true, lastName: true } },
+            },
+          },
           items: true,
         },
         orderBy: { updatedAt: "desc" },
@@ -1347,7 +1428,12 @@ export class PharmacyService {
 
   async listSales(
     tenantId: string,
-    params: { patientId?: string; status?: string; page?: number; limit?: number },
+    params: {
+      patientId?: string;
+      status?: string;
+      page?: number;
+      limit?: number;
+    },
   ) {
     const page = Number(params.page) || 1;
     const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
@@ -1401,7 +1487,11 @@ export class PharmacyService {
 
   async getPharmacySummary(tenantId: string) {
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
 
     const [
       totalMedicines,
@@ -1413,27 +1503,52 @@ export class PharmacyService {
       revenueToday,
     ] = await Promise.all([
       this.prisma.medicine.count({ where: { tenantId, isActive: true } }),
-      this.prisma.prescription.count({ where: { tenantId, status: { in: ["DRAFT", "APPROVED"] } } }),
-      this.prisma.prescription.count({ where: { tenantId, status: "DISPENSED", updatedAt: { gte: todayStart } } }),
-      this.prisma.inventoryItem.count({
-        where: { tenantId, currentStock: { gt: 0 }, reorderLevel: { not: null, gt: 0 } },
-      }).then(async (c) => {
-        const items = await this.prisma.inventoryItem.findMany({
-          where: { tenantId, currentStock: { gt: 0 }, reorderLevel: { not: null, gt: 0 } },
-          select: { currentStock: true, reorderLevel: true },
-        });
-        return items.filter((i) => Number(i.currentStock) <= Number(i.reorderLevel)).length;
+      this.prisma.prescription.count({
+        where: { tenantId, status: { in: ["DRAFT", "APPROVED"] } },
       }),
-      this.prisma.inventoryItem.aggregate({
-        where: { tenantId },
-        _sum: { currentStock: true },
-      }).then(async (r) => {
-        const items = await this.prisma.inventoryItem.findMany({
+      this.prisma.prescription.count({
+        where: {
+          tenantId,
+          status: "DISPENSED",
+          updatedAt: { gte: todayStart },
+        },
+      }),
+      this.prisma.inventoryItem
+        .count({
+          where: {
+            tenantId,
+            currentStock: { gt: 0 },
+            reorderLevel: { not: null, gt: 0 },
+          },
+        })
+        .then(async (c) => {
+          const items = await this.prisma.inventoryItem.findMany({
+            where: {
+              tenantId,
+              currentStock: { gt: 0 },
+              reorderLevel: { not: null, gt: 0 },
+            },
+            select: { currentStock: true, reorderLevel: true },
+          });
+          return items.filter(
+            (i) => Number(i.currentStock) <= Number(i.reorderLevel),
+          ).length;
+        }),
+      this.prisma.inventoryItem
+        .aggregate({
           where: { tenantId },
-          select: { currentStock: true, salesRate: true },
-        });
-        return items.reduce((s, i) => s + Number(i.currentStock) * Number(i.salesRate), 0);
-      }),
+          _sum: { currentStock: true },
+        })
+        .then(async (r) => {
+          const items = await this.prisma.inventoryItem.findMany({
+            where: { tenantId },
+            select: { currentStock: true, salesRate: true },
+          });
+          return items.reduce(
+            (s, i) => s + Number(i.currentStock) * Number(i.salesRate),
+            0,
+          );
+        }),
       this.prisma.invoice.aggregate({
         where: { tenantId, type: "PHARMACY", issuedDate: { gte: todayStart } },
         _sum: { totalAmount: true },
@@ -1470,10 +1585,15 @@ export class PharmacyService {
       this.prisma.payment.groupBy({
         by: ["paidAt"],
         _sum: { amount: true },
-        where: { tenantId, paidAt: { gte: last30Start }, invoice: { type: "PHARMACY" } },
+        where: {
+          tenantId,
+          paidAt: { gte: last30Start },
+          invoice: { type: "PHARMACY" },
+        },
       }),
     ]);
-    const trendMap: Record<string, { revenue: number; collection: number }> = {};
+    const trendMap: Record<string, { revenue: number; collection: number }> =
+      {};
     for (let d = 0; d < 30; d++) {
       const day = new Date(last30Start);
       day.setDate(day.getDate() + d);
@@ -1489,14 +1609,25 @@ export class PharmacyService {
     }
     const trend = Object.entries(trendMap)
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([date, v]) => ({ date, revenue: v.revenue, collection: v.collection }));
+      .map(([date, v]) => ({
+        date,
+        revenue: v.revenue,
+        collection: v.collection,
+      }));
 
     // Top medicines billed today
     const todayInvoices = await this.prisma.invoice.findMany({
-      where: { tenantId, type: "PHARMACY", issuedDate: { gte: todayStart }, status: { not: "CANCELLED" } },
+      where: {
+        tenantId,
+        type: "PHARMACY",
+        issuedDate: { gte: todayStart },
+        status: { not: "CANCELLED" },
+      },
       select: {
         patientId: true,
-        items: { select: { serviceName: true, quantity: true, lineTotal: true } },
+        items: {
+          select: { serviceName: true, quantity: true, lineTotal: true },
+        },
       },
     });
     let walkInBills = 0;
@@ -1523,10 +1654,15 @@ export class PharmacyService {
     const methodGroups = await this.prisma.payment.groupBy({
       by: ["method"],
       _sum: { amount: true },
-      where: { tenantId, paidAt: { gte: last30Start }, invoice: { type: "PHARMACY" } },
+      where: {
+        tenantId,
+        paidAt: { gte: last30Start },
+        invoice: { type: "PHARMACY" },
+      },
     });
     const collectionByMethod: Record<string, number> = {};
-    for (const g of methodGroups) collectionByMethod[g.method] = num(g._sum.amount);
+    for (const g of methodGroups)
+      collectionByMethod[g.method] = num(g._sum.amount);
 
     return {
       totalMedicines,

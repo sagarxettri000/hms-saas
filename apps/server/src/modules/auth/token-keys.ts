@@ -5,10 +5,7 @@ function readPem(value: string | undefined): string | null {
   // Environment variables commonly store PEMs with escaped newline sequences.
   // Normalise both single-escaped (\n) and double-escaped (\\n) forms.
   if (!pem) return null;
-  const normalized = pem
-    .replace(/\\\\n/g, "\\n")
-    .replace(/\\n/g, "\n")
-    .trim();
+  const normalized = pem.replace(/\\\\n/g, "\\n").replace(/\\n/g, "\n").trim();
   return normalized || null;
 }
 
@@ -31,7 +28,10 @@ export function accessPublicKeys(): string[] {
     try {
       const arr = JSON.parse(envRaw);
       if (Array.isArray(arr)) {
-        const fromArray = arr.map((x: string | number | null | undefined) => readPem(String(x ?? "")) ?? "");
+        const fromArray = arr.map(
+          (x: string | number | null | undefined) =>
+            readPem(String(x ?? "")) ?? "",
+        );
         if (fromArray.length > 0) return fromArray.filter(Boolean);
       }
     } catch {

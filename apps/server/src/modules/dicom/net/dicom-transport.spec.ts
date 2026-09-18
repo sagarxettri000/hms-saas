@@ -5,7 +5,10 @@ import * as fs from "fs";
 import { loadScpTlsOptions } from "./dicom-scp.service";
 
 function tmpFile(prefix: string): string {
-  const p = path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}.pem`);
+  const p = path.join(
+    os.tmpdir(),
+    `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}.pem`,
+  );
   fs.writeFileSync(p, `${prefix} content\n`);
   return p;
 }
@@ -35,7 +38,11 @@ describe("DICOM transport security", () => {
 
   it("disables peer verification by default (interop fallback)", () => {
     const opts = buildTlsConnectOptions("pacs", 1110, {});
-    expect(opts).toEqual({ host: "pacs", port: 1110, rejectUnauthorized: false });
+    expect(opts).toEqual({
+      host: "pacs",
+      port: 1110,
+      rejectUnauthorized: false,
+    });
   });
 
   it("enables mTLS verification when DICOM_TLS_CA is set", () => {
@@ -68,6 +75,8 @@ describe("DICOM transport security", () => {
   });
 
   it("rejects TLS listeners without configured credentials", () => {
-    expect(() => loadScpTlsOptions({})).toThrow(/DICOM_TLS_CERT\/DICOM_TLS_KEY/);
+    expect(() => loadScpTlsOptions({})).toThrow(
+      /DICOM_TLS_CERT\/DICOM_TLS_KEY/,
+    );
   });
 });

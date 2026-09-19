@@ -17,6 +17,7 @@ import { RolesModule } from "./modules/roles/roles.module";
 import { PermissionsModule } from "./modules/permissions/permissions.module";
 import { PatientsModule } from "./modules/patients/patients.module";
 import { RegulatoryModule } from "./modules/regulatory/regulatory.module";
+import { InteropModule } from "./modules/interop/interop.module";
 import { AppointmentsModule } from "./modules/appointments/appointments.module";
 import { DoctorsModule } from "./modules/doctors/doctors.module";
 import { EncountersModule } from "./modules/encounters/encounters.module";
@@ -95,6 +96,7 @@ import { AppController } from "./app.controller";
     PermissionsModule,
     PatientsModule,
     RegulatoryModule,
+    InteropModule,
     AppointmentsModule,
     DoctorsModule,
     EncountersModule,

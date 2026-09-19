@@ -15,6 +15,7 @@ import {
   CreateDonorDto,
   RegisterUnitDto,
 } from "./blood-bank.service";
+import { BloodChainService } from "../interop/blood-chain.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
@@ -30,7 +31,10 @@ import { PermissionAction } from "@hms/shared";
 @TenantScoped()
 @ApiBearerAuth()
 export class BloodBankController {
-  constructor(private readonly bloodBankService: BloodBankService) {}
+  constructor(
+    private readonly bloodBankService: BloodBankService,
+    private readonly bloodChain: BloodChainService,
+  ) {}
 
   @Get("donors")
   @Permissions(PermissionAction.VIEW)
@@ -96,11 +100,15 @@ export class BloodBankController {
 
   @Patch("units/:id/issue")
   @Permissions(PermissionAction.EDIT)
-  issueUnit(
+  async issueUnit(
     @Param("id") id: string,
     @Body() body: { issuedTo?: string; crossMatchTo?: string },
     @Req() req: any,
   ) {
+    // §82.4: rule-configured crossmatch gate before any unit leaves the bank.
+    if (body.issuedTo) {
+      await this.bloodChain.assertIssueAllowed(req.user.tenantId, id, body.issuedTo);
+    }
     return this.bloodBankService.issueUnit(
       req.user.tenantId,
       id,

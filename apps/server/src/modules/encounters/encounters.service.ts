@@ -5,8 +5,10 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { Optional, Inject } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { PublicHealthService } from "../interop/public-health.service";
 
 export interface CreateEncounterDto {
   patientId: string;
@@ -85,6 +87,7 @@ export class EncountersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    @Optional() @Inject(PublicHealthService) private readonly publicHealth?: PublicHealthService,
   ) {}
 
   async create(tenantId: string, dto: CreateEncounterDto, userId?: string) {
@@ -194,7 +197,7 @@ export class EncountersService {
       }
 
       if (dto.diagnosis) {
-        await tx.diagnosis.create({
+        const dx = await tx.diagnosis.create({
           data: {
             tenantId,
             encounterId: created.id,
@@ -206,6 +209,22 @@ export class EncountersService {
             confirmedAt: new Date(),
           },
         });
+        // §80.3: automatic surveillance evaluation — a reportable-disease match
+        // queues an EWARS transaction via the interop gateway. Failures here
+        // must never fail the clinical transaction (§84.2/§89).
+        if ((this as any).publicHealth) {
+          await (this as any).publicHealth
+            .evaluateDiagnosis(tenantId, {
+              diagnosisId: dx.id,
+              patientId: dto.patientId,
+              encounterId: created.id,
+              icd10Code: dto.icd10Code,
+              diagnosisName: dto.diagnosis,
+              origin: "AUTOMATIC" as const,
+              createdBy: userId,
+            })
+            .catch(() => undefined);
+        }
       }
 
       // §64.4/§64.2: an OPD encounter activates the OPD clinical context.

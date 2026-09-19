@@ -31,6 +31,9 @@ npm-debug.log*
 build.txt
 build_output.txt
 .freebuff/
+.freebuff-backups/
+apps/server/sql_tmp.sql
+apps/server/.probe-interop.mjs
 test_output.txt
 
 # Prisma (migrations are version-controlled and MUST be committed)

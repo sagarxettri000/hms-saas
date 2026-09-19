@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -172,6 +173,11 @@ export class Hl7Controller {
   async setListener(@Body() config: Hl7ListenerConfig, @Req() req: Request) {
     const user = req.user as any;
     if (config.enabled) {
+      if (process.env.VERCEL === "1") {
+        throw new BadRequestException(
+          "MLLP TCP listeners are unavailable on Vercel serverless; use the HTTP HL7 submission endpoint instead.",
+        );
+      }
       await this.hl7.startMllpListener(user.tenantId, config);
     } else {
       await this.hl7.stopMllpListener();

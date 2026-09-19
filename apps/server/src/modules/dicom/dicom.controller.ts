@@ -671,6 +671,11 @@ export class DicomController {
   @ApiOperation({ summary: "Start the DICOM SCP listener on a local node" })
   async listenerStart(@Body() body: { nodeId: string }, @Req() req: Request) {
     const user = req.user as any;
+    if (process.env.VERCEL === "1") {
+      throw new BadRequestException(
+        "DICOM SCP TCP listeners are unavailable on Vercel serverless.",
+      );
+    }
     await this.dicomScp.start(body.nodeId, user.tenantId);
     this.atna.recordAppLifecycle(user.tenantId, user.id, body.nodeId, true);
     return { running: true, stats: this.dicomScp.getStats() };

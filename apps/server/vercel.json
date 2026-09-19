@@ -1,0 +1,17 @@
+{
+  "framework": "nestjs",
+  "installCommand": "cd ../../ && npm install --include=dev",
+  "buildCommand": "cd ../../ && npm run build -w @hms/shared && cd apps/server && npx prisma generate && cd ../../ && npm run build -w @hms/server",
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index"
+    }
+  ]
+}

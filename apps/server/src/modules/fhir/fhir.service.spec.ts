@@ -16,7 +16,9 @@ describe("FhirService", () => {
       findMany: jest.fn().mockResolvedValue([]),
     },
   };
-  const service = new FhirService(prisma as any);
+  const audit = { log: jest.fn().mockResolvedValue(undefined) };
+  const rules = { resolveOrNull: jest.fn().mockResolvedValue(null) };
+  const service = new FhirService(prisma as any, audit as any, rules as any);
 
   const patient = {
     id: "p1",

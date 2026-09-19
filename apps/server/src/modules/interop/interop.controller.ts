@@ -386,4 +386,18 @@ export class InteropController {
   reconciliation(@Query("destination") destination: string | undefined, @Req() req: any) {
     return this.gateway.reconciliation(req.user.tenantId, destination);
   }
+
+  @Post("blood/units/:id/return")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Return an unused blood unit to the bank (spec #33)" })
+  returnUnit(@Param("id") id: string, @Body() body: any, @Req() req: any) {
+    return this.bloodChain.returnUnit(req.user.tenantId, id, { ...body, returnedBy: req.user.id });
+  }
+
+  @Post("transactions/:id/reconcile")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Reconcile one government transaction (spec #62: mismatch → exception)" })
+  reconcileOne(@Param("id") id: string, @Req() req: any) {
+    return this.gateway.reconcileOne(req.user.tenantId, id);
+  }
 }

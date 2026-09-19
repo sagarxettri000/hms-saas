@@ -1,7 +1,9 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
+  Post,
   Query,
   Req,
   Res,
@@ -133,5 +135,40 @@ export class FhirController {
       id,
     );
     return res.json(resource);
+  }
+
+  @Post("validate")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "FHIR validation — profile checks before exchange (FHIR $validate equivalent) (spec #12/#53)" })
+  validate(@Body() body: any, @Req() req: any) {
+    return this.fhirService.validateResource(req.user.tenantId, body?.resource ?? body);
+  }
+
+  @Post("Bundle")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Generate a FHIR document bundle with provenance record (spec #10/#11)" })
+  buildBundle(@Body() body: any, @Req() req: any) {
+    return this.fhirService.buildBundle(req.user.tenantId, body);
+  }
+
+  @Post("consents")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Record patient-authorized sharing consent (spec #49)" })
+  createConsent(@Body() body: any, @Req() req: any) {
+    return this.fhirService.createConsent(req.user.tenantId, { ...body, createdBy: req.user.id });
+  }
+
+  @Post("consents/:id/revoke")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Revoke a consent record (reason required)" })
+  revokeConsent(@Param("id") id: string, @Body() body: any, @Req() req: any) {
+    return this.fhirService.revokeConsent(req.user.tenantId, id, { ...body, revokedBy: req.user.id });
+  }
+
+  @Get("consents")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List consent records" })
+  listConsents(@Query("patientId") patientId: string | undefined, @Req() req: any) {
+    return this.fhirService.listConsents(req.user.tenantId, patientId || undefined);
   }
 }

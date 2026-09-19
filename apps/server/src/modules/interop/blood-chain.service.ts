@@ -241,4 +241,48 @@ export class BloodChainService {
     }, tf.patientId ?? undefined);
     return updated;
   }
+
+  /**
+   * Spec #33: unused-unit return to the bank. The unit's issued state is
+   * rolled back so it re-enters inventory; the return is recorded as a
+   * first-class traceability event, distinct from discard/wastage.
+   */
+  async returnUnit(
+    tenantId: string,
+    unitId: string,
+    data: { reason?: string; returnedBy?: string },
+  ) {
+    const unit = await this.prisma.bloodUnit.findFirst({
+      where: { id: unitId, tenantId },
+    });
+    if (!unit) throw new NotFoundException("Blood unit not found");
+    if (!["ISSUED", "RESERVED", "CROSSMATCHED"].includes(unit.status)) {
+      throw new ConflictException(
+        `Unit status ${unit.status} is not returnable; only ISSUED/RESERVED/CROSSMATCHED units can be returned`,
+      );
+    }
+    const ret = await this.prisma.bloodUnitReturn.create({
+      data: {
+        tenantId,
+        unitId,
+        reason: data.reason ?? null,
+        returnedBy: data.returnedBy ?? null,
+      },
+    });
+    await this.prisma.bloodUnit.update({
+      where: { id: unitId },
+      data: {
+        status: "AVAILABLE",
+        issuedTo: null,
+        issuedAt: null,
+        issuedBy: null,
+        crossMatchTo: null,
+      },
+    });
+    await this.rules.logEvent(tenantId, "BLOOD_UNIT_RETURNED", "BloodUnit", unitId, {
+      returnId: ret.id,
+      reason: data.reason,
+    }, unit.issuedTo ?? undefined);
+    return ret;
+  }
 }

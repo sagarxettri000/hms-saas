@@ -38,6 +38,8 @@ function makePrisma(over: any = {}) {
     bloodUnit: mk("bloodUnit"),
     wasteLedgerEntry: mk("wasteLedgerEntry"),
     wasteManifest: mk("wasteManifest"),
+    regulatoryException: mk("regulatoryException"),
+    bloodUnitReturn: mk("bloodUnitReturn"),
     diagnosis: mk("diagnosis"),
     $transaction: jest.fn((ops: any) => (Array.isArray(ops) ? Promise.all(ops) : Promise.resolve([]))),
     ...over.root,
@@ -460,5 +462,92 @@ describe("Waste ledger (§83)", () => {
     expect(dash.byDepartment["Ward A"]).toBe(3);
     expect(dash.byCategory["INFECTIOUS"]).toBe(6);
     expect(dash.treatedKg).toBe(3);
+  });
+});
+
+// ================= Spec #62 reconciliation =================
+
+describe("Reconciliation mismatch → exception (spec #62)", () => {
+  it("opens a RegulatoryException when SUBMITTED lacks an acknowledgement ref", async () => {
+    const prisma = makePrisma({
+      interopTransaction: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "tx1", tenantId: "t1", status: "SUBMITTED", ackRef: null, response: null, patientId: null,
+        }),
+      },
+    });
+    const svc = new InteropGatewayService(prisma, makeRules(prisma));
+    const res = await svc.reconcileOne("t1", "tx1");
+    expect(res.outcome).toBe("EXCEPTION");
+    expect(prisma.regulatoryException.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ kind: "GOVERNMENT_RECONCILIATION_MISMATCH", severity: "ERROR" }),
+      }),
+    );
+  });
+
+  it("confirms an ACKNOWLEDGED transaction as RECONCILED (ACCEPTED)", async () => {
+    const prisma = makePrisma({
+      interopTransaction: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "tx2", tenantId: "t1", status: "ACKNOWLEDGED", ackRef: "ACK-1", response: { code: "OK" }, patientId: null,
+        }),
+      },
+    });
+    const svc = new InteropGatewayService(prisma, makeRules(prisma));
+    const res = await svc.reconcileOne("t1", "tx2");
+    expect(res.outcome).toBe("RECONCILED");
+    expect(prisma.interopTransaction.update).toHaveBeenCalledWith({
+      where: { id: "tx2" },
+      data: { status: "ACCEPTED" },
+    });
+  });
+
+  it("flags REJECTED-response-but-ACKNOWLEDGED-status as a mismatch", async () => {
+    const prisma = makePrisma({
+      interopTransaction: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "tx3", tenantId: "t1", status: "ACKNOWLEDGED", ackRef: "ACK-2", response: { code: "REJECTED" }, patientId: null,
+        }),
+      },
+    });
+    const svc = new InteropGatewayService(prisma, makeRules(prisma));
+    const res = await svc.reconcileOne("t1", "tx3");
+    expect(res.outcome).toBe("EXCEPTION");
+  });
+
+  it("refuses to reconcile an unknown transaction", async () => {
+    const svc = new InteropGatewayService(makePrisma(), makeRules(makePrisma()));
+    await expect(svc.reconcileOne("t1", "nope")).rejects.toThrow(NotFoundException);
+  });
+});
+
+// ================= Spec #33 blood return =================
+
+describe("Blood unit return (spec #33)", () => {
+  it("returns an ISSUED unit to AVAILABLE and records the return event", async () => {
+    const prisma = makePrisma({
+      bloodUnit: {
+        findFirst: jest.fn().mockResolvedValue({ id: "u1", tenantId: "t1", status: "ISSUED", issuedTo: "pat-1" }),
+      },
+    });
+    const svc = new BloodChainService(prisma, makeRules(prisma));
+    const ret = await svc.returnUnit("t1", "u1", { reason: "not needed", returnedBy: "nurse-1" });
+    expect(ret.unitId).toBe("u1");
+    expect(prisma.bloodUnitReturn.create).toHaveBeenCalled();
+    expect(prisma.bloodUnit.update).toHaveBeenCalledWith({
+      where: { id: "u1" },
+      data: expect.objectContaining({ status: "AVAILABLE", issuedTo: null }),
+    });
+  });
+
+  it("refuses to return a unit that was never issued", async () => {
+    const prisma = makePrisma({
+      bloodUnit: {
+        findFirst: jest.fn().mockResolvedValue({ id: "u2", tenantId: "t1", status: "AVAILABLE" }),
+      },
+    });
+    const svc = new BloodChainService(prisma, makeRules(prisma));
+    await expect(svc.returnUnit("t1", "u2", {})).rejects.toThrow(ConflictException);
   });
 });

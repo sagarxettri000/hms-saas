@@ -262,4 +262,56 @@ export class InteropGatewayService {
       message: "Official adapter contract not yet implemented — transaction remains queued (§89)",
     };
   }
+
+  /**
+   * Spec #62 reconciliation: compare the hospital's authoritative record vs
+   * the gateway submission state vs the stored government response. Any
+   * mismatch opens a RegulatoryException (ERROR); an ACKNOWLEDGED txn with
+   * no mismatch is confirmed RECONCILED (ACCEPTED). Answers spec #66:
+   * "was it acknowledged, rejected, corrected, or reconciled?"
+   */
+  async reconcileOne(tenantId: string, txnId: string) {
+    const txn = await this.prisma.interopTransaction.findFirst({
+      where: { id: txnId, tenantId },
+    });
+    if (!txn) throw new NotFoundException("Interop transaction not found");
+
+    const govResponse = (txn.response as any)?.code ?? null;
+    const ackRef = txn.ackRef ?? null;
+    const mismatches: string[] = [];
+    if (txn.status === "SUBMITTED" && !ackRef) {
+      mismatches.push("Gateway SUBMITTED but no acknowledgement reference stored");
+    }
+    if (ackRef && govResponse && String(govResponse).toUpperCase() === "REJECTED" && txn.status === "ACKNOWLEDGED") {
+      mismatches.push("Government response REJECTED but gateway status ACKNOWLEDGED");
+    }
+
+    if (mismatches.length) {
+      const exception = await this.prisma.regulatoryException.create({
+        data: {
+          tenantId,
+          kind: "GOVERNMENT_RECONCILIATION_MISMATCH",
+          severity: "ERROR",
+          entityType: "InteropTransaction",
+          entityId: txn.id,
+          patientId: txn.patientId,
+          message: mismatches.join("; "),
+          details: { submittedState: txn.status, govResponse, ackRef },
+        },
+      });
+      await this.rules.logEvent(tenantId, "GOVERNMENT_RECONCILIATION_MISMATCH", "InteropTransaction", txn.id, {
+        exceptionId: exception.id,
+      });
+      return { txnId: txn.id, outcome: "EXCEPTION", mismatches, exceptionId: exception.id };
+    }
+
+    if (txn.status === "ACKNOWLEDGED") {
+      await this.prisma.interopTransaction.update({
+        where: { id: txn.id },
+        data: { status: "ACCEPTED" },
+      });
+      return { txnId: txn.id, outcome: "RECONCILED" };
+    }
+    return { txnId: txn.id, outcome: "NO_ACTION", status: txn.status };
+  }
 }

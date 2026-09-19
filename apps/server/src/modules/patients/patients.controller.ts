@@ -127,4 +127,27 @@ export class PatientsController {
   remove(@Param("id") id: string, @Req() req: any) {
     return this.patientsService.remove(req.user.tenantId, id, req.user.id);
   }
+
+  // ---- Effective-dated payor/scheme management (spec §2.1/§3) ----
+
+  @Get(":id/payors")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List a patient's payor/scheme history (effective-dated)" })
+  listPayors(@Param("id") id: string, @Req() req: any) {
+    return this.patientsService.listPayors(req.user.tenantId, id);
+  }
+
+  @Post(":id/payors")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Assign a payor/scheme with an eligibility window" })
+  assignPayor(@Param("id") id: string, @Body() dto: any, @Req() req: any) {
+    return this.patientsService.assignPayor(req.user.tenantId, id, dto, req.user.id);
+  }
+
+  @Get(":id/payors/active")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Resolve the patient's currently active primary payor" })
+  resolveActivePayor(@Param("id") id: string, @Req() req: any) {
+    return this.patientsService.resolveActivePayor(req.user.tenantId, id);
+  }
 }

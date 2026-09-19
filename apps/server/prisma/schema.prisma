@@ -247,6 +247,7 @@ enum RoomType {
 enum InvoiceStatus {
   DRAFT
   PENDING
+  FINALIZED
   PARTIAL
   PAID
   OVERDUE
@@ -700,6 +701,11 @@ model Tenant {
   dicomStudies            DicomStudy[]
   dicomNodes              DicomNode[]
   attendanceRecords       AttendanceRecord[]
+  patientPayors           PatientPayor[]
+  revenueSplitRules       RevenueSplitRule[]
+  revenueAllocations      RevenueAllocation[]
+  consultantAssignments   ConsultantAssignment[]
+  claimItems              ClaimItem[]
 
   @@index([status])
   @@index([createdAt])
@@ -1332,6 +1338,8 @@ model Patient {
   encounters          Encounter[]
   admissions          Admission[]
   insurancePolicies   InsurancePolicy[]
+  payors              PatientPayor[]
+  consultantAssignments ConsultantAssignment[]
   invoices            Invoice[]
   payments            Payment[]
   refunds             Refund[]
@@ -1751,6 +1759,7 @@ model Admission {
   chargeTransactions        ChargeTransaction[]
   dischargeBills            DischargeBill[]
   emergencyCase             EmergencyCase?
+  consultantAssignments     ConsultantAssignment[]
 
   @@index([tenantId, patientId])
   @@index([status])
@@ -2677,6 +2686,7 @@ model Invoice {
   schemeId             String?
   scheme               BillingScheme?  @relation(fields: [schemeId], references: [id], onDelete: SetNull)
   barcode              String?         @unique
+  @@unique([tenantId, idempotencyKey])
   printCount           Int             @default(0)
   issuedDate           DateTime        @default(now())
   dueDate              DateTime?
@@ -2687,6 +2697,11 @@ model Invoice {
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
 
+  finalizedAt          DateTime?
+  finalizedBy          String?
+  idempotencyKey       String?
+  billingMode          String?
+  revenueAllocations   RevenueAllocation[]
   items    InvoiceItem[]
   payments Payment[]
   refunds  Refund[]
@@ -2719,6 +2734,9 @@ model BillingScheme {
   updatedAt       DateTime @updatedAt
 
   invoices Invoice[]
+  payors    PatientPayor[]
+  revenueRules RevenueSplitRule[]
+  schemeInvoiceItems InvoiceItem[] @relation("SchemeInvoiceItems")
 
   @@unique([tenantId, name])
   @@index([tenantId, isActive])
@@ -2748,6 +2766,19 @@ model InvoiceItem {
   service         BillingService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   referenceType   String?
   referenceId     String?
+  chargeTransactionId String?
+  chargeTransaction ChargeTransaction? @relation(fields: [chargeTransactionId], references: [id], onDelete: SetNull)
+  netAmount       Decimal?     @db.Decimal(14, 2)
+  schemeId        String?
+  scheme          BillingScheme? @relation("SchemeInvoiceItems", fields: [schemeId], references: [id], onDelete: SetNull)
+  billingMode     String?
+  priceRuleId     String?
+  priceRuleVersion Int?
+  revenueRuleId   String?
+  revenueRuleVersion Int?
+  participants    Json?
+  revenueAllocations RevenueAllocation[]
+  claimItems ClaimItem[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime? @updatedAt
 
@@ -2755,6 +2786,7 @@ model InvoiceItem {
   @@index([invoiceId])
   @@map("invoice_items")
   @@index([tenantId, doctorId])
+  @@index([tenantId, chargeTransactionId])
 }
 model Payment {
   id              String        @id @default(cuid())
@@ -2918,6 +2950,7 @@ model BillingService {
   chargeTransactions ChargeTransaction[]
   dischargeBillDetails DischargeBillDetail[]
   invoiceItems InvoiceItem[]
+  revenueRules RevenueSplitRule[]
 
   @@unique([tenantId, code])
   @@index([tenantId, categoryId])
@@ -3035,6 +3068,7 @@ model InsuranceProvider {
   updatedAt     DateTime @updatedAt
 
   policies InsurancePolicy[]
+  claimItems ClaimItem[] @relation("ProviderClaimItems")
   claims   InsuranceClaim[]
 
   @@index([tenantId])
@@ -3062,6 +3096,8 @@ model InsurancePolicy {
   updatedAt       DateTime          @updatedAt
 
   claims InsuranceClaim[]
+  claimItems ClaimItem[] @relation("PolicyClaimItems")
+  patientPayors PatientPayor[]
 
   @@index([tenantId, patientId])
   @@map("insurance_policies")
@@ -3089,8 +3125,10 @@ model InsuranceClaim {
   rejectedAt      DateTime?
   rejectionReason String?
   settledAt       DateTime?
+  receivedAmount  Decimal?         @db.Decimal(14, 2)
   documents       Json?
   notes           String?
+  items           ClaimItem[]
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
@@ -3924,6 +3962,7 @@ model ChargeTransaction {
   createdAt            DateTime      @default(now())
 
   dischargeBillDetails DischargeBillDetail[]
+  invoiceItems InvoiceItem[]
 
   @@index([tenantId, patientId])
   @@index([tenantId, admissionId])
@@ -4018,4 +4057,176 @@ model DischargeBillDetail {
   @@index([tenantId, dischargeBillId])
   @@index([tenantId, serviceId])
   @@map("discharge_bill_details")
+}
+
+enum PayorPriority {
+  PRIMARY
+  SECONDARY
+}
+
+enum PayorStatus {
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+}
+
+enum ClaimItemStatus {
+  CLAIMED
+  PARTIALLY_APPROVED
+  APPROVED
+  REJECTED
+  SETTLED
+}
+
+model PatientPayor {
+  id               String        @id @default(cuid())
+  tenantId         String
+  tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId        String
+  patient          Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  schemeId         String
+  scheme           BillingScheme @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  policyId         String?
+  policy           InsurancePolicy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
+  priority         PayorPriority @default(PRIMARY)
+  status           PayorStatus   @default(ACTIVE)
+  memberNumber     String?
+  coveragePercent  Decimal       @default(100) @db.Decimal(5, 2)
+  copayPercent     Decimal       @default(0)   @db.Decimal(5, 2)
+  deductible       Decimal       @default(0)   @db.Decimal(14, 2)
+  coverageLimit    Decimal?      @db.Decimal(14, 2)
+  requiresAuth     Boolean       @default(false)
+  effectiveFrom    DateTime      @default(now())
+  effectiveTo      DateTime?
+  verifiedBy       String?
+  verifiedAt       DateTime?
+  notes            String?
+  createdBy        String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([tenantId, patientId])
+  @@index([tenantId, schemeId])
+  @@index([patientId, effectiveFrom])
+  @@map("patient_payors")
+}
+
+model RevenueSplitRule {
+  id                 String        @id @default(cuid())
+  tenantId           String
+  tenant             Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ruleCode           String
+  version            Int           @default(1)
+  schemeId           String?
+  scheme             BillingScheme? @relation(fields: [schemeId], references: [id], onDelete: SetNull)
+  billingMode        String?
+  encounterType      String?
+  serviceId          String?
+  service            BillingService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  serviceCategoryId  String?
+  basis              String        @default("NET_EXCL_TAX")
+  participants       Json
+  allowUnallocated   Boolean       @default(false)
+  priority           Int           @default(0)
+  effectiveFrom      DateTime      @default(now())
+  effectiveTo        DateTime?
+  isActive           Boolean       @default(true)
+  approvedBy         String?
+  approvedAt         DateTime?
+  changeReason       String?
+  createdBy          String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@unique([tenantId, ruleCode, version])
+  @@index([tenantId, isActive])
+  @@index([tenantId, schemeId])
+  @@index([serviceId])
+  @@map("revenue_split_rules")
+}
+
+model RevenueAllocation {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoiceId          String
+  invoice            Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceItemId      String
+  invoiceItem        InvoiceItem @relation(fields: [invoiceItemId], references: [id], onDelete: Cascade)
+  participantType    String
+  participantId      String
+  shareType          String
+  shareValue         Decimal  @db.Decimal(10, 2)
+  basis              String
+  basisAmount        Decimal  @db.Decimal(14, 2)
+  calculatedAmount   Decimal  @db.Decimal(14, 2)
+  ruleId             String
+  ruleVersion        Int
+  ruleTier           String
+  explanation        String
+  reversed           Boolean  @default(false)
+  reversalOfId       String?
+  reversal           RevenueAllocation? @relation("ReversalLink", fields: [reversalOfId], references: [id], onDelete: SetNull)
+  reversals          RevenueAllocation[] @relation("ReversalLink")
+  createdAt          DateTime @default(now())
+
+  @@index([tenantId, invoiceId])
+  @@index([tenantId, invoiceItemId])
+  @@index([tenantId, participantId])
+  @@index([reversalOfId])
+  @@map("revenue_allocations")
+}
+
+model ConsultantAssignment {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  admissionId   String
+  admission     Admission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
+  patientId     String
+  patient       Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId      String
+  role          String    @default("PRIMARY_CONSULTANT")
+  isPrimary     Boolean   @default(false)
+  departmentId  String?
+  specialty     String?
+  startAt       DateTime  @default(now())
+  endAt         DateTime?
+  assignedBy    String?
+  endReason     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([tenantId, admissionId])
+  @@index([tenantId, doctorId])
+  @@index([patientId])
+  @@map("consultant_assignments")
+}
+
+model ClaimItem {
+  id             String          @id @default(cuid())
+  tenantId       String
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  claimId        String
+  claim          InsuranceClaim  @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  invoiceItemId  String
+  invoiceItem    InvoiceItem     @relation(fields: [invoiceItemId], references: [id], onDelete: Cascade)
+  providerId     String?
+  provider       InsuranceProvider? @relation("ProviderClaimItems", fields: [providerId], references: [id], onDelete: SetNull)
+  policyId       String?
+  policy         InsurancePolicy? @relation("PolicyClaimItems", fields: [policyId], references: [id], onDelete: SetNull)
+  claimedAmount  Decimal         @db.Decimal(14, 2)
+  approvedAmount Decimal?        @db.Decimal(14, 2)
+  deductedAmount Decimal         @default(0) @db.Decimal(14, 2)
+  receivedAmount Decimal         @default(0) @db.Decimal(14, 2)
+  status         ClaimItemStatus @default(CLAIMED)
+  rejectionReason String?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([claimId, invoiceItemId])
+  @@index([tenantId, claimId])
+  @@index([tenantId, invoiceItemId])
+  @@map("claim_items")
 }

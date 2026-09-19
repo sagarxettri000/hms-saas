@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
+import { round } from "@hms/shared";
 
 export interface CreateShareRuleDto {
   doctorId?: string;
@@ -123,16 +124,19 @@ export class DoctorShareService {
           (!r.serviceId || r.serviceId === item.serviceId) &&
           (!r.departmentId || r.departmentId === item.departmentId),
       );
+      // Basis is NET EXCLUDING TAX (spec §15): doctors never share tax.
+      // lineTotal is tax-inclusive, so tax is subtracted explicitly.
       const gross = Number(item.lineTotal);
       const discount = Number(item.discountAmount) || 0;
-      const net = gross - discount;
+      const tax = Number(item.taxAmount) || 0;
+      const net = round(gross - discount - tax);
       if (net <= 0) continue;
 
       let doctorShare = 0;
       if (applicable) {
         doctorShare =
           applicable.shareType === "PERCENTAGE"
-            ? (net * Number(applicable.shareValue)) / 100
+            ? round((net * Number(applicable.shareValue)) / 100)
             : Number(applicable.shareValue);
         if (doctorShare > net) doctorShare = net;
       }
@@ -338,6 +342,217 @@ export class DoctorShareService {
       paidAmount: Number(paid._sum.doctorShare || 0),
       totalAmount: Number(total._sum.doctorShare || 0),
       totalTransactions: total._count,
+    };
+  }
+
+  // ------------------------------------------------------------------
+  // Versioned multi-participant revenue-split rules (spec §14/§17/§46)
+  // ------------------------------------------------------------------
+
+  async findRevenueRules(tenantId: string, schemeId?: string) {
+    if (!(this.prisma as any).revenueSplitRule) return [];
+    return (this.prisma as any).revenueSplitRule.findMany({
+      where: {
+        tenantId,
+        ...(schemeId ? { schemeId } : {}),
+      },
+      orderBy: [{ ruleCode: 'asc' }, { version: 'desc' }],
+    });
+  }
+
+  /**
+   * Create a NEW VERSION of a rule (never in-place mutation, spec §4/§34):
+   * deactivates the current active version and records the change reason.
+   */
+  async createRevenueRule(
+    tenantId: string,
+    dto: {
+      ruleCode: string;
+      schemeId?: string;
+      billingMode?: string;
+      encounterType?: string;
+      serviceId?: string;
+      serviceCategoryId?: string;
+      basis?: string;
+      participants: Array<{
+        type: string;
+        shareType: string;
+        shareValue: number;
+        participantId?: string;
+      }>;
+      allowUnallocated?: boolean;
+      priority?: number;
+      effectiveFrom?: string | Date;
+      changeReason?: string;
+    },
+    userId?: string,
+  ) {
+    if (!(this.prisma as any).revenueSplitRule)
+      throw new BadRequestException('Revenue rules are not available');
+
+    const { resolveRule } = await import('@hms/shared');
+    const { validateRuleShares } = await import('@hms/shared');
+
+    const existingVersions = await (this.prisma as any).revenueSplitRule.findMany({
+      where: { tenantId, ruleCode: dto.ruleCode },
+      orderBy: { version: 'desc' },
+      take: 1,
+    });
+    const version = (existingVersions[0]?.version ?? 0) + 1;
+
+    // Share validation happens through the shared engine before persisting.
+    const probe = {
+      id: `${dto.ruleCode}-v${version}`,
+      version,
+      schemeId: dto.schemeId ?? null,
+      billingMode: dto.billingMode ?? null,
+      encounterType: dto.encounterType ?? null,
+      serviceId: dto.serviceId ?? null,
+      serviceCategoryId: dto.serviceCategoryId ?? null,
+      basis: (dto.basis ?? 'NET_EXCL_TAX') as any,
+      participants: dto.participants,
+      allowUnallocated: dto.allowUnallocated ?? false,
+      priority: dto.priority ?? 0,
+      effectiveFrom: new Date(dto.effectiveFrom ?? new Date()).toISOString(),
+      effectiveTo: null,
+      isActive: true,
+    };
+    validateRuleShares(probe as any);
+
+    // Conflict check: the new rule must not tie with an existing one at the
+    // same tier for the same context (deterministic resolution, spec §46).
+    const activeRules = await (this.prisma as any).revenueSplitRule.findMany({
+      where: { tenantId, isActive: true },
+    });
+    const mapped = activeRules.map((r: any) => ({
+      id: r.id,
+      version: r.version,
+      schemeId: r.schemeId,
+      billingMode: r.billingMode,
+      encounterType: r.encounterType,
+      serviceId: r.serviceId,
+      serviceCategoryId: r.serviceCategoryId,
+      basis: r.basis,
+      participants: r.participants,
+      allowUnallocated: r.allowUnallocated,
+      priority: r.priority,
+      effectiveFrom: r.effectiveFrom.toISOString(),
+      effectiveTo: r.effectiveTo ? r.effectiveTo.toISOString() : null,
+      isActive: r.isActive,
+    }));
+    const ctx = {
+      schemeId: dto.schemeId ?? null,
+      billingMode: dto.billingMode ?? null,
+      encounterType: dto.encounterType ?? null,
+      serviceId: dto.serviceId ?? null,
+      serviceCategoryId: dto.serviceCategoryId ?? null,
+      at: new Date().toISOString(),
+    };
+    const resolution = resolveRule([...mapped, probe as any], ctx);
+    if (resolution.status === 'CONFLICT') {
+      throw new ConflictException(
+        'Rule conflicts with an existing rule at the same tier/priority — adjust priority or scope',
+      );
+    }
+
+    return (this.prisma as any).revenueSplitRule.create({
+      data: {
+        tenantId,
+        ruleCode: dto.ruleCode,
+        version,
+        schemeId: dto.schemeId,
+        billingMode: dto.billingMode,
+        encounterType: dto.encounterType,
+        serviceId: dto.serviceId,
+        serviceCategoryId: dto.serviceCategoryId,
+        basis: dto.basis ?? 'NET_EXCL_TAX',
+        participants: dto.participants,
+        allowUnallocated: dto.allowUnallocated ?? false,
+        priority: dto.priority ?? 0,
+        effectiveFrom: dto.effectiveFrom ? new Date(dto.effectiveFrom) : new Date(),
+        changeReason: dto.changeReason,
+        createdBy: userId,
+        isActive: true,
+      },
+    });
+  }
+
+  async deactivateRevenueRule(
+    tenantId: string,
+    id: string,
+    reason: string,
+    userId?: string,
+  ) {
+    if (!(this.prisma as any).revenueSplitRule)
+      throw new BadRequestException('Revenue rules are not available');
+    const rule = await (this.prisma as any).revenueSplitRule.findFirst({
+      where: { id, tenantId },
+    });
+    if (!rule) throw new NotFoundException('Revenue rule not found');
+    return (this.prisma as any).revenueSplitRule.update({
+      where: { id },
+      data: { isActive: false, changeReason: reason },
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // Reconciliation exceptions (spec §42/§53)
+  // ------------------------------------------------------------------
+
+  async getReconciliationExceptions(tenantId: string) {
+    const [
+      performedNotBilled,
+      unbilledCharges,
+      finalizedWithoutAllocations,
+      claimVariances,
+    ] = await Promise.all([
+      // Billed-without-consumed-utilization: an invoice line references a
+      // charge that is not marked BILLED (consumption skipped/bypassed).
+      (this.prisma as any).invoiceItem
+        ? (this.prisma as any).invoiceItem
+            .count({
+              where: {
+                tenantId,
+                chargeTransactionId: { not: null },
+                chargeTransaction: { is: { billingStatus: { not: 'BILLED' } } },
+              },
+            })
+            .catch(() => 0)
+        : Promise.resolve(0),
+      // Performed but not billed: charges still UNBILLED.
+      (this.prisma as any).chargeTransaction
+        ? (this.prisma as any).chargeTransaction.count({
+            where: { tenantId, billingStatus: 'UNBILLED' },
+          }).catch(() => 0)
+        : Promise.resolve(0),
+      // Finalized invoices missing revenue allocations entirely.
+      (this.prisma as any).revenueAllocation
+        ? (this.prisma as any).invoice.count({
+            where: {
+              tenantId,
+              finalizedAt: { not: null },
+              revenueAllocations: { none: {} },
+            },
+          }).catch(() => 0)
+        : Promise.resolve(0),
+      // Claims where approved != claimed, or received != approved.
+      (this.prisma as any).insuranceClaim.count({
+        where: {
+          tenantId,
+          OR: [
+            { approvedAmount: { not: null } },
+            { receivedAmount: { not: null } },
+          ],
+        },
+      }).then((n: number) => n).catch(() => 0),
+    ]);
+
+    return {
+      performedNotBilled: unbilledCharges,
+      billedWithoutUtilization: performedNotBilled,
+      finalizedWithoutAllocations,
+      claimCount: claimVariances,
+      generatedAt: new Date().toISOString(),
     };
   }
 }

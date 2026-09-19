@@ -97,6 +97,24 @@ export class AdmissionsService {
       data: { status: "ACTIVE" },
     });
 
+    // Consultant assignment history (spec §7.1): the original primary
+    // consultant becomes a permanent, dated record — never silently mutated.
+    if (dto.admittingDoctorId && (this.prisma as any).consultantAssignment) {
+      await this.prisma.consultantAssignment.create({
+        data: {
+          tenantId,
+          admissionId: admission.id,
+          patientId: dto.patientId,
+          doctorId: dto.admittingDoctorId,
+          role: "PRIMARY_CONSULTANT",
+          isPrimary: true,
+          departmentId: dto.departmentId || bed?.room?.ward?.departmentId,
+          startAt: admission.admissionDate,
+          assignedBy: userId,
+        },
+      });
+    }
+
     if (bed) {
       // Atomically claim the bed so concurrent admissions cannot double-book.
       await this.prisma.$transaction(async (tx) => {
@@ -277,6 +295,45 @@ export class AdmissionsService {
       patientId: _p,
       ...fields
     } = dto as any;
+
+    // Consultant change (spec §7.1): close the current primary assignment and
+    // open a new one — history is preserved, never overwritten.
+    if (
+      fields.admittingDoctorId &&
+      fields.admittingDoctorId !== admission.admittingDoctorId &&
+      (this.prisma as any).consultantAssignment
+    ) {
+      await this.prisma.consultantAssignment.updateMany({
+        where: {
+          admissionId: id,
+          isPrimary: true,
+          endAt: null,
+        },
+        data: {
+          endAt: new Date(),
+          endReason: `Replaced by doctor ${fields.admittingDoctorId}`,
+        },
+      });
+      await this.prisma.consultantAssignment.create({
+        data: {
+          tenantId,
+          admissionId: id,
+          patientId: admission.patientId,
+          doctorId: fields.admittingDoctorId,
+          role: "PRIMARY_CONSULTANT",
+          isPrimary: true,
+          departmentId: fields.departmentId ?? admission.departmentId,
+          startAt: new Date(),
+          assignedBy: userId,
+        },
+      });
+      await this.logAudit(tenantId, userId, "UPDATE", "Admission", id, {
+        action: "PRIMARY_CONSULTANT_CHANGED",
+        from: admission.admittingDoctorId,
+        to: fields.admittingDoctorId,
+      });
+    }
+
     return this.prisma.admission.update({
       where: { id },
       data: { ...fields, updatedBy: userId },

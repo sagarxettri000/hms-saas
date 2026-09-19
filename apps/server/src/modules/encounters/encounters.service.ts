@@ -114,6 +114,26 @@ export class EncountersService {
       if (!doctorId) doctorId = appointment.doctorId;
     }
 
+    // Resolve the patient's active primary payor (best-effort, guarded for
+    // unit-test mocks and schema rollout).
+    let encounterPayor: any = null;
+    if ((this.prisma as any).patientPayor) {
+      const now = new Date();
+      encounterPayor = await (this.prisma as any)
+        .patientPayor.findFirst({
+          where: {
+            tenantId,
+            patientId: dto.patientId,
+            status: 'ACTIVE',
+            priority: 'PRIMARY',
+            effectiveFrom: { lte: now },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+          },
+          orderBy: { effectiveFrom: 'desc' },
+        })
+        .catch(() => null);
+    }
+
     const encounter = await this.prisma.$transaction(async (tx) => {
       const created = await tx.encounter.create({
         data: {
@@ -142,6 +162,12 @@ export class EncountersService {
           followUpNotes: dto.followUpNotes,
           consultationStartedAt: new Date(),
           createdBy: userId,
+          // Payor context frozen at encounter creation (spec §2.1/§5): the
+          // patient's effective primary payor becomes part of the encounter's
+          // historical record — later scheme changes never rewrite it.
+          ...(encounterPayor
+            ? { insuranceCoverage: { payorId: encounterPayor.id, schemeId: encounterPayor.schemeId } as any }
+            : {}),
         },
       });
 

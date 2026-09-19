@@ -9,6 +9,51 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PharmacyService } from "../pharmacy/pharmacy.service";
 import { buildInvoicePdf, buildReceiptPdf } from "./invoice-pdf";
+import {
+  allocate,
+  LineParticipant,
+  LineRuleContext,
+  RevenueSplitRule,
+  round,
+  splitInvoiceLines,
+  SplitResult,
+  allSplitsValid,
+} from "@hms/shared";
+
+/** Map a stored RevenueSplitRule row onto the shared engine shape. */
+function mapRule(row: {
+  id: string;
+  version: number;
+  schemeId?: string | null;
+  billingMode?: string | null;
+  encounterType?: string | null;
+  serviceId?: string | null;
+  serviceCategoryId?: string | null;
+  basis: string;
+  participants: unknown;
+  allowUnallocated: boolean;
+  priority: number;
+  effectiveFrom: Date;
+  effectiveTo?: Date | null;
+  isActive: boolean;
+}): RevenueSplitRule {
+  return {
+    id: row.id,
+    version: row.version,
+    schemeId: row.schemeId,
+    billingMode: row.billingMode,
+    encounterType: row.encounterType,
+    serviceId: row.serviceId,
+    serviceCategoryId: row.serviceCategoryId,
+    basis: row.basis as RevenueSplitRule["basis"],
+    participants: (row.participants as RevenueSplitRule["participants"]) ?? [],
+    allowUnallocated: row.allowUnallocated,
+    priority: row.priority,
+    effectiveFrom: row.effectiveFrom.toISOString(),
+    effectiveTo: row.effectiveTo ? row.effectiveTo.toISOString() : null,
+    isActive: row.isActive,
+  };
+}
 
 const MAX_LIMIT = 100;
 
@@ -25,6 +70,8 @@ export interface InvoiceItemDto {
   departmentId?: string;
   referenceType?: string;
   referenceId?: string;
+  /** Documented participation for revenue splitting (spec §18). */
+  participants?: LineParticipant[];
 }
 
 export interface CreateInvoiceDto {
@@ -41,6 +88,10 @@ export interface CreateInvoiceDto {
   dueDate?: Date | string;
   notes?: string;
   items: InvoiceItemDto[];
+  /** Idempotent invoice creation: same key returns the original invoice. */
+  idempotencyKey?: string;
+  /** Explicit billing mode (e.g. ONCO, DIALYSIS); resolved from payor if absent. */
+  billingMode?: string;
 }
 
 export interface CreatePaymentDto {
@@ -247,28 +298,79 @@ export class BillingService {
     if (!dto.items || dto.items.length === 0)
       throw new BadRequestException("At least one invoice item required");
 
+    // Idempotent creation (spec §38): a repeated request returns the original
+    // invoice instead of creating a duplicate.
+    if (dto.idempotencyKey) {
+      const existing = await this.prisma.invoice.findUnique({
+        where: {
+          tenantId_idempotencyKey: {
+            tenantId,
+            idempotencyKey: dto.idempotencyKey,
+          },
+        },
+      });
+      if (existing) return existing;
+    }
+
     const [catalog, settings] = await Promise.all([
       this.prisma.billingService.findMany({
         where: { tenantId, isActive: true },
       }),
       this.getBillingSettings(tenantId),
     ]);
+
+    // --- Scheme/payor context (spec §2.1): resolve the patient's effective
+    // primary payor (active, within its eligibility window) and freeze its
+    // identity onto the invoice. Explicit dto.schemeId still wins.
+    let billingMode: string | null = dto.billingMode ?? null;
+    let payorSchemeId: string | null = dto.schemeId ?? null;
+    if (!payorSchemeId && this.prisma.patientPayor) {
+      const now = new Date();
+      const activePayor = await this.prisma.patientPayor.findFirst({
+        where: {
+          tenantId,
+          patientId: dto.patientId,
+          status: "ACTIVE",
+          priority: "PRIMARY",
+          effectiveFrom: { lte: now },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+        },
+        orderBy: { effectiveFrom: "desc" },
+      });
+      if (activePayor) payorSchemeId = activePayor.schemeId;
+    }
     const taxConfig = settings.taxConfig as any;
     const defaultTax = Number(taxConfig?.defaultTaxPercent || 0);
     const rounding = settings.rounding as any;
     const roundEnabled = !!rounding?.enabled;
 
     let scheme: any = null;
-    if (dto.schemeId) {
+    if (payorSchemeId) {
       scheme = await this.prisma.billingScheme.findFirst({
-        where: { id: dto.schemeId, tenantId, isActive: true },
+        where: { id: payorSchemeId, tenantId, isActive: true },
       });
       if (!scheme)
         throw new NotFoundException("Billing scheme not found or inactive");
+      if (!billingMode)
+        billingMode =
+          (scheme.rules && typeof scheme.rules === "object"
+            ? (scheme.rules as any).billingMode
+            : null) ?? null;
     }
 
     const catalogMap = new Map(catalog.map((s) => [s.id, s] as const));
     for (const s of catalog) catalogMap.set(s.code, s);
+
+    // --- Revenue rules (spec §14/§17): load active versioned rules once;
+    // the deterministic resolver picks the rule per line and its version is
+    // frozen onto the line at invoice creation.
+    const revenueRuleRows =
+      this.prisma.revenueSplitRule && billingMode
+        ? await this.prisma.revenueSplitRule.findMany({
+            where: { tenantId, isActive: true },
+          })
+        : [];
+    const revenueRules = (revenueRuleRows as any[]).map(mapRule);
 
     const items = dto.items.map((item) => {
       const quantity = this.validateMoney(item.quantity ?? 1, {
@@ -317,6 +419,10 @@ export class BillingService {
       let lineTotal = taxable + taxAmount;
       if (roundEnabled) lineTotal = Math.round(lineTotal);
 
+      // Server-authoritative net (excl. tax) — the default allocation basis
+      // and the SSOT value stored per line (spec §11, §15).
+      const netAmount = round(gross - discountAmount);
+
       return {
         tenantId,
         serviceName,
@@ -330,10 +436,20 @@ export class BillingService {
         taxPercent,
         taxAmount,
         lineTotal,
+        netAmount,
         doctorId: item.doctorId,
         departmentId: catalogItem?.departmentId || item.departmentId,
         referenceType: item.referenceType,
         referenceId: item.referenceId,
+        chargeTransactionId:
+          item.referenceType === "charge" ||
+          item.referenceType === "CHARGE_TRANSACTION"
+            ? item.referenceId
+            : null,
+        schemeId: scheme?.id ?? null,
+        billingMode,
+        participants: item.participants ?? [],
+        serviceCategoryId: catalogItem?.categoryId ?? null,
       };
     });
 
@@ -357,6 +473,46 @@ export class BillingService {
       throw new BadRequestException("Total amount cannot be negative");
 
     const invoiceNumber = await this.generateInvoiceNumber(tenantId);
+
+    // --- Per-line revenue split (spec §13/§47): computed BEFORE persistence
+    // so a missing/conflicting/invalid rule configuration blocks the invoice
+    // instead of silently billing without an allocation.
+    const nowIso = new Date().toISOString();
+    const splitLinesForEngine = items.map((it, idx) => ({
+      lineId: `L${idx}`,
+      quantity: it.quantity,
+      rate: it.rate,
+      discountAmount: it.discountAmount,
+      taxAmount: it.taxAmount,
+      participants: it.participants,
+      serviceId: it.serviceId,
+      serviceCategoryId: it.serviceCategoryId,
+    }));
+    const splitResults: SplitResult[] =
+      revenueRules.length > 0
+        ? splitInvoiceLines(
+            splitLinesForEngine,
+            revenueRules,
+            (line): LineRuleContext => {
+              const src = items[Number(line.lineId.slice(1))];
+              return {
+                schemeId: scheme?.id ?? null,
+                billingMode,
+                serviceId: src.serviceId,
+                serviceCategoryId: src.serviceCategoryId,
+                at: nowIso,
+              };
+            },
+          )
+        : [];
+    if (revenueRules.length > 0 && !allSplitsValid(splitResults)) {
+      const failures = splitResults
+        .filter((r) => r.status !== "OK" && r.status !== "NO_PARTICIPANTS")
+        .map((r) => `${r.lineId}: ${r.message}`);
+      throw new BadRequestException(
+        `Invoice blocked by revenue-split validation — ${failures.join("; ")}`,
+      );
+    }
 
     const invoice = await this.prisma.$transaction(async (tx) => {
       const created = await tx.invoice.create({
@@ -382,13 +538,64 @@ export class BillingService {
           paidAmount: 0,
           dueAmount: totalAmount,
           isCredit: dto.isCredit || false,
+          idempotencyKey: dto.idempotencyKey,
+          billingMode,
           dueDate: dto.dueDate ? this.normalizeDate(dto.dueDate) : undefined,
           notes: dto.notes,
           createdBy: userId,
-          items: { create: items },
+          items: {
+            create: items.map(({ serviceCategoryId: _sc, ...itemData }) => ({
+              ...itemData,
+              participants: itemData.participants as unknown as Prisma.InputJsonValue,
+            })),
+          },
         },
         include: { items: true },
       });
+
+      // Persist per-line revenue allocations — the SSOT split records
+      // (spec §13/§25) that refunds reverse and reports consume.
+      if (revenueRules.length > 0 && created.items.length > 0) {
+        const allocationRows: any[] = [];
+        splitResults.forEach((result, idx) => {
+          if (result.status !== "OK") return;
+          const invItem = created.items[idx];
+          if (!invItem) return;
+          for (const a of result.allocations) {
+            allocationRows.push({
+              tenantId,
+              invoiceId: created.id,
+              invoiceItemId: invItem.id,
+              participantType: a.participantType,
+              participantId: a.participantId,
+              shareType: a.shareType,
+              shareValue: a.shareValue,
+              basis: a.basis,
+              basisAmount: a.basisAmount,
+              calculatedAmount: a.calculatedAmount,
+              ruleId: a.ruleId,
+              ruleVersion: a.ruleVersion,
+              ruleTier: a.ruleTier,
+              explanation: a.explanation,
+            });
+          }
+        });
+        if (allocationRows.length > 0 && tx.revenueAllocation) {
+          await tx.revenueAllocation.createMany({ data: allocationRows });
+        }
+      }
+
+      // Consume utilization records (spec §9/§32): a charge referenced by a
+      // billed line can never be billed again.
+      const consumedChargeIds = items
+        .map((it) => it.chargeTransactionId)
+        .filter((v): v is string => !!v);
+      if (consumedChargeIds.length > 0 && tx.chargeTransaction) {
+        await tx.chargeTransaction.updateMany({
+          where: { id: { in: consumedChargeIds }, tenantId },
+          data: { billingStatus: "BILLED" },
+        });
+      }
 
       if (dto.isCredit) {
         await this.addCreditBalance(tx, tenantId, dto.patientId, totalAmount);
@@ -609,7 +816,7 @@ export class BillingService {
           },
         },
         admission: true,
-        items: true,
+        items: { include: { revenueAllocations: true } },
         payments: { orderBy: { paidAt: "desc" } },
         refunds: { orderBy: { createdAt: "desc" } },
         deposits: true,
@@ -669,6 +876,10 @@ export class BillingService {
       where: { id, tenantId },
     });
     if (!invoice) throw new NotFoundException("Invoice not found");
+    if (invoice.finalizedAt)
+      throw new ConflictException(
+        "Invoice is finalized — use a credit note/adjustment workflow",
+      );
     if (Number(invoice.paidAmount) > 0)
       throw new ConflictException("Cannot discount an invoice with payments");
 
@@ -782,6 +993,231 @@ export class BillingService {
       reason: dto.reason,
     });
     return updated;
+  }
+
+  /** Immutability guard (spec §34): finalized invoices reject in-place edits. */
+  private assertNotFinalized(invoice: { finalizedAt?: Date | null } | null) {
+    if (invoice?.finalizedAt)
+      throw new ConflictException(
+        "Invoice is finalized — use a credit note/adjustment workflow",
+      );
+  }
+
+  /**
+   * Finalize an invoice (spec §24/§47): runs the split engine, persists the
+   * per-line RevenueAllocation records, and freezes the invoice. Historical
+   * allocations keep their rule versions forever (spec §4).
+   */
+  async finalizeInvoice(tenantId: string, id: string, userId?: string) {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id, tenantId },
+      include: { items: true, scheme: true },
+    });
+    if (!invoice) throw new NotFoundException("Invoice not found");
+    if (invoice.finalizedAt)
+      throw new ConflictException("Invoice is already finalized");
+    if (invoice.status === "CANCELLED")
+      throw new ConflictException("Cannot finalize a cancelled invoice");
+    if (invoice.status === "DRAFT")
+      throw new ConflictException("Draft invoices must be reviewed first");
+
+    const [ruleRows, categories] = await Promise.all([
+      this.prisma.revenueSplitRule
+        ? this.prisma.revenueSplitRule.findMany({
+            where: { tenantId, isActive: true },
+          })
+        : Promise.resolve([] as any[]),
+      this.prisma.serviceCategory.findMany({ where: { tenantId } }),
+    ]);
+    const revenueRules = (ruleRows as any[]).map(mapRule);
+    const categoryById = new Map(categories.map((c: any) => [c.id, c] as const));
+
+    const nowIso = new Date().toISOString();
+    const engineLines = invoice.items.map((it, idx) => ({
+      lineId: `L${idx}`,
+      quantity: Number(it.quantity),
+      rate: Number(it.rate),
+      discountAmount: Number(it.discountAmount),
+      taxAmount: Number(it.taxAmount),
+      participants:
+        (it.participants as any[] | null)?.map((p) => ({
+          type: String(p.type ?? ""),
+          participantId: String(p.participantId ?? ""),
+        })) ??
+        (it.doctorId ? [{ type: "PRIMARY_DOCTOR", participantId: it.doctorId }] : []),
+      serviceId: it.serviceId,
+      serviceCategoryId: it.serviceId
+        ? undefined
+        : undefined,
+    }));
+
+    // Resolve each line's service category from the catalog.
+    const catalogRows = await this.prisma.billingService.findMany({
+      where: { tenantId },
+      select: { id: true, categoryId: true },
+    });
+    const categoryByService = new Map(
+      catalogRows.map((s: any) => [s.id, s.categoryId] as const),
+    );
+    for (let i = 0; i < engineLines.length; i++) {
+      engineLines[i].serviceCategoryId =
+        categoryByService.get(invoice.items[i].serviceId ?? "") ?? undefined;
+    }
+
+    const results =
+      revenueRules.length > 0
+        ? splitInvoiceLines(
+            engineLines,
+            revenueRules,
+            (line): LineRuleContext => ({
+              schemeId: invoice.schemeId,
+              billingMode: invoice.billingMode,
+              serviceId: line.serviceId,
+              serviceCategoryId: line.serviceCategoryId,
+              at: nowIso,
+            }),
+          )
+        : [];
+    if (revenueRules.length > 0 && !allSplitsValid(results)) {
+      const failures = results
+        .filter((r) => r.status !== "OK" && r.status !== "NO_PARTICIPANTS")
+        .map((r) => `${r.lineId}: ${r.message}`);
+      throw new ConflictException(
+        `Finalization blocked by revenue-split validation — ${failures.join("; ")}`,
+      );
+    }
+
+    let allocationCount = 0;
+    return this.prisma.$transaction(async (tx) => {
+      if (revenueRules.length > 0) {
+        const allocationRows: any[] = [];
+        results.forEach((result, idx) => {
+          if (result.status !== "OK") return;
+          const invItem = invoice.items[idx];
+          if (!invItem) return;
+          for (const a of result.allocations) {
+            allocationRows.push({
+              tenantId,
+              invoiceId: invoice.id,
+              invoiceItemId: invItem.id,
+              participantType: a.participantType,
+              participantId: a.participantId,
+              shareType: a.shareType,
+              shareValue: a.shareValue,
+              basis: a.basis,
+              basisAmount: a.basisAmount,
+              calculatedAmount: a.calculatedAmount,
+              ruleId: a.ruleId,
+              ruleVersion: a.ruleVersion,
+              ruleTier: a.ruleTier,
+              explanation: a.explanation,
+            });
+          }
+        });
+        // Idempotent: finalizing twice must not duplicate allocations.
+        if (allocationRows.length > 0 && tx.revenueAllocation) {
+          const existing = await tx.revenueAllocation.count({
+            where: { invoiceId: invoice.id, reversed: false },
+          });
+          if (existing === 0) {
+            await tx.revenueAllocation.createMany({ data: allocationRows });
+            allocationCount = allocationRows.length;
+          }
+        }
+      }
+
+      const updated = await tx.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          finalizedAt: new Date(),
+          finalizedBy: userId,
+          status: "FINALIZED",
+        },
+      });
+      await this.logAudit(tenantId, userId, "UPDATE", "Invoice", invoice.id, {
+        action: "FINALIZED",
+        allocations: allocationCount,
+      });
+      return updated;
+    });
+  }
+
+  /**
+   * Reverse the revenue allocations of an invoice after a completed refund
+   * (spec §22): creates reversal rows referencing the ORIGINAL allocations —
+   * never recalculated with today's rules.
+   */
+  private async reverseRevenueAllocations(
+    tx: any,
+    tenantId: string,
+    invoiceId: string,
+    refundAmount: number,
+    userId?: string,
+  ) {
+    if (!tx.revenueAllocation) return;
+    const originals = await tx.revenueAllocation.findMany({
+      where: { tenantId, invoiceId, reversed: false },
+    });
+    if (originals.length === 0) return;
+
+    const invoice = await tx.invoice.findUnique({ where: { id: invoiceId } });
+    const total = Number(invoice?.totalAmount ?? 0);
+    if (total <= 0) return;
+    const ratio = Math.min(refundAmount / total, 1);
+
+    // Proportionally reverse each original allocation at the same frozen
+    // rule version/basis/percentage (largest-remainder keeps sums exact).
+    const grouped = new Map<string, typeof originals>();
+    for (const a of originals) {
+      const key = a.invoiceItemId;
+      const list = grouped.get(key) ?? [];
+      list.push(a);
+      grouped.set(key, list);
+    }
+    for (const [, list] of grouped) {
+      const weights = list.map((a: any) => Number(a.calculatedAmount));
+      const lineTarget = -round(
+        list.reduce(
+          (s: number, a: any) => s + Number(a.calculatedAmount),
+          0,
+        ) * ratio,
+      );
+      // Negate the largest-remainder allocation of the absolute target so the
+      // reversal rows sum EXACTLY to the negative line target.
+      const parts = allocate(Math.abs(lineTarget), weights).map((v) => -v);
+      for (let i = 0; i < list.length; i++) {
+        const orig = list[i];
+        await tx.revenueAllocation.create({
+          data: {
+            tenantId,
+            invoiceId,
+            invoiceItemId: orig.invoiceItemId,
+            participantType: orig.participantType,
+            participantId: orig.participantId,
+            shareType: orig.shareType,
+            shareValue: orig.shareValue,
+            basis: orig.basis,
+            basisAmount: orig.basisAmount,
+            calculatedAmount: parts[i],
+            ruleId: orig.ruleId,
+            ruleVersion: orig.ruleVersion,
+            ruleTier: orig.ruleTier,
+            explanation: `Reversal of allocation ${orig.id} (refund ratio ${ratio})`,
+            reversed: false,
+            reversalOfId: orig.id,
+          },
+        });
+        await tx.revenueAllocation.update({
+          where: { id: orig.id },
+          data: { reversed: true },
+        });
+      }
+    }
+    await this.logAudit(tenantId, userId, "UPDATE", "Invoice", invoiceId, {
+      action: "REVENUE_ALLOCATIONS_REVERSED",
+      refundAmount,
+      ratio,
+    });
   }
 
   async cancelInvoice(
@@ -1092,6 +1528,15 @@ export class BillingService {
       const updated = await tx.refund.findUniqueOrThrow({ where: { id } });
 
       if (refund.invoiceId) {
+        // Reverse the original revenue allocations (spec §22) — reversal rows
+        // reference the originals; amounts are never recalculated.
+        await this.reverseRevenueAllocations(
+          tx,
+          tenantId,
+          refund.invoiceId,
+          Number(refund.amount),
+          userId,
+        );
         const invoice = await tx.invoice.findUnique({
           where: { id: refund.invoiceId },
         });

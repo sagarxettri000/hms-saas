@@ -110,4 +110,47 @@ export class DoctorShareController {
       doctorId,
     );
   }
+
+  // ------- Versioned multi-participant revenue rules (spec §14/§17/§46) -------
+
+  @Get("revenue-rules")
+  @Permissions(PermissionAction.VIEW)
+  findRevenueRules(@Query("schemeId") schemeId: string, @Req() req: any) {
+    return this.doctorShareService.findRevenueRules(req.user.tenantId, schemeId);
+  }
+
+  /** Configuration (CONFIGURE) ≠ audit — RBAC separation of duties (spec §41). */
+  @Post("revenue-rules")
+  @Permissions(PermissionAction.CONFIGURE)
+  createRevenueRule(@Body() dto: any, @Req() req: any) {
+    return this.doctorShareService.createRevenueRule(
+      req.user.tenantId,
+      dto,
+      req.user.id,
+    );
+  }
+
+  @Patch("revenue-rules/:id/deactivate")
+  @Permissions(PermissionAction.CONFIGURE)
+  deactivateRevenueRule(
+    @Param("id") id: string,
+    @Body() body: { reason: string },
+    @Req() req: any,
+  ) {
+    return this.doctorShareService.deactivateRevenueRule(
+      req.user.tenantId,
+      id,
+      body.reason,
+      req.user.id,
+    );
+  }
+
+  /** Exception dashboard counts (spec §53); read-only for finance roles. */
+  @Get("reconciliation/exceptions")
+  @Permissions(PermissionAction.VIEW)
+  getReconciliationExceptions(@Req() req: any) {
+    return this.doctorShareService.getReconciliationExceptions(
+      req.user.tenantId,
+    );
+  }
 }

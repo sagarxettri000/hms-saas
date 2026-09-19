@@ -797,4 +797,105 @@ export class PatientsService {
       console.warn(`Failed to write audit log: ${error}`);
     }
   }
+
+  // ------------------------------------------------------------------
+  // Effective-dated payor/scheme linkage (spec §2.1/§3) — the registration
+  // → payor → eligibility → coverage chain feeding every encounter.
+  // ------------------------------------------------------------------
+
+  async listPayors(tenantId: string, patientId: string) {
+    if (!(this.prisma as any).patientPayor) return [];
+    return (this.prisma as any).patientPayor.findMany({
+      where: { tenantId, patientId },
+      orderBy: [{ priority: 'asc' }, { effectiveFrom: 'desc' }],
+    });
+  }
+
+  /**
+   * Assign a payor/scheme to a patient with an eligibility window. History is
+   * append-only: a new assignment never overwrites the one it supersedes.
+   */
+  async assignPayor(
+    tenantId: string,
+    patientId: string,
+    dto: {
+      schemeId: string;
+      policyId?: string;
+      priority?: string;
+      memberNumber?: string;
+      coveragePercent?: number;
+      copayPercent?: number;
+      deductible?: number;
+      coverageLimit?: number;
+      requiresAuth?: boolean;
+      effectiveFrom?: string | Date;
+      effectiveTo?: string | Date | null;
+      notes?: string;
+    },
+    userId?: string,
+  ) {
+    if (!(this.prisma as any).patientPayor)
+      throw new BadRequestException('Payor management is not available');
+
+    const patient = await this.prisma.patient.findFirst({
+      where: { id: patientId, tenantId, deletedAt: null },
+    });
+    if (!patient) throw new NotFoundException('Patient not found');
+
+    const scheme = await (this.prisma as any).billingScheme.findFirst({
+      where: { id: dto.schemeId, tenantId, isActive: true },
+    });
+    if (!scheme) throw new NotFoundException('Billing scheme not found or inactive');
+
+    if (dto.priority === 'PRIMARY') {
+      // Supersede the current primary payor instead of overwriting history.
+      await (this.prisma as any).patientPayor.updateMany({
+        where: {
+          tenantId,
+          patientId,
+          priority: 'PRIMARY',
+          status: 'ACTIVE',
+          OR: [{ effectiveTo: null }, { effectiveTo: { gt: new Date() } }],
+        },
+        data: { effectiveTo: new Date(), status: 'EXPIRED' },
+      });
+    }
+
+    return (this.prisma as any).patientPayor.create({
+      data: {
+        tenantId,
+        patientId,
+        schemeId: dto.schemeId,
+        policyId: dto.policyId,
+        priority: (dto.priority ?? 'PRIMARY') as any,
+        memberNumber: dto.memberNumber,
+        coveragePercent: dto.coveragePercent ?? 100,
+        copayPercent: dto.copayPercent ?? 0,
+        deductible: dto.deductible ?? 0,
+        coverageLimit: dto.coverageLimit,
+        requiresAuth: dto.requiresAuth ?? false,
+        effectiveFrom: dto.effectiveFrom ? new Date(dto.effectiveFrom) : new Date(),
+        effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
+        notes: dto.notes,
+        createdBy: userId,
+      },
+    });
+  }
+
+  /** Effective payor resolution: the ACTIVE primary within its window. */
+  async resolveActivePayor(tenantId: string, patientId: string) {
+    if (!(this.prisma as any).patientPayor) return null;
+    const now = new Date();
+    return (this.prisma as any).patientPayor.findFirst({
+      where: {
+        tenantId,
+        patientId,
+        status: 'ACTIVE',
+        priority: 'PRIMARY',
+        effectiveFrom: { lte: now },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+      },
+      orderBy: { effectiveFrom: 'desc' },
+    });
+  }
 }

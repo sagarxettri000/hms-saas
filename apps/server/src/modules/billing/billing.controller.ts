@@ -81,6 +81,13 @@ export class BillingController {
     return this.billingService.refreshOverdueStatus(req.user.tenantId);
   }
 
+  @Patch("invoices/:id/finalize")
+  @Permissions(PermissionAction.APPROVE)
+  @ApiOperation({ summary: "Finalize invoice — freezes it and persists revenue allocations" })
+  finalizeInvoice(@Param("id") id: string, @Req() req: any) {
+    return this.billingService.finalizeInvoice(req.user.tenantId, id, req.user.id);
+  }
+
   @Patch("invoices/:id/discount")
   @Permissions(PermissionAction.DISCOUNT)
   @ApiOperation({ summary: "Apply discount to invoice" })

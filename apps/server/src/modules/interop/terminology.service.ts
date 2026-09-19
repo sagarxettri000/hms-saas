@@ -84,7 +84,7 @@ export class TerminologyService {
         OR: [
           { display: { contains: query, mode: "insensitive" as any } },
           { code: { contains: query, mode: "insensitive" as any } },
-          { synonyms: { array_contains: query } as any },
+          { synonyms: { string_contains: query } },
         ],
       },
       orderBy: { code: "asc" },

@@ -6,10 +6,11 @@ import { MssService } from "./mss.service";
 import { ProgramsService } from "./programs.service";
 import { DisasterOfflineService } from "./disaster-offline.service";
 import { BilingualService } from "./bilingual.service";
+import { Programmes2Service } from "./programmes2.service";
 
 @Module({
   controllers: [RegulatoryController],
-  providers: [RegulatoryService, RegulatoryRuleService, MssService, ProgramsService, DisasterOfflineService, BilingualService],
-  exports: [RegulatoryService, RegulatoryRuleService, MssService, ProgramsService, DisasterOfflineService, BilingualService],
+  providers: [RegulatoryService, RegulatoryRuleService, MssService, ProgramsService, DisasterOfflineService, BilingualService, Programmes2Service],
+  exports: [RegulatoryService, RegulatoryRuleService, MssService, ProgramsService, DisasterOfflineService, BilingualService, Programmes2Service],
 })
 export class RegulatoryModule {}

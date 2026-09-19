@@ -23,6 +23,7 @@ import { MssService } from "./mss.service";
 import { ProgramsService } from "./programs.service";
 import { DisasterOfflineService } from "./disaster-offline.service";
 import { BilingualService } from "./bilingual.service";
+import { Programmes2Service } from "./programmes2.service";
 import {
   AmountDto,
   AssignFreeBedDto,
@@ -56,6 +57,7 @@ export class RegulatoryController {
     private readonly programs: ProgramsService,
     private readonly disasterOffline: DisasterOfflineService,
     private readonly bilingual: BilingualService,
+    private readonly programmes2: Programmes2Service,
   ) {}
 
   // ---------------- Rule engine (admin configuration) ----------------
@@ -843,5 +845,84 @@ export class RegulatoryController {
       { ...body, dateTime: new Date(body.dateTime ?? Date.now()) },
       body.language ?? "ne",
     );
+  }
+
+  // ------------- Programme ledger / operational MSS / deferred billing -------------
+
+  @Post("programme-ledger")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Open a unified government-programme ledger entry (spec #24)" })
+  openLedger(@Body() body: any, @Req() req: any) {
+    return this.programmes2.openLedgerEntry(req.user.tenantId, body);
+  }
+
+  @Get("programme-ledger")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List programme ledger entries" })
+  listLedger(@Query() q: any, @Req() req: any) {
+    return this.programmes2.listLedger(req.user.tenantId, q);
+  }
+
+  @Post("programme-ledger/:id/utilize")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Record benefit utilization (invariant: utilized ≤ approved + reversed)" })
+  utilizeLedger(@Param("id") id: string, @Body() body: any, @Req() req: any) {
+    return this.programmes2.utilizeLedger(req.user.tenantId, id, body);
+  }
+
+  @Post("programme-ledger/:id/claim")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Record government claim (invariant: claimed ≤ utilized)" })
+  claimLedger(@Param("id") id: string, @Body() body: any, @Req() req: any) {
+    return this.programmes2.claimLedger(req.user.tenantId, id, body);
+  }
+
+  @Post("programme-ledger/:id/pay")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Record government payment (invariant: paid ≤ claimed)" })
+  payLedger(@Param("id") id: string, @Body() body: any, @Req() req: any) {
+    return this.programmes2.payLedger(req.user.tenantId, id, body);
+  }
+
+  @Post("programme-ledger/:id/reverse")
+  @Permissions(PermissionAction.APPROVE)
+  @ApiOperation({ summary: "Authorized reversal (append-oriented correction, reason required)" })
+  reverseLedger(@Param("id") id: string, @Body() body: any, @Req() req: any) {
+    return this.programmes2.reverseLedger(req.user.tenantId, id, body);
+  }
+
+  @Get("mss/operational-compliance")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Auto-derived MSS compliance signals from live operational data (spec #4.1)" })
+  operationalCompliance(@Query("facilityLevel") facilityLevel: string, @Req() req: any) {
+    return this.programmes2.deriveOperationalCompliance(req.user.tenantId, facilityLevel);
+  }
+
+  @Post("disaster/:activationId/deferred")
+  @Permissions(PermissionAction.CREATE)
+  @ApiOperation({ summary: "Capture a disaster service without billing (spec #12)" })
+  recordDeferred(@Param("activationId") activationId: string, @Body() body: any, @Req() req: any) {
+    return this.programmes2.recordDeferredService(req.user.tenantId, { ...body, activationId });
+  }
+
+  @Get("disaster/deferred")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Deferred-transaction summary (command/finance view)" })
+  deferredSummary(@Query("activationId") activationId: string | undefined, @Req() req: any) {
+    return this.programmes2.deferredSummary(req.user.tenantId, activationId || undefined);
+  }
+
+  @Post("disaster/deferred/reconcile")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Reconcile deferred services into an encounter/invoice (idempotent)" })
+  reconcileDeferred(@Body() body: any, @Req() req: any) {
+    return this.programmes2.reconcileDeferred(req.user.tenantId, body);
+  }
+
+  @Post("disaster/deferred/:id/write-off")
+  @Permissions(PermissionAction.APPROVE)
+  @ApiOperation({ summary: "Authorized write-off of a deferred service (reason required)" })
+  writeOffDeferred(@Param("id") id: string, @Body() body: any, @Req() req: any) {
+    return this.programmes2.writeOffDeferred(req.user.tenantId, id, body);
   }
 }

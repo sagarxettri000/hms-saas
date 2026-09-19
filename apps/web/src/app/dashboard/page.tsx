@@ -6,6 +6,11 @@ import { api, safe } from '@/lib/api';
 import { formatMoney, formatDate, formatDateTime, badgeTone } from '@/lib/hooks';
 
 import {
+  canAccessModule,
+  quickActionsFor,
+  type QuickAction,
+} from '@/lib/permissions';
+import {
   BarList,
   DashboardSkeletons,
   DeltaText,
@@ -51,6 +56,9 @@ interface ActivityItem {
   at: string | null;
 }
 
+// Group only decides which data loaders run; *visibility* of every widget and
+// quick action is decided by the permission model (can/canAccessModule), not
+// by group membership.
 const ROLE_GROUPS: Record<string, string[]> = {
   ADMIN: ['HOSPITAL_ADMIN', 'HOSPITAL_OWNER'],
   SUPER: ['PLATFORM_SUPER_ADMIN', 'IT_ADMIN'],
@@ -64,13 +72,14 @@ const ROLE_GROUPS: Record<string, string[]> = {
   INVENTORY: ['INVENTORY_MANAGER', 'STORE_KEEPER', 'PURCHASE_OFFICER'],
   QUALITY: ['QUALITY_MANAGER'],
   DEPT: ['DEPARTMENT_HEAD'],
+  AUDITOR: ['AUDITOR'],
 };
 
 function getRoleGroup(role: string): string {
   for (const [group, roles] of Object.entries(ROLE_GROUPS)) {
     if (roles.includes(role)) return group;
   }
-  return 'ADMIN';
+  return 'NONE';
 }
 
 function unwrapResponse(r: any): any {
@@ -321,6 +330,12 @@ export default function DashboardPage() {
   }
 
   async function loadActivity() {
+    // /audit is a System-module surface: roles without audit access get no
+    // activity feed at all (no 403 noise, no empty card).
+    if (!canAccessModule(roleRef.current, 'audit')) {
+      setActivity([]);
+      return;
+    }
     const r = await safe(api('/audit?limit=10'));
     const rows = listOf(r);
     setActivity(
@@ -347,7 +362,40 @@ export default function DashboardPage() {
     else if (g === 'INVENTORY') await loadInventoryData();
     else if (g === 'QUALITY') await loadQualityData();
     else if (g === 'DEPT') await loadDeptData();
+    else if (g === 'AUDITOR') await loadAuditorData();
+    else if (g === 'NONE') await loadAuditorData();
     else await loadAdminData(g === 'SUPER');
+  }
+
+  /** Read-only overview for roles with only VIEW-ish permissions (e.g. AUDITOR). */
+  async function loadAuditorData() {
+    const [summaryR, todayR] = await Promise.all([
+      safe(api('/reports/summary')),
+      safe(api('/appointments/today')),
+    ]);
+    const s = summaryOf(summaryR);
+    const appts = listOf(todayR);
+    const beds = s.bedOccupancy || { occupied: 0, total: 0 };
+    const occupancy = beds.total > 0 ? Math.round((beds.occupied / beds.total) * 100) : 0;
+
+    setStats([
+      { label: "Today's appointments", value: summaryOf(todayR)?.summary?.total ?? appts.length, tone: 'blue', icon: '📅' },
+      { label: "Today's patients", value: s.patients ?? 0, tone: 'green', icon: '👤' },
+      { label: "Today's admissions", value: s.admissions ?? 0, tone: 'purple', icon: '🛏' },
+      { label: 'Bed occupancy', value: `${occupancy}%`, tone: occupancy >= 90 ? 'red' : occupancy >= 70 ? 'amber' : 'green', icon: '🛌' },
+    ]);
+
+    setFocus({
+      title: "Today's schedule",
+      headers: ['Patient', 'Doctor', 'Time', 'Status'],
+      badgeCol: 3,
+      rows: appts.slice(0, 8).map((a: any) => [
+        personName(a.patient),
+        a.doctor?.user ? personName(a.doctor.user) : '—',
+        timeOf(a.startTime),
+        String(a.status || '—'),
+      ]),
+    });
   }
 
   async function loadAdminData(isSuper: boolean) {
@@ -1100,6 +1148,7 @@ export default function DashboardPage() {
     : '';
 
   const finRole = group === 'ADMIN' || group === 'FINANCE' || group === 'RECEPTION';
+  const quickActionList: QuickAction[] = quickActionsFor(role);
   const isDoctor = role === 'DOCTOR';
   const isNurse = ['NURSE', 'WARD_INCHARGE', 'ICU_STAFF'].includes(role);
   const isRadiologist = role === 'RADIOLOGIST';
@@ -1554,12 +1603,12 @@ export default function DashboardPage() {
             }}
           >
             <div>
-              {quickLinks.length > 0 && (
+              {quickActionList.length > 0 && (
                 <>
                   <h2 className="section-title">Quick actions</h2>
                   <div className="link-grid" style={{ marginBottom: 24 }}>
-                    {quickLinks.map((l) => (
-                      <button key={l.href + l.label} className="card link-card" onClick={() => router.push(l.href)}>
+                    {quickActionList.map((l) => (
+                      <button key={l.key} className="card link-card" onClick={() => router.push(l.href)}>
                         <span style={{ fontSize: 22 }}>{l.icon}</span>
                         <span>{l.label}</span>
                       </button>
@@ -1614,6 +1663,7 @@ export default function DashboardPage() {
               )}
             </div>
 
+            {canAccessModule(role, 'audit') && (
             <div>
               <h2 className="section-title">Recent activity</h2>
               <div className="card" style={{ padding: 0 }}>
@@ -1641,6 +1691,7 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
+            )}
           </div>
         </>
       )}

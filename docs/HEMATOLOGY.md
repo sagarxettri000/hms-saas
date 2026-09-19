@@ -107,7 +107,7 @@ New Prisma models/fields (migration `20260915070840_add_hematology_catalog_and_p
   `[tenantId, code]`).
 
 The migration also **seeds the 14-component catalog + CBC panel idempotently for
-every existing tenant** (data-shipped so `migrate deploy` on Railway populates
+every existing tenant** (data-shipped so `migrate deploy` on the production host populates
 production without running the seed script). The authoritative values live in
 `apps/server/src/modules/laboratory/hematology-catalog.ts` - keep both in sync
 when ranges change (tests assert catalog integrity).

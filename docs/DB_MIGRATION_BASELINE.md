@@ -1,6 +1,6 @@
 # Prisma Migrate Production Baseline
 
-**Applies to:** Production Postgres (Railway). ~5 minutes, requires Railway access to the server's `DATABASE_URL`.
+**Applies to:** Production Postgres. ~5 minutes, requires access to the server's `DATABASE_URL`.
 
 ## Why this is needed
 
@@ -15,7 +15,7 @@ The production database was created via `prisma db push`, so it has **all tables
 From the repo root, using the **production** `DATABASE_URL`:
 
 ```bash
-DATABASE_URL="<your-prod-railway-connection-string>" \
+DATABASE_URL="<your-prod-connection-string>" \
   npx prisma migrate resolve --applied 20260901000000_init \
   --schema apps/server/prisma/schema.prisma
 ```
@@ -31,7 +31,7 @@ Migration 20260901000000_init marked as applied.
 ## Step 2 — Sanity-check recorded history
 
 ```bash
-DATABASE_URL="<your-prod-railway-connection-string>" \
+DATABASE_URL="<your-prod-connection-string>" \
   npx prisma migrate status --schema apps/server/prisma/schema.prisma
 ```
 
@@ -57,7 +57,7 @@ Confirm "All migrations have been successfully applied", then delete the throwaw
 
 ## Safety notes
 
-- **Do Step 1 before any deploy triggers `migrate deploy`**, to avoid a failed-then-retried loop (Railway `restartPolicyMaxRetries: 5` will keep retrying).
+- **Do Step 1 before any deploy triggers `migrate deploy`**, to avoid a failed-then-retried deployment loop.
 - **Idempotent:** `migrate resolve --applied` is safe to run twice.
 - **No rollback** needed — this is bookkeeping, it makes no schema change.
 

@@ -4,7 +4,7 @@ import * as bcrypt from 'bcryptjs';
 /**
  * Ensure the demo RADIOLOGIST login exists in the connected database.
  * Additive + idempotent (upsert semantics) so it is safe to run against
- * the deployed Railway database: `npm run seed:radiologist`.
+ * the deployed production database: `npm run seed:radiologist`.
  *
  * Creates (if missing): user radiologist@nbmaitri.com (RADIOLOGIST),
  * staffProfile (Radiology) and doctorProfile (Diagnostic Radiology).

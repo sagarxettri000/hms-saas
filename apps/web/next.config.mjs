@@ -1,9 +1,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Origin of the backend API. Defaults to the production Railway deployment;
-// NEXT_PUBLIC_API_URL (set in Vercel/local .env.local) overrides it at runtime.
-const apiOrigin = (process.env.NEXT_PUBLIC_API_URL || 'https://hms-saas-api-production.up.railway.app/api/v1')
+// NEXT_PUBLIC_API_URL (set in Vercel/local .env.local) overrides the local default.
+const apiOrigin = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1')
   .replace(/\/api\/v1\/?$/, '');
 
 const csp = [

@@ -1,7 +1,7 @@
 # Security Assessment — HMS SaaS Backend
 
 Internal white-hat audit of the platform's attack surface, performed against the
-deployed backend (`hms-saas-api-production.up.railway.app`) and localhost.
+deployed backend and localhost.
 Severity: High / Medium / Low / Info. Prod was only probed read-only; full PoCs
 were executed on localhost.
 
@@ -57,7 +57,7 @@ JWTs are HS256 (`jwt.strategy.ts`) with a single static secret resolved at boot.
   for such a user is a full takeover. User CUIDs leak in audit/log responses
   (`createdBy`), making the `sub` easy to obtain once a secret is known.
 - No key rotation; tokens signed before a rotation stay valid until expiry.
-- Prod secrets live only in Railway env vars (not committed — verified).
+- Production secrets live only in the deployment environment (not committed — verified).
 
 **Fix:** Access tokens are now signed with RS256 when `JWT_ACCESS_PRIVATE_KEY`
 is set; the strategy verifies via `JWT_ACCESS_PUBLIC_KEYS` (bare PEM or JSON

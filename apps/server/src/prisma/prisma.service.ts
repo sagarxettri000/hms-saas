@@ -15,13 +15,22 @@ export class PrismaService
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
+    // Query-level event logging is useful locally but adds measurable overhead
+    // per statement on serverless (a remote DB round trip dominates already).
+    // Production keeps only warn/error.
+    const isProduction = process.env.NODE_ENV === "production";
     super({
-      log: [
-        { emit: "event", level: "query" },
-        { emit: "stdout", level: "info" },
-        { emit: "stdout", level: "warn" },
-        { emit: "stdout", level: "error" },
-      ],
+      log: isProduction
+        ? [
+            { emit: "stdout", level: "warn" },
+            { emit: "stdout", level: "error" },
+          ]
+        : [
+            { emit: "event", level: "query" },
+            { emit: "stdout", level: "info" },
+            { emit: "stdout", level: "warn" },
+            { emit: "stdout", level: "error" },
+          ],
     });
   }
 

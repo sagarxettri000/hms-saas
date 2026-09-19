@@ -117,23 +117,25 @@ export class RlsBootstrap implements OnApplicationBootstrap {
   constructor(private readonly prisma: PrismaService) {}
 
   async onApplicationBootstrap() {
-    if (
-      process.env.NODE_ENV === "production" &&
-      process.env.ENABLE_RLS !== "true"
-    ) {
-      console.warn(
-        "WARNING: Row-Level Security is DISABLED in production. This is a security risk. Set ENABLE_RLS=true.",
-      );
-    }
-
-    if (process.env.ENABLE_RLS !== "true") {
+    // RLS bootstrap issues ~3 statements per tenant-scoped table. Running it on
+    // every serverless cold start adds hundreds of round trips to a remote DB
+    // and blocks the first request, so it is opt-in only and never runs on
+    // Vercel. Policies already exist in the database; re-run manually with
+    // RLS_BOOTSTRAP=true (and ENABLE_RLS=true) when tables change.
+    if (process.env.VERCEL === "1") {
       this.logger.log(
-        "ENABLE_RLS not set to true; skipping Row-Level Security bootstrap.",
+        "Skipping Row-Level Security bootstrap on Vercel (run manually).",
       );
       return;
     }
 
-    // Confirm the DB user has rights to alter tables; run as superuser in migration.
+    if (process.env.RLS_BOOTSTRAP !== "true") {
+      this.logger.log(
+        "RLS_BOOTSTRAP not set to true; skipping Row-Level Security bootstrap.",
+      );
+      return;
+    }
+
     for (const table of TENANT_SCOPED_TABLES) {
       await this.enableOnTable(table);
     }

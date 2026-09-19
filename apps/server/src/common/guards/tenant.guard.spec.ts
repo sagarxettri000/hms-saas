@@ -25,6 +25,7 @@ describe("TenantGuard (tenant isolation)", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (guard as any).tenantCache.clear();
     reflector.getAllAndOverride.mockReturnValue(true);
     prisma.tenant.findFirst.mockResolvedValue({
       id: "tenant-a",
@@ -50,6 +51,17 @@ describe("TenantGuard (tenant isolation)", () => {
       role: "HOSPITAL_ADMIN",
     });
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
+  });
+
+  it("caches the tenant status lookup across requests", async () => {
+    const ctx = makeContext({
+      id: "u1",
+      tenantId: "tenant-a",
+      role: "HOSPITAL_ADMIN",
+    });
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    expect(prisma.tenant.findFirst).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a user attempting to access another tenant via header", async () => {

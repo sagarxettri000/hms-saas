@@ -181,8 +181,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setUserName(localStorage.getItem('userName') || 'User');
     setTenantName(localStorage.getItem('tenantName') || 'Workspace');
     setRole(localStorage.getItem('role') || '');
-    // Reconcile identity/role from the server so the sidebar's role-gated items
-    // render correctly for every session (even stale localStorage).
+    // Reconcile identity/role from the server once per session (not on every
+    // soft navigation) so the sidebar's role-gated items render correctly even
+    // for stale localStorage. Refetching /auth/me per navigation added a full
+    // API round trip to every page change.
     let cancelled = false;
     async function syncIdentity() {
       try {
@@ -215,7 +217,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
     syncIdentity();
     return () => { cancelled = true; };
-  }, [isPublic, pathname]);
+  }, [isPublic]);
 
   function handleLogout() {
     api('/auth/logout', {

@@ -294,6 +294,75 @@ describe("BillingService.finalizeInvoice + refund reversal", () => {
     );
   });
 
+  it("applies an encounterType-scoped rule (OP follow-up vs initial pricing)", async () => {
+    // A FOLLOWUP encounter linked to the invoice must engage the
+    // ENCOUNTER_TYPE_SERVICE tier instead of the DEFAULT tier.
+    const prisma = makePrisma({
+      invoice: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue(
+            invoiceRow({ encounterId: "enc-9", type: "OPD" }),
+          ),
+        update: jest.fn().mockImplementation(({ where, data }) => ({ id: where.id, ...data })),
+      },
+      encounter: {
+        findUnique: jest.fn().mockResolvedValue({ type: "FOLLOWUP" }),
+      },
+      revenueSplitRule: {
+        findMany: jest.fn().mockResolvedValue([
+          ruleRow({
+            encounterType: "FOLLOWUP",
+            serviceId: "svc-1",
+            participants: [
+              { type: "PRIMARY_DOCTOR", shareType: "PERCENTAGE", shareValue: 60 },
+              { type: "HOSPITAL", shareType: "PERCENTAGE", shareValue: 40 },
+            ],
+          }),
+        ]),
+      },
+      billingService: {
+        findMany: jest.fn().mockResolvedValue([{ id: "svc-1", categoryId: "cat-1" }]),
+      },
+    });
+    // Stick the service onto the line so the ENCOUNTER_TYPE_SERVICE tier matches.
+    prisma.invoice.findFirst.mockResolvedValue(
+      invoiceRow({
+        encounterId: "enc-9",
+        type: "OPD",
+        items: [
+          {
+            id: "item-1",
+            tenantId: "t1",
+            serviceName: "Consultation",
+            quantity: 1,
+            rate: 10000,
+            discountAmount: 0,
+            taxAmount: 900,
+            lineTotal: 10900,
+            doctorId: "dr-a",
+            serviceId: "svc-1",
+            participants: [
+              { type: "PRIMARY_DOCTOR", participantId: "dr-a" },
+              { type: "HOSPITAL", participantId: "hospital" },
+            ],
+          },
+        ],
+      }),
+    );
+    const service = makeService(prisma);
+    await service.finalizeInvoice("t1", "inv-1", "user-1");
+
+    const rows = prisma.revenueAllocation.createMany.mock.calls[0][0].data as any[];
+    expect(rows).toHaveLength(2);
+    const doctor = rows.find((r) => r.participantType === "PRIMARY_DOCTOR");
+    const hospital = rows.find((r) => r.participantType === "HOSPITAL");
+    // FOLLOWUP encounter engaged ENCOUNTER_TYPE_SERVICE: 60/40 on 10000 net.
+    expect(doctor.ruleTier).toBe("ENCOUNTER_TYPE_SERVICE");
+    expect(doctor.calculatedAmount).toBe(6000);
+    expect(hospital.calculatedAmount).toBe(4000);
+  });
+
   it("rejects finalization of an already-finalized invoice", async () => {
     const prisma = makePrisma({
       invoice: {

@@ -28,6 +28,17 @@ export interface UpdateAdmissionDto extends Partial<CreateAdmissionDto> {
   notes?: string;
 }
 
+export interface AddConsultantDto {
+  doctorId: string;
+  /** Role within the admission: SECONDARY_CONSULTANT (default), SURGEON,
+   * ANESTHETIST, etc. The PRIMARY_CONSULTANT slot is managed via admission
+   * create/update, never via this route. */
+  role?: string;
+  departmentId?: string;
+  specialty?: string;
+  startAt?: Date | string;
+}
+
 export interface AdmissionSearchParams {
   patientId?: string;
   departmentId?: string;
@@ -296,6 +307,9 @@ export class AdmissionsService {
         bedMovements: { orderBy: { movedAt: "desc" }, include: { bed: true } },
         deposits: true,
         invoices: { include: { items: true } },
+        consultantAssignments: {
+          orderBy: [{ isPrimary: "desc" }, { startAt: "asc" }],
+        },
       },
     });
     if (!admission) throw new NotFoundException("Admission not found");
@@ -362,6 +376,92 @@ export class AdmissionsService {
       where: { id },
       data: { ...fields, updatedBy: userId },
     });
+  }
+
+  /**
+   * Add a consultant to an active admission (spec §7.2): additional consultants
+   * during the stay become permanent, dated ConsultantAssignment records —
+   * never silently mutated. Only non-primary roles are accepted here; the
+   * primary slot is managed through admission create/update.
+   */
+  async addConsultant(
+    tenantId: string,
+    id: string,
+    dto: AddConsultantDto,
+    userId?: string,
+  ) {
+    const admission = await this.ensureExists(tenantId, id);
+    if (!dto.doctorId) throw new BadRequestException("doctorId is required");
+
+    const role = dto.role || "SECONDARY_CONSULTANT";
+    if (role.toUpperCase() === "PRIMARY_CONSULTANT") {
+      throw new BadRequestException(
+        "Primary consultant is managed via admission create/update",
+      );
+    }
+
+    if (admission.status === "DISCHARGED" || admission.status === "DECEASED") {
+      throw new ConflictException(
+        `Cannot add a consultant to a ${admission.status} admission`,
+      );
+    }
+
+    const doctor = await this.prisma.doctorProfile.findFirst({
+      where: { id: dto.doctorId, tenantId },
+      select: { id: true },
+    });
+    if (!doctor) throw new NotFoundException("Doctor not found");
+
+    const assignment = await this.prisma.consultantAssignment.create({
+      data: {
+        tenantId,
+        admissionId: id,
+        patientId: admission.patientId,
+        doctorId: dto.doctorId,
+        role,
+        isPrimary: false,
+        departmentId: dto.departmentId ?? admission.departmentId,
+        specialty: dto.specialty,
+        startAt: dto.startAt
+          ? this.normalizeDate(dto.startAt)
+          : new Date(),
+        assignedBy: userId,
+      },
+    });
+
+    const enriched = await this.enrichConsultants(tenantId, [assignment]);
+
+    await this.logAudit(tenantId, userId, "CREATE", "ConsultantAssignment", assignment.id, {
+      admissionId: id,
+      doctorId: dto.doctorId,
+      role,
+    } as Prisma.InputJsonValue);
+    return enriched[0];
+  }
+
+  /** List the admission's consultants (primary + additional, dated history). */
+  async getConsultants(tenantId: string, id: string) {
+    await this.ensureExists(tenantId, id);
+    const assignments = await this.prisma.consultantAssignment.findMany({
+      where: { tenantId, admissionId: id },
+      orderBy: [{ isPrimary: "desc" }, { startAt: "asc" }],
+    });
+    return this.enrichConsultants(tenantId, assignments);
+  }
+
+  /** Attach doctor display info to consultant assignments. The model has no
+   * doctor relation, so names come from a bulk DoctorProfile lookup. */
+  private async enrichConsultants(tenantId: string, assignments: any[]) {
+    if (assignments.length === 0) return assignments;
+    const doctorIds = [...new Set(assignments.map((a) => a.doctorId))];
+    const doctors = await this.prisma.doctorProfile.findMany({
+      where: { tenantId, id: { in: doctorIds } },
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
+    const byId = new Map(doctors.map((d) => [d.id, d] as const));
+    return assignments.map((a) => ({ ...a, doctor: byId.get(a.doctorId) ?? null }));
   }
 
   async allocateBed(

@@ -474,6 +474,18 @@ export class BillingService {
 
     const invoiceNumber = await this.generateInvoiceNumber(tenantId);
 
+    // --- Encounter-type context (spec §17/§46): resolve the linked
+    // encounter's type (OPD / IPD / EMERGENCY / FOLLOWUP ...) so OP
+    // consultation vs initial vs follow-up investigation rules can differ.
+    // Falls back to the invoice type when no encounter is linked.
+    const effectiveEncounterType =
+      dto.encounterId
+        ? (((await this.prisma.encounter.findUnique({
+            where: { id: dto.encounterId },
+            select: { type: true },
+          }))?.type as string | null) ?? dto.type ?? "OPD")
+        : (dto.type ?? "OPD");
+
     // --- Per-line revenue split (spec §13/§47): computed BEFORE persistence
     // so a missing/conflicting/invalid rule configuration blocks the invoice
     // instead of silently billing without an allocation.
@@ -498,6 +510,7 @@ export class BillingService {
               return {
                 schemeId: scheme?.id ?? null,
                 billingMode,
+                encounterType: effectiveEncounterType,
                 serviceId: src.serviceId,
                 serviceCategoryId: src.serviceCategoryId,
                 at: nowIso,
@@ -1033,6 +1046,13 @@ export class BillingService {
     const categoryById = new Map(categories.map((c: any) => [c.id, c] as const));
 
     const nowIso = new Date().toISOString();
+    const invoiceType = (invoice.type as string) || "OPD";
+    const effectiveEncounterType = invoice.encounterId
+      ? (((await this.prisma.encounter.findUnique({
+          where: { id: invoice.encounterId },
+          select: { type: true },
+        }))?.type as string | null) ?? invoiceType)
+      : invoiceType;
     const engineLines = invoice.items.map((it, idx) => ({
       lineId: `L${idx}`,
       quantity: Number(it.quantity),
@@ -1072,6 +1092,7 @@ export class BillingService {
             (line): LineRuleContext => ({
               schemeId: invoice.schemeId,
               billingMode: invoice.billingMode,
+              encounterType: effectiveEncounterType,
               serviceId: line.serviceId,
               serviceCategoryId: line.serviceCategoryId,
               at: nowIso,

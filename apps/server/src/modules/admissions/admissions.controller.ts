@@ -12,6 +12,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   AdmissionsService,
+  AddConsultantDto,
   CreateAdmissionDto,
   UpdateAdmissionDto,
   AdmissionSearchParams,
@@ -131,6 +132,29 @@ export class AdmissionsController {
     @Req() req: any,
   ) {
     return this.admissionsService.discharge(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user.id,
+    );
+  }
+
+  @Get(":id/consultants")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List consultants on an admission (primary + additional)" })
+  getConsultants(@Param("id") id: string, @Req() req: any) {
+    return this.admissionsService.getConsultants(req.user.tenantId, id);
+  }
+
+  @Post(":id/consultants")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({ summary: "Add an additional consultant to an admission" })
+  addConsultant(
+    @Param("id") id: string,
+    @Body() dto: AddConsultantDto,
+    @Req() req: any,
+  ) {
+    return this.admissionsService.addConsultant(
       req.user.tenantId,
       id,
       dto,

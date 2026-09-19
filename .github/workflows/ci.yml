@@ -54,37 +54,3 @@ jobs:
         working-directory: apps/server
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hms_test
-
-  build:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    steps:
-      - uses: actions/checkout@v7
-      - name: Build Docker images
-        run: |
-          docker compose build server web
-      - name: Log in to GitHub Container Registry
-        if: vars.DOCKER_REGISTRY != ''
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Tag and push images
-        if: vars.DOCKER_REGISTRY != ''
-        run: |
-          docker tag hms-saas-server ghcr.io/${{ github.repository }}/server:latest
-          docker tag hms-saas-web ghcr.io/${{ github.repository }}/web:latest
-          docker push ghcr.io/${{ github.repository }}/server:latest
-          docker push ghcr.io/${{ github.repository }}/web:latest
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment: production
-    steps:
-      - uses: actions/checkout@v7
-      - name: Deploy to production
-        if: vars.DEPLOY_HOST != ''
-        run: |
-          echo "Deploy command goes here — configure per your infrastructure"
-          echo "Example: ssh ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }} 'cd /opt/hms && docker compose pull && docker compose up -d'"

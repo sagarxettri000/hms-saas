@@ -6,12 +6,31 @@ describe("ReportsService", () => {
     invoice: {
       findMany: jest.fn().mockResolvedValue([]),
       count: jest.fn().mockResolvedValue(0),
+      aggregate: jest.fn().mockResolvedValue({ _sum: {}, _count: 0 }),
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
+    invoiceItem: {
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
+    payment: {
+      aggregate: jest.fn().mockResolvedValue({ _sum: {}, _count: 0 }),
+      groupBy: jest.fn().mockResolvedValue([]),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    insuranceClaim: {
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
+    insuranceProvider: {
+      findMany: jest.fn().mockResolvedValue([]),
     },
     appointment: {
       count: jest.fn().mockResolvedValue(0),
       groupBy: jest.fn().mockResolvedValue([]),
     },
-    patient: { count: jest.fn().mockResolvedValue(0) },
+    patient: {
+      count: jest.fn().mockResolvedValue(0),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
     admission: {
       count: jest.fn().mockResolvedValue(0),
       groupBy: jest.fn().mockResolvedValue([]),
@@ -31,6 +50,7 @@ describe("ReportsService", () => {
     },
     refund: {
       findMany: jest.fn().mockResolvedValue([]),
+      aggregate: jest.fn().mockResolvedValue({ _sum: {}, _count: 0 }),
     },
     department: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -336,5 +356,144 @@ describe("ReportsService", () => {
     });
     const arg = prisma.invoice.findMany.mock.calls[0][0];
     expect(arg.where.items.some.departmentId).toBe("dept1");
+  });
+
+  it("computes the analytics overview with KPIs, trend and aging", async () => {
+    prisma.invoice.aggregate
+      .mockResolvedValueOnce({
+        _sum: { totalAmount: 1000, paidAmount: 600, dueAmount: 400 },
+        _count: 4,
+      })
+      .mockResolvedValueOnce({
+        _sum: { totalAmount: 800, paidAmount: 500, dueAmount: 300 },
+        _count: 3,
+      });
+    prisma.invoice.groupBy
+      .mockResolvedValueOnce([
+        {
+          type: "OPD",
+          _sum: { totalAmount: 600, paidAmount: 400, dueAmount: 200 },
+          _count: 2,
+        },
+        {
+          type: "LAB",
+          _sum: { totalAmount: 400, paidAmount: 200, dueAmount: 200 },
+          _count: 2,
+        },
+      ])
+      .mockResolvedValueOnce([
+        { status: "PAID", _count: 2 },
+        { status: "OVERDUE", _count: 2 },
+      ])
+      .mockResolvedValueOnce([
+        {
+          patientId: "p1",
+          _sum: { totalAmount: 600, paidAmount: 400, dueAmount: 200 },
+          _count: 2,
+        },
+      ]);
+    prisma.payment.aggregate
+      .mockResolvedValueOnce({ _sum: { amount: 550 }, _count: 3 })
+      .mockResolvedValueOnce({ _sum: { amount: 500 }, _count: 3 });
+    prisma.payment.groupBy.mockResolvedValueOnce([
+      { method: "CASH", _sum: { amount: 400 }, _count: 2 },
+      { method: "CARD", _sum: { amount: 150 }, _count: 1 },
+    ]);
+    prisma.refund.aggregate.mockResolvedValueOnce({
+      _sum: { amount: 50 },
+      _count: 1,
+    });
+    prisma.invoice.findMany
+      .mockResolvedValueOnce([
+        { issuedDate: new Date(), totalAmount: 600 },
+        { issuedDate: new Date(), totalAmount: 400 },
+      ])
+      .mockResolvedValueOnce([
+        { dueAmount: 200, dueDate: new Date(), issuedDate: new Date() },
+      ])
+      .mockResolvedValueOnce([]);
+    prisma.payment.findMany
+      .mockResolvedValueOnce([{ paidAt: new Date(), amount: 550 }])
+      .mockResolvedValueOnce([]);
+    prisma.invoiceItem.groupBy.mockResolvedValueOnce([
+      { departmentId: "d1", _sum: { lineTotal: 700 } },
+    ]);
+    prisma.insuranceClaim.groupBy
+      .mockResolvedValueOnce([
+        {
+          status: "APPROVED",
+          _count: 2,
+          _sum: { claimAmount: 300, approvedAmount: 250, receivedAmount: 100 },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          providerId: "prov1",
+          _count: 2,
+          _sum: { claimAmount: 300, approvedAmount: 250, receivedAmount: 100 },
+        },
+      ]);
+    prisma.patient.findMany.mockResolvedValueOnce([
+      { id: "p1", mrn: "M1", firstName: "Asha", middleName: null, lastName: "Rai" },
+    ]);
+    prisma.department.findMany.mockResolvedValueOnce([
+      { id: "d1", name: "Cardiology" },
+    ]);
+    prisma.insuranceProvider.findMany.mockResolvedValueOnce([
+      { id: "prov1", name: "Nepal Insurance", type: "NATIONAL" },
+    ]);
+
+    const res = await service.getAnalyticsOverview("t1", { days: "30" });
+
+    expect(res.range.days).toBe(30);
+    expect(res.kpis.revenue).toBe(1000);
+    expect(res.kpis.collections).toBe(550);
+    expect(res.kpis.refunds).toBe(50);
+    expect(res.kpis.netCollections).toBe(500);
+    expect(res.kpis.outstanding).toBe(400);
+    expect(res.kpis.collectionRate).toBeCloseTo(55);
+    expect(res.kpis.invoices).toBe(4);
+    expect(res.kpis.paidInvoices).toBe(2);
+    expect(res.kpis.overdueInvoices).toBe(2);
+    expect(res.kpis.prevRevenue).toBe(800);
+    expect(res.kpis.revenueDelta).toBeCloseTo(25);
+    expect(res.trend).toHaveLength(30);
+    expect(res.trend.reduce((s: number, t: any) => s + t.revenue, 0)).toBe(1000);
+    expect(res.revenueByType[0]).toMatchObject({
+      type: "OPD",
+      label: "Outpatient",
+      amount: 600,
+    });
+    expect(res.collectionByMethod[0]).toMatchObject({
+      method: "CASH",
+      amount: 400,
+    });
+    expect(
+      res.outstandingAging.reduce((s: number, b: any) => s + b.amount, 0),
+    ).toBe(200);
+    expect(res.topPayers[0]).toMatchObject({
+      patientId: "p1",
+      name: "Asha Rai",
+      billed: 600,
+    });
+    expect(res.revenueByDepartment[0]).toMatchObject({
+      name: "Cardiology",
+      amount: 700,
+    });
+    expect(res.insurance.claimed).toBe(300);
+    expect(res.insurance.received).toBe(100);
+    expect(res.insurance.topProviders[0]).toMatchObject({
+      name: "Nepal Insurance",
+      claimed: 300,
+    });
+    const invArg = prisma.invoice.aggregate.mock.calls[0][0];
+    expect(invArg.where.tenantId).toBe("t1");
+    expect(invArg.where.status).toEqual({ not: "CANCELLED" });
+  });
+
+  it("rejects an invalid from date on analytics", async () => {
+    await expect(
+      service.getAnalyticsOverview("t1", { from: "not-a-date" }),
+    ).rejects.toThrow(BadRequestException);
   });
 });

@@ -450,7 +450,8 @@ export default function DashboardPage() {
             { label: 'Insurance', href: '/insurance', icon: '◈' },
             { label: 'Memberships', href: '/memberships', icon: '★' },
             { label: 'Accounting', href: '/accounting', icon: '⇄' },
-            { label: 'Reports & analytics', href: '/reports', icon: '📊' },
+            { label: 'Analytics', href: '/analytics', icon: '📊' },
+            { label: 'Reports & analytics', href: '/reports', icon: '📈' },
             { label: 'HR & staff', href: '/hr', icon: '👥' },
             { label: 'Users & roles', href: '/settings', icon: '⚙' },
             { label: 'Tenants', href: '/tenants', icon: '▦' },
@@ -734,7 +735,8 @@ export default function DashboardPage() {
     setQuickLinks([
       { label: 'Invoices & payments', href: '/billing', icon: '📄' },
       { label: 'Accounting', href: '/accounting', icon: '⇄' },
-      { label: 'Reports', href: '/reports', icon: '📊' },
+      { label: 'Analytics', href: '/analytics', icon: '📊' },
+      { label: 'Reports', href: '/reports', icon: '📈' },
     ]);
   }
 
@@ -1476,7 +1478,14 @@ export default function DashboardPage() {
 
           {finRole && finance && (
             <div className="dash-widget-grid">
-              <WidgetCard title="Revenue vs collections · 30 days">
+              <WidgetCard
+                title="Revenue vs collections · 30 days"
+                action={
+                  <a className="dash-link" href="/analytics">
+                    Full analytics
+                  </a>
+                }
+              >
                 <TrendChart data={trend} height={150} />
               </WidgetCard>
               <WidgetCard title="Collections today by method">

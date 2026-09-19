@@ -113,6 +113,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { label: 'Memberships', href: '/memberships', icon: '★', roles: [...FINANCE, ...ADMIN, ...SUPER, ...FRONT] },
       { label: 'Doctor Share', href: '/doctor-share', icon: '➗', roles: [...ADMIN, ...SUPER] },
       { label: 'Accounting', href: '/accounting', icon: '⇄', roles: [...ADMIN, ...SUPER], flag: 'accounting' },
+      { label: 'Analytics', href: '/analytics', icon: '📊', roles: [...ADMIN, ...SUPER, 'FINANCE_MANAGER'] },
       { label: 'Reports', href: '/reports', icon: '▦', roles: [...ADMIN, ...SUPER] },
       { label: 'Procurement', href: '/procurement', icon: '↦', roles: [...ADMIN, ...SUPER, 'INVENTORY_MANAGER', 'PURCHASE_OFFICER', 'STORE_KEEPER', 'PHARMACIST', 'FINANCE_MANAGER'] },
       { label: 'CRM', href: '/crm', icon: '⊞', roles: [...ADMIN, ...SUPER], flag: 'crm' },

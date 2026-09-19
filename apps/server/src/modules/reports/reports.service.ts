@@ -76,6 +76,516 @@ export class ReportsService {
     return where;
   }
 
+  private static readonly OPEN_INVOICE_STATUSES = [
+    "PENDING",
+    "PARTIAL",
+    "OVERDUE",
+  ];
+
+  private static readonly REVENUE_TYPE_LABELS: Record<string, string> = {
+    OPD: "Outpatient",
+    SPECIAL_OPD: "Special OPD",
+    IPD: "Inpatient",
+    DISCHARGE: "Admission / Discharge",
+    EMERGENCY: "Emergency",
+    LAB: "Laboratory",
+    LABORATORY: "Laboratory",
+    RADIOLOGY: "Radiology",
+    PHARMACY: "Pharmacy",
+    OT: "Operation Theatre",
+    PROCEDURE: "Procedures",
+    SERVICE: "Services",
+    AMBULANCE: "Ambulance",
+  };
+
+  private static readonly METHOD_LABELS: Record<string, string> = {
+    CASH: "Cash",
+    CARD: "Card",
+    BANK: "Bank",
+    ONLINE: "Online",
+    WALLET: "Wallet",
+    INSURANCE: "Insurance",
+  };
+
+  /**
+   * Executive analytics overview built entirely from live aggregate queries.
+   * Powers the dedicated /analytics view: revenue vs collections trend, KPI
+   * deltas vs the previous comparable period, receivables aging, revenue by
+   * type/department, top patients and insurance payer mix.
+   */
+  async getAnalyticsOverview(
+    tenantId: string,
+    params: { days?: string | number; from?: string; to?: string } = {},
+  ) {
+    const n = (v: unknown): number => Number(v ?? 0);
+    const pctChange = (current: number, previous: number): number => {
+      if (previous === 0) return current === 0 ? 0 : 100;
+      return ((current - previous) / previous) * 100;
+    };
+    const dateKey = (d: Date): string => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
+    const monthKey = (d: Date): string =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+    const now = new Date();
+    let from: Date;
+    let to: Date;
+    if (params.from || params.to) {
+      const range = this.parseRange(params.from, params.to);
+      to =
+        range.to ??
+        new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      from =
+        range.from ??
+        new Date(to.getFullYear(), to.getMonth(), to.getDate() - 29);
+    } else {
+      const days = Math.min(365, Math.max(1, Number(params.days) || 30));
+      to = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        59,
+        999,
+      );
+      from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+    }
+    from.setHours(0, 0, 0, 0);
+    const dayCount = Math.max(
+      1,
+      Math.round((to.getTime() - from.getTime()) / 86_400_000),
+    );
+    // Previous window of equal length for period-over-period deltas.
+    const prevTo = new Date(from.getTime() - 1);
+    const prevFrom = new Date(from.getTime() - dayCount * 86_400_000);
+    const sixMonthsStart = new Date(
+      now.getFullYear(),
+      now.getMonth() - 5,
+      1,
+    );
+
+    const invWhere = {
+      tenantId,
+      issuedDate: { gte: from, lte: to },
+      status: { not: "CANCELLED" as any },
+    };
+
+    const [
+      invAgg,
+      invTypeGroup,
+      invStatusGroup,
+      prevInvAgg,
+      payAgg,
+      payMethodGroup,
+      prevPayAgg,
+      refundAgg,
+      trendInvoices,
+      trendPayments,
+      topPatientGroup,
+      deptGroup,
+      agingRows,
+      monthlyInvoices,
+      monthlyPayments,
+      insuranceStatusGroup,
+      insuranceProviderGroup,
+    ] = await Promise.all([
+      this.prisma.invoice.aggregate({
+        _sum: { totalAmount: true, paidAmount: true, dueAmount: true },
+        _count: true,
+        where: invWhere,
+      }),
+      this.prisma.invoice.groupBy({
+        by: ["type"],
+        _sum: { totalAmount: true, paidAmount: true, dueAmount: true },
+        _count: true,
+        where: invWhere,
+      }),
+      this.prisma.invoice.groupBy({
+        by: ["status"],
+        _count: true,
+        where: invWhere,
+      }),
+      this.prisma.invoice.aggregate({
+        _sum: { totalAmount: true, paidAmount: true },
+        where: {
+          tenantId,
+          issuedDate: { gte: prevFrom, lte: prevTo },
+          status: { not: "CANCELLED" as any },
+        },
+      }),
+      this.prisma.payment.aggregate({
+        _sum: { amount: true },
+        _count: true,
+        where: { tenantId, paidAt: { gte: from, lte: to } },
+      }),
+      this.prisma.payment.groupBy({
+        by: ["method"],
+        _sum: { amount: true },
+        _count: true,
+        where: { tenantId, paidAt: { gte: from, lte: to } },
+      }),
+      this.prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: { tenantId, paidAt: { gte: prevFrom, lte: prevTo } },
+      }),
+      this.prisma.refund.aggregate({
+        _sum: { amount: true },
+        _count: true,
+        where: {
+          tenantId,
+          refundedAt: { gte: from, lte: to },
+          status: "COMPLETED",
+        },
+      }),
+      this.prisma.invoice.findMany({
+        select: { issuedDate: true, totalAmount: true },
+        where: invWhere,
+      }),
+      this.prisma.payment.findMany({
+        select: { paidAt: true, amount: true },
+        where: { tenantId, paidAt: { gte: from, lte: to } },
+      }),
+      this.prisma.invoice.groupBy({
+        by: ["patientId"],
+        _sum: { totalAmount: true, paidAmount: true, dueAmount: true },
+        _count: true,
+        where: { ...invWhere, patientId: { not: null } },
+        orderBy: { _sum: { totalAmount: "desc" } },
+        take: 8,
+      } as any),
+      this.prisma.invoiceItem.groupBy({
+        by: ["departmentId"],
+        _sum: { lineTotal: true },
+        where: {
+          tenantId,
+          departmentId: { not: null },
+          invoice: { is: invWhere },
+        },
+        orderBy: { _sum: { lineTotal: "desc" } },
+        take: 10,
+      } as any),
+      this.prisma.invoice.findMany({
+        select: { dueAmount: true, dueDate: true, issuedDate: true },
+        where: {
+          tenantId,
+          status: { in: ReportsService.OPEN_INVOICE_STATUSES as any },
+          dueAmount: { gt: 0 },
+        },
+      }),
+      this.prisma.invoice.findMany({
+        select: { issuedDate: true, totalAmount: true },
+        where: {
+          tenantId,
+          issuedDate: { gte: sixMonthsStart },
+          status: { not: "CANCELLED" as any },
+        },
+      }),
+      this.prisma.payment.findMany({
+        select: { paidAt: true, amount: true },
+        where: { tenantId, paidAt: { gte: sixMonthsStart } },
+      }),
+      this.prisma.insuranceClaim.groupBy({
+        by: ["status"],
+        _sum: {
+          claimAmount: true,
+          approvedAmount: true,
+          receivedAmount: true,
+        },
+        _count: true,
+        where: { tenantId },
+      }),
+      this.prisma.insuranceClaim.groupBy({
+        by: ["providerId"],
+        _sum: {
+          claimAmount: true,
+          approvedAmount: true,
+          receivedAmount: true,
+        },
+        _count: true,
+        where: { tenantId, providerId: { not: null } },
+        orderBy: { _sum: { claimAmount: "desc" } },
+        take: 8,
+      } as any),
+    ]);
+
+    const patientIds = topPatientGroup
+      .map((g) => g.patientId)
+      .filter((id): id is string => !!id);
+    const deptIds = deptGroup
+      .map((g) => g.departmentId)
+      .filter((id): id is string => !!id);
+    const providerIds = insuranceProviderGroup
+      .map((g) => g.providerId)
+      .filter((id): id is string => !!id);
+
+    const [patients, departments, providers] = await Promise.all([
+      patientIds.length
+        ? this.prisma.patient.findMany({
+            where: { id: { in: patientIds } },
+            select: {
+              id: true,
+              mrn: true,
+              firstName: true,
+              middleName: true,
+              lastName: true,
+            },
+          })
+        : Promise.resolve([] as any[]),
+      deptIds.length
+        ? this.prisma.department.findMany({
+            where: { id: { in: deptIds } },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([] as any[]),
+      providerIds.length
+        ? this.prisma.insuranceProvider.findMany({
+            where: { id: { in: providerIds } },
+            select: { id: true, name: true, type: true },
+          })
+        : Promise.resolve([] as any[]),
+    ]);
+    const patientMap = new Map(patients.map((p: any) => [p.id, p]));
+    const deptMap = new Map(departments.map((d: any) => [d.id, d]));
+    const providerMap = new Map(providers.map((p: any) => [p.id, p]));
+
+    // Daily trend (zero-filled across the full window).
+    const trendMap: Record<string, { revenue: number; collection: number }> = {};
+    const cursor = new Date(from);
+    for (let d = 0; d < dayCount; d++) {
+      trendMap[dateKey(cursor)] = { revenue: 0, collection: 0 };
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    for (const inv of trendInvoices) {
+      const key = dateKey(inv.issuedDate);
+      if (trendMap[key]) trendMap[key].revenue += n(inv.totalAmount);
+    }
+    for (const pay of trendPayments) {
+      const key = dateKey(pay.paidAt);
+      if (trendMap[key]) trendMap[key].collection += n(pay.amount);
+    }
+    let cumRevenue = 0;
+    let cumCollection = 0;
+    const trend = Object.entries(trendMap)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, v]) => {
+        cumRevenue += v.revenue;
+        cumCollection += v.collection;
+        return {
+          date,
+          revenue: Math.round(v.revenue * 100) / 100,
+          collection: Math.round(v.collection * 100) / 100,
+          cumulativeRevenue: Math.round(cumRevenue * 100) / 100,
+          cumulativeCollection: Math.round(cumCollection * 100) / 100,
+        };
+      });
+
+    // Revenue by type.
+    const revenueByType = invTypeGroup
+      .map((g) => ({
+        type: g.type,
+        label:
+          ReportsService.REVENUE_TYPE_LABELS[g.type] ||
+          String(g.type).replace(/_/g, " "),
+        amount: n(g._sum.totalAmount),
+        collected: n(g._sum.paidAmount),
+        outstanding: n(g._sum.dueAmount),
+        count: n(g._count),
+      }))
+      .filter((r) => r.amount !== 0 || r.count > 0)
+      .sort((a, b) => b.amount - a.amount);
+
+    // Collections by method.
+    const collectionsTotal = n(payAgg._sum.amount);
+    const collectionByMethod = payMethodGroup
+      .map((g) => ({
+        method: g.method,
+        label:
+          ReportsService.METHOD_LABELS[g.method] ||
+          String(g.method).replace(/_/g, " "),
+        amount: n(g._sum.amount),
+        count: n(g._count),
+        share: collectionsTotal > 0 ? (n(g._sum.amount) / collectionsTotal) * 100 : 0,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    // Receivables aging (snapshot of open invoices, aged from dueDate).
+    const agingDefs = [
+      { key: "current", label: "0–30 days", max: 30, color: "#16a34a" },
+      { key: "d31_60", label: "31–60 days", max: 60, color: "#2563eb" },
+      { key: "d61_90", label: "61–90 days", max: 90, color: "#d97706" },
+      { key: "d90", label: "90+ days", max: Infinity, color: "#dc2626" },
+    ];
+    const outstandingAging = agingDefs.map((b) => ({
+      key: b.key,
+      label: b.label,
+      color: b.color,
+      amount: 0,
+      count: 0,
+    }));
+    for (const inv of agingRows) {
+      const basis = inv.dueDate || inv.issuedDate;
+      const age = basis
+        ? Math.max(0, Math.floor((Date.now() - basis.getTime()) / 86_400_000))
+        : 0;
+      const idx = age <= 30 ? 0 : age <= 60 ? 1 : age <= 90 ? 2 : 3;
+      outstandingAging[idx].amount += n(inv.dueAmount);
+      outstandingAging[idx].count += 1;
+    }
+
+    // Top patients by billed amount.
+    const topPayers = topPatientGroup.map((g) => {
+      const p = patientMap.get(g.patientId as string);
+      const name = p
+        ? [p.firstName, p.middleName, p.lastName].filter(Boolean).join(" ")
+        : "Unknown patient";
+      return {
+        patientId: g.patientId,
+        name,
+        mrn: p?.mrn || null,
+        billed: n(g._sum?.totalAmount),
+        collected: n(g._sum?.paidAmount),
+        outstanding: n(g._sum?.dueAmount),
+        invoices: n(g._count),
+      };
+    });
+
+    // Revenue by department (from invoice line items).
+    const revenueByDepartment = deptGroup.map((g) => ({
+      departmentId: g.departmentId,
+      name: deptMap.get(g.departmentId as string)?.name || "Unassigned",
+      amount: n(g._sum?.lineTotal),
+    }));
+
+    // Monthly revenue vs collections (last 6 months).
+    const monthlyMap: Record<string, { revenue: number; collection: number }> = {};
+    for (let i = 5; i >= 0; i--) {
+      monthlyMap[monthKey(new Date(now.getFullYear(), now.getMonth() - i, 1))] = {
+        revenue: 0,
+        collection: 0,
+      };
+    }
+    for (const inv of monthlyInvoices) {
+      const key = monthKey(inv.issuedDate);
+      if (monthlyMap[key]) monthlyMap[key].revenue += n(inv.totalAmount);
+    }
+    for (const pay of monthlyPayments) {
+      const key = monthKey(pay.paidAt);
+      if (monthlyMap[key]) monthlyMap[key].collection += n(pay.amount);
+    }
+    const monthly = Object.entries(monthlyMap)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, v]) => {
+        const [y, m] = key.split("-").map(Number);
+        return {
+          key,
+          label: new Date(y, m - 1, 1).toLocaleString(undefined, {
+            month: "short",
+            year: "2-digit",
+          }),
+          revenue: Math.round(v.revenue * 100) / 100,
+          collection: Math.round(v.collection * 100) / 100,
+        };
+      });
+
+    // Insurance payer mix.
+    const insuranceByStatus = insuranceStatusGroup.map((g) => ({
+      status: g.status,
+      count: n(g._count),
+      claimed: n(g._sum?.claimAmount),
+      approved: n(g._sum?.approvedAmount),
+      received: n(g._sum?.receivedAmount),
+    }));
+    let claimed = 0;
+    let approved = 0;
+    let received = 0;
+    let claimCount = 0;
+    for (const s of insuranceByStatus) {
+      claimed += s.claimed;
+      approved += s.approved;
+      received += s.received;
+      claimCount += s.count;
+    }
+    const topProviders = insuranceProviderGroup.map((g) => {
+      const p = providerMap.get(g.providerId as string);
+      return {
+        providerId: g.providerId,
+        name: p?.name || "Unknown provider",
+        type: p?.type || null,
+        claims: n(g._count),
+        claimed: n(g._sum?.claimAmount),
+        approved: n(g._sum?.approvedAmount),
+        received: n(g._sum?.receivedAmount),
+      };
+    });
+
+    const revenue = n(invAgg._sum.totalAmount);
+    const collections = collectionsTotal;
+    const refunds = n(refundAgg._sum.amount);
+    const outstanding = n(invAgg._sum.dueAmount);
+    const invoices = n(invAgg._count);
+    const statusCounts: Record<string, number> = {};
+    for (const g of invStatusGroup) statusCounts[g.status] = n(g._count);
+    const prevRevenue = n(prevInvAgg._sum.totalAmount);
+    const prevCollections = n(prevPayAgg._sum.amount);
+    const prevPaid = n(prevInvAgg._sum.paidAmount);
+
+    return {
+      range: {
+        from: dateKey(from),
+        to: dateKey(to),
+        days: dayCount,
+        previousFrom: dateKey(prevFrom),
+        previousTo: dateKey(prevTo),
+      },
+      kpis: {
+        revenue,
+        collections,
+        refunds,
+        netCollections: collections - refunds,
+        outstanding,
+        collectionRate: revenue > 0 ? (collections / revenue) * 100 : 0,
+        netCollectionRate:
+          revenue > 0 ? ((collections - refunds) / revenue) * 100 : 0,
+        invoices,
+        paidInvoices: statusCounts.PAID ?? 0,
+        partialInvoices: statusCounts.PARTIAL ?? 0,
+        pendingInvoices: statusCounts.PENDING ?? 0,
+        overdueInvoices: statusCounts.OVERDUE ?? 0,
+        cancelledInvoices: statusCounts.CANCELLED ?? 0,
+        avgInvoice: invoices > 0 ? revenue / invoices : 0,
+        avgDailyRevenue: dayCount > 0 ? revenue / dayCount : 0,
+        avgDailyCollection: dayCount > 0 ? collections / dayCount : 0,
+        prevRevenue,
+        prevCollections,
+        prevPaid,
+        revenueDelta: pctChange(revenue, prevRevenue),
+        collectionDelta: pctChange(collections, prevCollections),
+      },
+      trend,
+      revenueByType,
+      collectionByMethod,
+      outstandingAging,
+      topPayers,
+      revenueByDepartment,
+      monthly,
+      insurance: {
+        claimCount,
+        claimed,
+        approved,
+        received,
+        outstanding: Math.max(0, approved - received),
+        settlementRate: approved > 0 ? (received / approved) * 100 : 0,
+        byStatus: insuranceByStatus.sort((a, b) => b.claimed - a.claimed),
+        topProviders,
+      },
+    };
+  }
+
   async getSummary(
     tenantId: string,
     params: { from?: string; to?: string } = {},

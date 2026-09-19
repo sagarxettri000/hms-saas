@@ -36,6 +36,16 @@ export class ReportsController {
     return this.reportsService.getSummary(req.user.tenantId, query);
   }
 
+  @Get("analytics")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({
+    summary:
+      "Executive analytics: revenue vs collections, receivables aging, payer mix",
+  })
+  analytics(@Query() query: any, @Req() req: any) {
+    return this.reportsService.getAnalyticsOverview(req.user.tenantId, query);
+  }
+
   @Get("revenue-by-status")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Revenue grouped by invoice status" })

@@ -17,6 +17,8 @@ coverage/
 .env.*.local
 .env.production
 !.env.example
+# Vercel CLI pull artifacts (contain OIDC/session tokens)
+.env.vercel
 
 # Runtime / storage (only the top-level storage dir, not modules/storage)
 /storage/
@@ -32,6 +34,9 @@ build_output.txt
 test_output.txt
 
 # Prisma (migrations are version-controlled and MUST be committed)
+
+# Supabase local link cache (metadata only, regenerate via `supabase link`)
+supabase/.temp/
 
 # OS
 .DS_Store

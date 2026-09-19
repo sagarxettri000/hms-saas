@@ -49,7 +49,9 @@ export class Hl7QueueService implements OnModuleInit {
       port: Number(process.env.REDIS_PORT) || 6379,
       password: process.env.REDIS_PASSWORD || undefined,
       db: Number(process.env.REDIS_DB) || 0,
-      maxRetriesPerRequest: 3,
+      // BullMQ workers use blocking commands and therefore require
+      // maxRetriesPerRequest to be null.
+      maxRetriesPerRequest: null,
     };
   }
 

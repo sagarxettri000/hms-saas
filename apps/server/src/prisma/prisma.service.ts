@@ -20,6 +20,14 @@ export class PrismaService
     // Production keeps only warn/error.
     const isProduction = process.env.NODE_ENV === "production";
     super({
+      // Interactive transactions touch the remote Prisma Postgres host with
+      // several sequential round-trips (number generation + create + update
+      // + ledger write ≈ 8 queries); the 5s default expires mid-transaction
+      // on a remote DB (~600ms+ per round trip) and rolls back valid work.
+      transactionOptions: {
+        maxWait: 10_000,
+        timeout: 30_000,
+      },
       log: isProduction
         ? [
             { emit: "stdout", level: "warn" },

@@ -748,7 +748,7 @@ export class EncountersService {
       .findMany({
         where: {
           tenantId,
-          role: { in: ["PHARMACIST", "PHARMACY_TECHNICIAN"] as any },
+          role: { in: ["PHARMACIST"] as any },
         },
         select: { id: true },
       })

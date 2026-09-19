@@ -17,6 +17,7 @@ import {
   UpdatePatientDto,
   PatientSearchParams,
 } from "./patients.service";
+import { PatientVisibilityService } from "./patient-visibility.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
@@ -32,7 +33,10 @@ import { PermissionAction } from "@hms/shared";
 @TenantScoped()
 @ApiBearerAuth()
 export class PatientsController {
-  constructor(private readonly patientsService: PatientsService) {}
+  constructor(
+    private readonly patientsService: PatientsService,
+    private readonly visibility: PatientVisibilityService,
+  ) {}
 
   @Post()
   @Permissions(PermissionAction.CREATE)
@@ -56,7 +60,13 @@ export class PatientsController {
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Search and list patients" })
   async findAll(@Query() query: PatientSearchParams, @Req() req: any) {
-    const result = await this.patientsService.findAll(req.user.tenantId, query);
+    // §64.15: search results respect clinical visibility — the backend
+    // returns only authorized records (never "SELECT * then hide in UI").
+    const visibility = await this.visibility.buildActiveListFilter(req.user);
+    const result = await this.patientsService.findAll(req.user.tenantId, {
+      ...query,
+      visibilityFilter: visibility,
+    });
     result.data = this.patientsService.maskPatientPhi(
       req.user.role,
       result.data,
@@ -75,7 +85,11 @@ export class PatientsController {
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Global patient search" })
   async search(@Query() query: PatientSearchParams, @Req() req: any) {
-    const result = await this.patientsService.findAll(req.user.tenantId, query);
+    const visibility = await this.visibility.buildActiveListFilter(req.user);
+    const result = await this.patientsService.findAll(req.user.tenantId, {
+      ...query,
+      visibilityFilter: visibility,
+    });
     result.data = this.patientsService.maskPatientPhi(
       req.user.role,
       result.data,
@@ -86,14 +100,18 @@ export class PatientsController {
   @Get("by-mrn/:mrn")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Find patient by MRN" })
-  findByMrn(@Param("mrn") mrn: string, @Req() req: any) {
-    return this.patientsService.findByMrn(req.user.tenantId, mrn);
+  async findByMrn(@Param("mrn") mrn: string, @Req() req: any) {
+    const patient = await this.patientsService.findByMrn(req.user.tenantId, mrn);
+    // §64.16: direct lookups obey the same authorization as lists.
+    if (patient) await this.visibility.assertCanAccess(req.user, (patient as any).id);
+    return patient;
   }
 
   @Get(":id")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Get patient details with full record" })
   async findById(@Param("id") id: string, @Req() req: any) {
+    await this.visibility.assertCanAccess(req.user, id);
     const patient = await this.patientsService.findById(req.user.tenantId, id);
     // Apply the same PHI masking used by findAll/search so restricted roles
     // (e.g. RECEPTIONIST) cannot read identity documents via the detail route.

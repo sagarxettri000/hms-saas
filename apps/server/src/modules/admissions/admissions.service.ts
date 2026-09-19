@@ -135,6 +135,30 @@ export class AdmissionsService {
           },
         });
       });
+
+      // §64.5/§64.6: admission + bed assignment activates the IPD clinical
+      // context — the patient becomes visible in this ward's worklists now.
+      if ((this.prisma as any).patientLocation) {
+        await (this.prisma as any).patientLocation.updateMany({
+          where: { tenantId, patientId: dto.patientId, status: { in: ["ACTIVE", "TEMPORARY"] } },
+          data: { status: "ENDED", endedAt: new Date(), endReason: "Superseded by IPD admission" },
+        });
+        await (this.prisma as any).patientLocation.create({
+          data: {
+            tenantId,
+            patientId: dto.patientId,
+            encounterId: dto.encounterId,
+            admissionId: admission.id,
+            locationType: bed.room?.ward?.bedType === "EMERGENCY" ? "ER" : "IPD_WARD",
+            departmentId: admission.departmentId,
+            wardId: bed.room?.ward?.id ?? null,
+            bedId: bed.id,
+            status: "ACTIVE",
+            isPrimary: true,
+            createdBy: userId,
+          },
+        });
+      }
     }
 
     if (dto.encounterId) {
@@ -522,6 +546,15 @@ export class AdmissionsService {
         await tx.bedAllocation.update({
           where: { id: alloc.id },
           data: { status: "CLEANING", releasedAt: new Date() },
+        });
+      }
+
+      // §64.14: discharge ends the active clinical context — the patient
+      // leaves every active worklist but stays accessible as a record.
+      if ((tx as any).patientLocation) {
+        await (tx as any).patientLocation.updateMany({
+          where: { tenantId, patientId: admission.patientId, status: { in: ["ACTIVE", "TEMPORARY"] } },
+          data: { status: "ENDED", endedAt: new Date(), endReason: "Discharged" },
         });
       }
 

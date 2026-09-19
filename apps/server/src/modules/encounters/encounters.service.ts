@@ -208,6 +208,34 @@ export class EncountersService {
         });
       }
 
+      // §64.4/§64.2: an OPD encounter activates the OPD clinical context.
+      // The patient becomes visible in OPD worklists (department-scoped) and
+      // leaves any prior active context — visibility follows location.
+      if ((tx as any).patientLocation) {
+        const prior = await (tx as any).patientLocation.findFirst({
+          where: { tenantId, patientId: dto.patientId, status: "ACTIVE" },
+          select: { id: true, locationType: true },
+        });
+        if (!prior || prior.locationType === "OPD") {
+          await (tx as any).patientLocation.updateMany({
+            where: { tenantId, patientId: dto.patientId, status: { in: ["ACTIVE", "TEMPORARY"] } },
+            data: { status: "ENDED", endedAt: new Date(), endReason: "Superseded by OPD encounter" },
+          });
+          await (tx as any).patientLocation.create({
+            data: {
+              tenantId,
+              patientId: dto.patientId,
+              encounterId: created.id,
+              locationType: "OPD",
+              departmentId: dto.departmentId,
+              status: "ACTIVE",
+              isPrimary: true,
+              createdBy: userId,
+            },
+          });
+        }
+      }
+
       return created;
     });
 

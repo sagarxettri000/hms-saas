@@ -702,6 +702,8 @@ model Tenant {
   dicomNodes              DicomNode[]
   attendanceRecords       AttendanceRecord[]
   patientPayors           PatientPayor[]
+  patientLocations        PatientLocation[]
+  patientTransfers        PatientTransfer[]
   revenueSplitRules       RevenueSplitRule[]
   revenueAllocations      RevenueAllocation[]
   consultantAssignments   ConsultantAssignment[]
@@ -760,6 +762,9 @@ model Department {
 
   @@unique([tenantId, code])
   @@index([tenantId])
+  patientLocations   PatientLocation[]
+  transfersTo        PatientTransfer[] @relation("TransferToDepartment")
+
   @@map("departments")
   @@index([branchId])
   @@index([parentId])
@@ -805,6 +810,8 @@ model Ward {
   rooms        Room[]
   beds         Bed[]
   maintenances BedMaintenance[]
+  patientLocations PatientLocation[]
+  transfersTo      PatientTransfer[] @relation("TransferToWard")
 
   @@index([tenantId, departmentId])
   @@map("wards")
@@ -833,6 +840,9 @@ model Bed {
 
   @@index([tenantId, wardId, roomId])
   @@index([status])
+  patientLocations PatientLocation[]
+  transfersTo      PatientTransfer[] @relation("TransferToBed")
+
   @@map("beds")
   @@index([roomId])
 }
@@ -1339,6 +1349,8 @@ model Patient {
   admissions          Admission[]
   insurancePolicies   InsurancePolicy[]
   payors              PatientPayor[]
+  locations           PatientLocation[]
+  transfers           PatientTransfer[]
   consultantAssignments ConsultantAssignment[]
   invoices            Invoice[]
   payments            Payment[]
@@ -1527,6 +1539,7 @@ model Encounter {
   followUps       FollowUp[]
   dischargeBills  DischargeBill[]
   chargeTransactions ChargeTransaction[]
+  patientLocations   PatientLocation[]
 
   @@index([tenantId, patientId])
   @@index([tenantId, doctorId])
@@ -1760,6 +1773,7 @@ model Admission {
   dischargeBills            DischargeBill[]
   emergencyCase             EmergencyCase?
   consultantAssignments     ConsultantAssignment[]
+  patientLocations          PatientLocation[]
 
   @@index([tenantId, patientId])
   @@index([status])
@@ -4229,4 +4243,106 @@ model ClaimItem {
   @@index([tenantId, claimId])
   @@index([tenantId, invoiceItemId])
   @@map("claim_items")
+}
+
+enum LocationType {
+  ER
+  OPD
+  IPD_WARD
+  ICU
+  OT
+  RADIOLOGY
+  LABORATORY
+  DIALYSIS
+  ONCOLOGY
+  PHARMACY
+  OTHER
+}
+
+enum LocationStatus {
+  ACTIVE
+  TEMPORARY
+  ENDED
+}
+
+enum TransferStatus {
+  REQUESTED
+  APPROVED
+  PENDING
+  IN_TRANSIT
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+model PatientLocation {
+  id            String         @id @default(cuid())
+  tenantId      String
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId     String
+  patient       Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  encounterId   String?
+  encounter     Encounter?     @relation(fields: [encounterId], references: [id], onDelete: SetNull)
+  admissionId   String?
+  admission     Admission?     @relation(fields: [admissionId], references: [id], onDelete: SetNull)
+  locationType  LocationType
+  departmentId  String?
+  department    Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  wardId        String?
+  ward          Ward?          @relation(fields: [wardId], references: [id], onDelete: SetNull)
+  bedId         String?
+  bed           Bed?           @relation(fields: [bedId], references: [id], onDelete: SetNull)
+  status        LocationStatus @default(ACTIVE)
+  isPrimary     Boolean        @default(true)
+  startedAt     DateTime       @default(now())
+  endedAt       DateTime?
+  endReason     String?
+  createdBy     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  transfersFrom PatientTransfer[] @relation("TransferFrom")
+
+  @@index([tenantId, patientId, status])
+  @@index([tenantId, locationType, status])
+  @@index([tenantId, departmentId, status])
+  @@index([tenantId, wardId, status])
+  @@index([encounterId])
+  @@index([admissionId])
+  @@map("patient_locations")
+}
+
+model PatientTransfer {
+  id                  String         @id @default(cuid())
+  tenantId            String
+  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId           String
+  patient             Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  encounterId         String?
+  fromLocationId      String?
+  fromLocation        PatientLocation? @relation("TransferFrom", fields: [fromLocationId], references: [id], onDelete: SetNull)
+  toLocationType      LocationType
+  toDepartmentId      String?
+  toDepartment        Department?    @relation("TransferToDepartment", fields: [toDepartmentId], references: [id], onDelete: SetNull)
+  toWardId            String?
+  toWard              Ward?          @relation("TransferToWard", fields: [toWardId], references: [id], onDelete: SetNull)
+  toBedId             String?
+  toBed               Bed?           @relation("TransferToBed", fields: [toBedId], references: [id], onDelete: SetNull)
+  reason              String?
+  status              TransferStatus @default(REQUESTED)
+  requestedBy         String?
+  requestedAt         DateTime       @default(now())
+  approvedBy          String?
+  approvedAt          DateTime?
+  completedAt         DateTime?
+  completedBy         String?
+  cancelledBy         String?
+  rejectionReason     String?
+  resultingLocationId String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@index([tenantId, patientId, status])
+  @@index([tenantId, status])
+  @@index([fromLocationId])
+  @@map("patient_transfers")
 }

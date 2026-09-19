@@ -83,6 +83,8 @@ export interface PatientSearchParams {
   limit?: number;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
+  /** §64.15 — server-side clinical visibility filter (set by the controller). */
+  visibilityFilter?: Record<string, any>;
 }
 
 @Injectable()
@@ -270,6 +272,13 @@ export class PatientsService {
     const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
 
     const where: any = { tenantId, deletedAt: null };
+
+    // §64.15/§64.23: clinical-context visibility is enforced server-side —
+    // the filter is composed INTO the query so unauthorized patients are
+    // never returned (not filtered out in the frontend afterwards).
+    if (params.visibilityFilter) {
+      Object.assign(where, params.visibilityFilter);
+    }
 
     if (params.patientType) where.patientType = params.patientType;
     if (params.dateOfBirth)

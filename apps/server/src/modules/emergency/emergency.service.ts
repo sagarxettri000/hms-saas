@@ -123,8 +123,9 @@ export class EmergencyService {
 
     // Record the doctor's EMERGENCY encounter (with the triage vitals if
     // provided) so the patient shows up in the doctor's "My Patients".
+    let encounterId: string | null = null;
     if (doctor) {
-      await this.prisma.encounter.create({
+      const encounter = await this.prisma.encounter.create({
         data: {
           tenantId,
           patientId: dto.patientId,
@@ -137,6 +138,39 @@ export class EmergencyService {
           examination: dto.examination,
           history: dto.history,
           clinicalNotes: `Emergency case ${caseNumber}`,
+          createdBy: userId,
+        },
+      });
+      encounterId = encounter.id;
+    }
+
+    // §64.1/§64.2: the ER case registers the patient's CURRENT clinical
+    // context. From this point the patient is ER-visible and invisible to
+    // other departments' worklists until a completed transfer moves them.
+    // The location is stamped with the registering staff's department so
+    // ER-department-scoped visibility resolves.
+    if ((this.prisma as any).patientLocation) {
+      const creatorDept = userId
+        ? await this.prisma.staffProfile
+            .findFirst({
+              where: { userId, tenantId },
+              select: { departmentId: true },
+            })
+            .catch(() => null)
+        : null;
+      await this.prisma.patientLocation.updateMany({
+        where: { tenantId, patientId: dto.patientId, status: { in: ["ACTIVE", "TEMPORARY"] } },
+        data: { status: "ENDED", endedAt: new Date(), endReason: "Superseded by new location" },
+      });
+      await this.prisma.patientLocation.create({
+        data: {
+          tenantId,
+          patientId: dto.patientId,
+          encounterId,
+          locationType: "ER",
+          departmentId: creatorDept?.departmentId ?? undefined,
+          status: "ACTIVE",
+          isPrimary: true,
           createdBy: userId,
         },
       });
@@ -358,6 +392,21 @@ export class EmergencyService {
           },
         });
       }
+
+      // §64.6: attach the bed to the patient's active location so bed-based
+      // visibility (ER bed board / ward lists) resolves through one record.
+      if ((tx as any).patientLocation) {
+        const active = await (tx as any).patientLocation.findFirst({
+          where: { tenantId, patientId: ec.patientId, status: "ACTIVE" },
+          select: { id: true },
+        });
+        if (active) {
+          await (tx as any).patientLocation.update({
+            where: { id: active.id },
+            data: { bedId: bed?.id ?? null, admissionId: created.id },
+          });
+        }
+      }
       return created;
     });
 
@@ -431,6 +480,15 @@ export class EmergencyService {
         await tx.bed.update({
           where: { id: alloc.bedId },
           data: { status: "AVAILABLE" },
+        });
+      }
+
+      // §64.14: discharged patients leave the active ER worklist. The
+      // clinical record remains accessible to authorized users (§64.18).
+      if ((tx as any).patientLocation) {
+        await (tx as any).patientLocation.updateMany({
+          where: { tenantId, patientId: ec.patientId, status: { in: ["ACTIVE", "TEMPORARY"] } },
+          data: { status: "ENDED", endedAt: new Date(), endReason: "Discharged from ER" },
         });
       }
     });
@@ -622,6 +680,44 @@ export class EmergencyService {
             },
           },
           );
+        }
+      }
+
+      // §64.7/§64.8: the clinical context follows the physical location.
+      // Ward move → the ER location ends and the WARD location activates in
+      // this same transaction (§64.25 — never active in both). Bed move
+      // inside the ER → the active location's bed pointer updates.
+      if ((tx as any).patientLocation) {
+        if (ward) {
+          await (tx as any).patientLocation.updateMany({
+            where: { tenantId, patientId: ec.patientId, status: { in: ["ACTIVE", "TEMPORARY"] } },
+            data: { status: "ENDED", endedAt: new Date(), endReason: body.reason || `ER → ${ward.name}` },
+          });
+          await (tx as any).patientLocation.create({
+            data: {
+              tenantId,
+              patientId: ec.patientId,
+              admissionId,
+              locationType: "IPD_WARD",
+              departmentId: ward.departmentId || undefined,
+              wardId: ward.id,
+              bedId: claimedBedId,
+              status: "ACTIVE",
+              isPrimary: true,
+              createdBy: userId,
+            },
+          });
+        } else if (claimedBedId) {
+          const active = await (tx as any).patientLocation.findFirst({
+            where: { tenantId, patientId: ec.patientId, status: "ACTIVE" },
+            select: { id: true },
+          });
+          if (active) {
+            await (tx as any).patientLocation.update({
+              where: { id: active.id },
+              data: { bedId: claimedBedId },
+            });
+          }
         }
       }
 

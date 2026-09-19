@@ -760,6 +760,39 @@ export class BedManagementService {
         },
       });
 
+      // §64.8/§64.6: the clinical context follows the bed — the active
+      // location's bed pointer updates so bed-based visibility stays true.
+      if ((tx as any).patientLocation) {
+        const admission = await tx.admission.findFirst({
+          where: { id: dto.admissionId },
+          select: { patientId: true, departmentId: true },
+        });
+        if (admission) {
+          const active = await (tx as any).patientLocation.findFirst({
+            where: { tenantId, patientId: admission.patientId, status: "ACTIVE" },
+            select: { id: true, departmentId: true, wardId: true },
+          });
+          if (active) {
+            const targetBed = await tx.bed.findFirst({
+              where: { id: dto.toBedId },
+              select: { room: { select: { ward: { select: { id: true, departmentId: true } } } } },
+            });
+            await (tx as any).patientLocation.update({
+              where: { id: active.id },
+              data: {
+                bedId: dto.toBedId,
+                ...(targetBed?.room?.ward
+                  ? {
+                      wardId: targetBed.room.ward.id,
+                      departmentId: targetBed.room.ward.departmentId,
+                    }
+                  : {}),
+              },
+            });
+          }
+        }
+      }
+
       return newAlloc;
     });
   }

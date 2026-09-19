@@ -76,6 +76,9 @@ async function main() {
   // Create settings
   await seedSettings(tenant.id);
 
+  // Create default regulatory rules (§65 – idempotent upserts)
+  await seedRegulatoryRules(tenant.id);
+
   console.log('✅ Seed completed successfully');
   console.log('----------------------------------------');
   console.log('🔑 Login credentials:');
@@ -1088,6 +1091,168 @@ async function seedSettings(tenantId: string) {
   }
 
   console.log(`  ✓ ${settings.length} tenant settings seeded`);
+}
+
+// Default regulatory rules (spec §65) — idempotent: an existing ACTIVE rule
+// for a key is never clobbered, only missing keys are created.
+async function seedRegulatoryRules(tenantId: string) {
+  const rules = [
+    {
+      ruleKey: 'free_bed_quota',
+      ruleName: 'Social Health Bed Quota (Free Bed)',
+      authority: 'Ministry of Health and Population',
+      legalReference: 'Social Welfare Act 2049 / NHF Guidelines',
+      category: 'FREE_BED',
+      ruleType: 'QUOTA',
+      jurisdiction: 'Nepal',
+      eligibilityExpression: 'patient.category in ["BIPANNA","DALIT","SINGLE_WOMAN","DISABLED"]',
+      benefitExpression: 'free bed under 10% of applicable bed base',
+      config: {
+        bedBase: 100,
+        quotaPercent: 10,
+        roundingMode: 'FLOOR',
+        warningThresholdPercent: 80,
+      },
+    },
+    {
+      ruleKey: 'ssu_subsidy_matrix',
+      ruleName: 'Safe Motherhood / Serious Illness Subsidy Matrix',
+      authority: 'Ministry of Health and Population',
+      legalReference: 'NHF Subsidy Guidelines',
+      category: 'SSU',
+      ruleType: 'SUBSIDY_MATRIX',
+      jurisdiction: 'Nepal',
+      eligibilityExpression: 'economicTier in ["POOREST","POOR"]',
+      benefitExpression: 'subsidy percent per economic tier',
+      config: {
+        matrix: [
+          { economicTier: 'POOREST', subsidyPercent: 90 },
+          { economicTier: 'POOR', subsidyPercent: 75 },
+          { economicTier: 'MIDDLE', subsidyPercent: 50 },
+        ],
+        committeeThresholdAmount: 50000,
+      },
+    },
+    {
+      ruleKey: 'bipanna_assistance',
+      ruleName: 'Bipanna Nagarik Kosh Assistance',
+      authority: 'Ministry of Health and Population',
+      legalReference: 'Bipanna Nagarik Kosh Guidelines',
+      category: 'BIPANNA',
+      ruleType: 'ASSISTANCE_CEILING',
+      jurisdiction: 'Nepal',
+      eligibilityExpression: 'disease in configured disease list',
+      benefitExpression: 'assistance ceiling per disease category',
+      config: {
+        diseases: [
+          { category: 'CANCER', maxAmount: 200000 },
+          { category: 'KIDNEY_TRANSPLANT', maxAmount: 500000 },
+          { category: 'CARDIAC', maxAmount: 300000 },
+          { category: 'NEUROLOGICAL', maxAmount: 250000 },
+        ],
+      },
+    },
+    {
+      ruleKey: 'senior_citizen',
+      ruleName: 'Senior Citizen Priority',
+      authority: 'Ministry of Health and Population',
+      legalReference: 'Senior Citizens Act 2063',
+      category: 'SENIOR',
+      ruleType: 'ELIGIBILITY_THRESHOLD',
+      jurisdiction: 'Nepal',
+      eligibilityExpression: 'age >= 60',
+      benefitExpression: 'priority queue token',
+      config: { minAge: 60 },
+    },
+    {
+      ruleKey: 'vip_access_policy',
+      ruleName: 'VIP / VVIP Access Policy',
+      authority: 'Hospital Governance',
+      legalReference: 'Hospital Data Protection Policy',
+      category: 'VIP',
+      ruleType: 'ACCESS_CONTROL',
+      jurisdiction: 'Hospital',
+      eligibilityExpression: 'patient flagged as VIP/VVIP',
+      benefitExpression: 'need-to-know gated access + full audit log',
+      config: {
+        allowedRoles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR'],
+        breakGlassNotifyRoles: ['HOSPITAL_ADMIN'],
+        defaultPolicy: { actions: ['VIEW'] },
+      },
+    },
+    {
+      ruleKey: 'queue_priority_order',
+      ruleName: 'Queue Priority Ordering',
+      authority: 'Hospital Governance',
+      legalReference: 'Hospital Guidelines',
+      category: 'SERVICE',
+      ruleType: 'PRIORITY_ORDER',
+      jurisdiction: 'Hospital',
+      eligibilityExpression: 'triage level or senior citizen',
+      benefitExpression: 'priority ordering in queues',
+      config: { emergencyDominates: true, emergencyTriageCutoff: 2 },
+    },
+    {
+      ruleKey: 'brain_death_protocol',
+      ruleName: 'Brain Death Certification Protocol',
+      authority: 'National Transplant Coordination Center',
+      legalReference: 'Human Body Organ Transplantation Act 2075',
+      category: 'BRAIN_DEATH',
+      ruleType: 'WORKFLOW_PROTOCOL',
+      jurisdiction: 'Nepal',
+      eligibilityExpression: 'neurological determination of death',
+      benefitExpression: 'structured certification checklist',
+      config: {
+        steps: ['CONFIRM_CAUSE', 'NEURO_EXAM', 'APNEA_TEST', 'SECOND_EXAM'],
+        certification: {
+          requiredSignoffs: ['NEURO_CONSULTANT', 'ICU_CONSULTANT', 'MEDICAL_DIRECTOR'],
+        },
+      },
+    },
+    {
+      ruleKey: 'donor_alert_trigger',
+      ruleName: 'Organ Donation Alert Trigger',
+      authority: 'National Transplant Coordination Center',
+      legalReference: 'Human Body Organ Transplantation Act 2075',
+      category: 'BRAIN_DEATH',
+      ruleType: 'ALERT_TRIGGER',
+      jurisdiction: 'Nepal',
+      eligibilityExpression: 'brain death CERTIFIED',
+      benefitExpression: 'authorized-recipient alert to transplant registry',
+      config: {
+        triggerStatus: 'CERTIFIED',
+        authorizedRecipients: ['ntcc@gov.np'],
+      },
+    },
+  ];
+
+  let created = 0;
+  for (const r of rules) {
+    const existing = await prisma.regulatoryRule.findFirst({
+      where: { tenantId, ruleKey: r.ruleKey, status: 'ACTIVE' },
+    });
+    if (existing) continue;
+    await prisma.regulatoryRule.create({
+      data: {
+        tenantId,
+        ruleKey: r.ruleKey,
+        ruleName: r.ruleName,
+        authority: r.authority,
+        legalReference: r.legalReference,
+        category: r.category,
+        ruleType: r.ruleType,
+        jurisdiction: r.jurisdiction,
+        eligibilityExpression: r.eligibilityExpression,
+        benefitExpression: r.benefitExpression,
+        version: 1,
+        config: r.config as any,
+        effectiveFrom: new Date(),
+        status: 'ACTIVE',
+      },
+    });
+    created += 1;
+  }
+  console.log(`  ✓ ${created} regulatory rules seeded (existing ACTIVE rules untouched)`);
 }
 
 main()

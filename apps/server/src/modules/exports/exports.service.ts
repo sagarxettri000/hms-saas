@@ -251,7 +251,7 @@ export class ExportsService {
 
   async revenuePdf(
     tenantId: string,
-    params: { from?: string; to?: string },
+    params: { from?: string; to?: string; watermark?: string },
   ): Promise<Buffer> {
     const { summary, byStatus, dateLabel } = await this.revenuePdfData(
       tenantId,
@@ -275,12 +275,13 @@ export class ExportsService {
         { title: "Outstanding", width: 3, align: "right" },
       ],
       rows,
+      watermark: params.watermark,
     });
   }
 
   async doctorWorkloadPdf(
     tenantId: string,
-    params: { from?: string; to?: string },
+    params: { from?: string; to?: string; watermark?: string },
   ): Promise<Buffer> {
     const { workload, dateLabel } = await this.workloadPdfData(
       tenantId,
@@ -294,6 +295,7 @@ export class ExportsService {
         { title: "Appointments", width: 2, align: "right" },
       ],
       rows: workload.map((w) => [w.name, w.count.toString()]),
+      watermark: params.watermark,
     });
   }
 }

@@ -175,4 +175,21 @@ describe("pdf.util", () => {
     expect(text).toContain("startxref");
     expect(text).toContain("%%EOF");
   });
+
+  it("buildPdf renders an optional watermark (§35.2)", () => {
+    const pdf = buildPdf({
+      title: "Test",
+      columns: [{ title: "A", width: 1 }],
+      rows: [["x"]],
+      watermark: "CONFIDENTIAL",
+    });
+    const text = pdf.toString("latin1");
+    expect(text).toContain("(CONFIDENTIAL) Tj");
+    const plain = buildPdf({
+      title: "Test",
+      columns: [{ title: "A", width: 1 }],
+      rows: [["x"]],
+    }).toString("latin1");
+    expect(plain).not.toContain("CONFIDENTIAL");
+  });
 });

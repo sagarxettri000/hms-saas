@@ -32,6 +32,7 @@ function makePrisma(over: any = {}) {
       update: jest.fn().mockImplementation(({ where, data }) => ({ id: where.id, ...data })),
       count: jest.fn().mockResolvedValue(0),
       aggregate: jest.fn().mockResolvedValue({ _sum: {} }),
+      findMany: jest.fn().mockResolvedValue([]),
       ...over.ssuAssessment,
     },
     ssuCommitteeDecision: {
@@ -44,7 +45,17 @@ function makePrisma(over: any = {}) {
       update: jest.fn().mockImplementation(({ where, data }) => ({ id: where.id, ...data })),
       count: jest.fn().mockResolvedValue(0),
       aggregate: jest.fn().mockResolvedValue({ _sum: {} }),
+      findMany: jest.fn().mockResolvedValue([]),
       ...over.bipannaCase,
+    },
+    bipannaClaim: {
+      create: jest.fn().mockImplementation(({ data }) => ({ id: "clm-1", ...data })),
+      findFirst: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockImplementation(({ where, data }) => ({ id: where.id, ...data })),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+      ...over.bipannaClaim,
     },
     brainDeathCase: {
       create: jest.fn().mockImplementation(({ data }) => ({ id: "bdc-1", ...data })),
@@ -126,6 +137,59 @@ describe("Regulatory rule engine (§65.44/§65.45)", () => {
     });
     const svc = new RegulatoryRuleService(prisma);
     await expect(svc.approve(TENANT, "r1", "user-1")).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("surfaces the structured rule fields (jurisdiction, expressions) on resolve (§65.3)", async () => {
+    const prisma = makePrisma({
+      regulatoryRule: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: "r1",
+            ruleKey: "k",
+            version: 1,
+            config: { a: 1 },
+            effectiveFrom: new Date("2026-01-01"),
+            authority: "MoHP",
+            legalReference: "L-1",
+            ruleType: "QUOTA",
+            jurisdiction: "Nepal",
+            eligibilityExpression: "age >= 60",
+            benefitExpression: "priority token",
+          },
+        ]),
+      },
+    });
+    const svc = new RegulatoryRuleService(prisma);
+    const rule = await svc.resolve(TENANT, "k");
+    expect(rule.ruleType).toBe("QUOTA");
+    expect(rule.jurisdiction).toBe("Nepal");
+    expect(rule.eligibilityExpression).toBe("age >= 60");
+    expect(rule.benefitExpression).toBe("priority token");
+  });
+
+  it("persists structured fields when creating a rule version", async () => {
+    const prisma = makePrisma();
+    const svc = new RegulatoryRuleService(prisma);
+    await svc.createVersion(TENANT, {
+      ruleKey: "free_bed_quota",
+      ruleName: "Free Bed",
+      ruleType: "QUOTA",
+      jurisdiction: "Nepal",
+      eligibilityExpression: "category in [...]",
+      benefitExpression: "10% base",
+      config: { bedBase: 100, quotaPercent: 10 },
+      effectiveFrom: new Date(),
+    });
+    expect(prisma.regulatoryRule.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          ruleType: "QUOTA",
+          jurisdiction: "Nepal",
+          eligibilityExpression: "category in [...]",
+          benefitExpression: "10% base",
+        }),
+      }),
+    );
   });
 });
 
@@ -320,7 +384,18 @@ describe("Bipanna Nagarik Kosh (§65.15–§65.19, §65.53)", () => {
     const svc = makeService(prisma);
     await expect(svc.submitBipannaClaim(TENANT, "bc-1", 60000, "u1")).rejects.toBeInstanceOf(ConflictException);
     await svc.submitBipannaClaim(TENANT, "bc-1", 50000, "u1");
+    // A claim record trails the submission (status tracker on government claim, §65.19).
+    expect(prisma.bipannaClaim.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ caseId: "bc-1", amount: 50000, status: "SUBMITTED", submittedBy: "u1" }),
+      }),
+    );
     await svc.settleBipannaClaim(TENANT, "bc-1", { approvedClaim: 45000, received: 45000, rejected: 5000, userId: "u1" });
+    expect(prisma.bipannaClaim.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "SETTLED", approvedAmount: 45000, rejectedAmount: 5000, settledAmount: 45000 }),
+      }),
+    );
     expect(prisma.bipannaCase.update).toHaveBeenCalledTimes(2);
     const rec = svc.reconcileBipanna({ approvedAmount: 100000, utilizedAmount: 50000, rejectedAmount: 5000, returnedAmount: 0 });
     expect(rec.remaining).toBe(45000);
@@ -500,5 +575,95 @@ describe("Funding waterfall & double-funding (§65.48–§65.50)", () => {
     expect(check.flagged).toBe(true);
     expect(check.programs).toHaveLength(3);
     expect(prisma.regulatoryException.create).toHaveBeenCalled();
+  });
+});
+
+describe("Free-bed pre-breach warning threshold (§65.4)", () => {
+  it("logs a FREE_BED_QUOTA_WARNING while still compliant but approaching the quota", async () => {
+    const prisma = makePrisma({
+      freeBedAllocation: { count: jest.fn().mockResolvedValue(8) },
+    });
+    const svc = makeService(prisma);
+    stubRule(svc, RULE_KEYS.FREE_BED, {
+      bedBase: 100,
+      quotaPercent: 10,
+      roundingMode: "ROUND",
+      warningThresholdPercent: 80,
+    });
+    const dash = await svc.getFreeBedDashboard(TENANT);
+    expect(dash.complianceStatus).toBe("COMPLIANT");
+    expect(dash.warningStatus).toBe("WARNING");
+    expect(prisma.regulatoryException.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ kind: "FREE_BED_QUOTA_WARNING" }) }),
+    );
+  });
+
+  it("no warning when occupancy is below the configured threshold", async () => {
+    const prisma = makePrisma();
+    const svc = makeService(prisma);
+    stubRule(svc, RULE_KEYS.FREE_BED, {
+      bedBase: 100,
+      quotaPercent: 10,
+      roundingMode: "ROUND",
+      warningThresholdPercent: 80,
+    });
+    const dash = await svc.getFreeBedDashboard(TENANT);
+    expect(dash.complianceStatus).toBe("COMPLIANT");
+    expect(dash.warningStatus).toBe("OK");
+    expect(prisma.regulatoryException.create).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ kind: "FREE_BED_QUOTA_WARNING" }) }),
+    );
+  });
+});
+
+describe("SSU / Bipanna / free-bed / ledger list endpoints", () => {
+  it("lists SSU assessments filtered by status", async () => {
+    const prisma = makePrisma({
+      ssuAssessment: {
+        findMany: jest.fn().mockResolvedValue([{ id: "ssu-1", status: "RECOMMENDED" }]),
+      },
+    });
+    const svc = makeService(prisma);
+    const list = await svc.listSsuAssessments(TENANT, { status: "RECOMMENDED" });
+    expect(list).toHaveLength(1);
+    expect(prisma.ssuAssessment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ tenantId: TENANT, status: "RECOMMENDED" }) }),
+    );
+  });
+
+  it("lists Bipanna cases with claims and filters by patient", async () => {
+    const prisma = makePrisma({
+      bipannaCase: {
+        findMany: jest.fn().mockResolvedValue([{ id: "bc-1", claims: [] }]),
+      },
+    });
+    const svc = makeService(prisma);
+    const list = await svc.listBipannaCases(TENANT, { patientId: "p1" });
+    expect(list).toHaveLength(1);
+    expect(prisma.bipannaCase.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ patientId: "p1" }) }),
+    );
+  });
+
+  it("lists claims for a case and the full patient benefit ledger", async () => {
+    const prisma = makePrisma({
+      bipannaClaim: {
+        findMany: jest.fn().mockResolvedValue([{ id: "clm-1", status: "SUBMITTED" }]),
+      },
+      subsidyLedgerEntry: {
+        findMany: jest.fn().mockResolvedValue([{ id: "sle-1", amount: 50000 }]),
+      },
+    });
+    const svc = makeService(prisma);
+    const claims = await svc.listBipannaClaims(TENANT, { caseId: "bc-1" });
+    expect(claims).toHaveLength(1);
+    expect(prisma.bipannaClaim.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ caseId: "bc-1" }) }),
+    );
+    const ledger = await svc.listBenefitLedger(TENANT, "p1");
+    expect(ledger).toHaveLength(1);
+    expect(prisma.subsidyLedgerEntry.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ patientId: "p1" }) }),
+    );
   });
 });

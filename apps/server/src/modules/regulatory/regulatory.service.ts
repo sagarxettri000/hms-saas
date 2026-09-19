@@ -27,6 +27,7 @@ export interface FreeBedRuleConfig {
   bedBase: number; // legally applicable bed base (not every physical bed)
   quotaPercent: number; // e.g. 10 for 10%
   roundingMode: "FLOOR" | "CEIL" | "ROUND"; // configured regulatory rounding (§65.3)
+  warningThresholdPercent?: number; // e.g. 80 → warn before breach (§65.4)
 }
 
 export interface SeniorRuleConfig {
@@ -49,6 +50,7 @@ export class RegulatoryService {
     required: number;
     bedBase: number;
     quotaPercent: number;
+    warningThresholdPercent: number;
     ruleVersion: number;
   }> {
     const rule = await this.rules.resolve<FreeBedRuleConfig>(tenantId, RULE_KEYS.FREE_BED);
@@ -63,6 +65,7 @@ export class RegulatoryService {
       required,
       bedBase: rule.config.bedBase,
       quotaPercent: rule.config.quotaPercent,
+      warningThresholdPercent: rule.config.warningThresholdPercent ?? 80,
       ruleVersion: rule.version,
     };
   }
@@ -76,6 +79,19 @@ export class RegulatoryService {
     const available = Math.max(0, quota.required - occupied);
     const utilizationPct = quota.required > 0 ? Math.round((occupied / quota.required) * 100) : 0;
     const compliant = occupied >= quota.required || available > 0;
+
+    // §65.4: pre-breach warning threshold — the dashboard warns while the
+    // program is still compliant but approaching the required quota.
+    const warningThresholdPercent = quota.warningThresholdPercent ?? 80;
+    const inWarning = compliant && occupied >= (quota.required * warningThresholdPercent) / 100;
+    if (inWarning) {
+      await this.rules.logException(
+        tenantId,
+        "FREE_BED_QUOTA_WARNING",
+        { required: quota.required, occupied, available, thresholdPercent: warningThresholdPercent },
+        `Free-bed quota nearing capacity: ${occupied}/${quota.required} engaged (threshold ${warningThresholdPercent}%)`,
+      );
+    }
 
     if (!compliant) {
       // §65.4: quota exception must be logged.
@@ -95,6 +111,8 @@ export class RegulatoryService {
       availableFreeBeds: available,
       utilizationPercent: utilizationPct,
       complianceStatus: compliant ? "COMPLIANT" : "EXCEPTION",
+      warningStatus: inWarning ? "WARNING" : compliant ? "OK" : "EXCEPTION",
+      warningThresholdPercent,
       ruleVersion: quota.ruleVersion,
     };
   }
@@ -237,7 +255,7 @@ export class RegulatoryService {
     assessmentId: string,
     data: {
       decision: "APPROVED" | "REJECTED" | "RETURNED";
-      members: Array<{ userId: string; name?: string }>;
+      members?: Array<{ userId: string; name?: string }>;
       approvedAmount?: number;
       reason?: string;
       decidedBy: string;
@@ -255,7 +273,7 @@ export class RegulatoryService {
     }
     // Segregation of duties: a recommender cannot sit on the deciding committee.
     const recommender = assessment.recommendedBy;
-    if (recommender && data.members.some((m) => m.userId === recommender)) {
+    if (recommender && (data.members ?? []).some((m) => m.userId === recommender)) {
       throw new ConflictException(
         "Segregation of duties: the assessor/recommender cannot approve their own recommendation",
       );
@@ -265,7 +283,7 @@ export class RegulatoryService {
       data: {
         tenantId,
         assessmentId,
-        members: data.members as any,
+        members: (data.members ?? []) as any,
         decision: data.decision,
         approvedAmount: data.approvedAmount,
         reason: data.reason,
@@ -504,38 +522,68 @@ export class RegulatoryService {
         `Claim ${amount} exceeds utilized assistance ${utilized}`,
       );
     }
-    const updated = await this.prisma.bipannaCase.update({
-      where: { id: caseId },
-      data: { claimedAmount: { increment: amount } },
-    });
+    const claimNumber = await this.generateBipannaClaimNumber(tenantId);
+    const [claim, updated] = await this.prisma.$transaction([
+      this.prisma.bipannaClaim.create({
+        data: {
+          tenantId,
+          caseId,
+          claimNumber,
+          amount,
+          patientId: bc.patientId,
+          status: "SUBMITTED",
+          submittedBy: userId,
+        },
+      }),
+      this.prisma.bipannaCase.update({
+        where: { id: caseId },
+        data: { claimedAmount: { increment: amount } },
+      }),
+    ]);
     await this.recordSubsidyLedger(tenantId, {
       program: "BIPANNA",
       bipannaCaseId: caseId,
       patientId: bc.patientId,
       entryType: "CLAIM",
       amount,
+      reference: claimNumber,
       createdBy: userId,
     });
     await this.queueGovSync(tenantId, "BipannaClaim", caseId, userId, { amount });
-    await this.rules.logEvent(tenantId, "GOVERNMENT_CLAIM_SUBMITTED", "BipannaCase", caseId, { amount }, bc.patientId, userId);
-    return updated;
+    await this.rules.logEvent(tenantId, "GOVERNMENT_CLAIM_SUBMITTED", "BipannaClaim", claim.id, { amount }, bc.patientId, userId);
+    return { claim, case: updated };
   }
 
   async settleBipannaClaim(
     tenantId: string,
     caseId: string,
-    data: { approvedClaim: number; received: number; rejected: number; userId?: string },
+    data: { approvedClaim: number; received: number; rejected: number; userId?: string; claimId?: string },
   ) {
     const bc = await this.prisma.bipannaCase.findFirst({ where: { id: caseId, tenantId } });
     if (!bc) throw new NotFoundException("Bipanna case not found");
-    const updated = await this.prisma.bipannaCase.update({
-      where: { id: caseId },
-      data: {
-        approvedClaimAmount: { increment: data.approvedClaim },
-        receivedAmount: { increment: data.received },
-        rejectedAmount: { increment: data.rejected },
-      },
-    });
+    const updated = await this.prisma.$transaction([
+      this.prisma.bipannaCase.update({
+        where: { id: caseId },
+        data: {
+          approvedClaimAmount: { increment: data.approvedClaim },
+          receivedAmount: { increment: data.received },
+          rejectedAmount: { increment: data.rejected },
+        },
+      }),
+      this.prisma.bipannaClaim.updateMany({
+        where: data.claimId
+          ? { id: data.claimId, tenantId, caseId }
+          : { caseId, tenantId, status: { in: ["SUBMITTED", "APPROVED"] } },
+        data: {
+          status: "SETTLED",
+          approvedAmount: data.approvedClaim,
+          rejectedAmount: data.rejected,
+          settledAmount: data.received,
+          settledAt: new Date(),
+          approvalRef: `SETTLE-${Date.now()}`,
+        },
+      }),
+    ]);
     await this.recordSubsidyLedger(tenantId, {
       program: "BIPANNA",
       bipannaCaseId: caseId,
@@ -549,7 +597,7 @@ export class RegulatoryService {
       received: data.received,
       rejected: data.rejected,
     }, bc.patientId, data.userId);
-    return updated;
+    return updated[0];
   }
 
   /** §65.19 reconciliation: approved − utilized − rejected − returned = remaining. */
@@ -569,6 +617,12 @@ export class RegulatoryService {
     const year = new Date().getFullYear();
     const count = await this.prisma.bipannaCase.count({ where: { tenantId } });
     return `BNK-${year}-${String(count + 1).padStart(5, "0")}`;
+  }
+
+  private async generateBipannaClaimNumber(tenantId: string): Promise<string> {
+    const year = new Date().getFullYear();
+    const count = await this.prisma.bipannaClaim.count({ where: { tenantId } });
+    return `CLM-${year}-${String(count + 1).padStart(5, "0")}`;
   }
 
   // ------------------------------------------------------------------
@@ -1091,6 +1145,82 @@ export class RegulatoryService {
   async exceptionList(tenantId: string) {
     return this.prisma.regulatoryException.findMany({
       where: { tenantId, resolvedAt: null },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // List endpoints (SSU / Bipanna / free-beds / ledger)
+  // ------------------------------------------------------------------
+
+  async listSsuAssessments(
+    tenantId: string,
+    filter: { patientId?: string; status?: string } = {},
+  ) {
+    return this.prisma.ssuAssessment.findMany({
+      where: {
+        tenantId,
+        ...(filter.patientId ? { patientId: filter.patientId } : {}),
+        ...(filter.status ? { status: filter.status as any } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+  }
+
+  async listBipannaCases(
+    tenantId: string,
+    filter: { patientId?: string; status?: string } = {},
+  ) {
+    return this.prisma.bipannaCase.findMany({
+      where: {
+        tenantId,
+        ...(filter.patientId ? { patientId: filter.patientId } : {}),
+        ...(filter.status ? { status: filter.status as any } : {}),
+      },
+      include: { claims: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+  }
+
+  async listBipannaClaims(
+    tenantId: string,
+    filter: { caseId?: string; status?: string } = {},
+  ) {
+    return this.prisma.bipannaClaim.findMany({
+      where: {
+        tenantId,
+        ...(filter.caseId ? { caseId: filter.caseId } : {}),
+        ...(filter.status ? { status: filter.status as any } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+  }
+
+  async listFreeBedAllocations(
+    tenantId: string,
+    filter: { patientId?: string; status?: string } = {},
+  ) {
+    return this.prisma.freeBedAllocation.findMany({
+      where: {
+        tenantId,
+        ...(filter.patientId ? { patientId: filter.patientId } : {}),
+        ...(filter.status ? { status: filter.status as any } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+  }
+
+  async listBenefitLedger(
+    tenantId: string,
+    patientId: string,
+  ) {
+    return this.prisma.subsidyLedgerEntry.findMany({
+      where: { tenantId, patientId },
       orderBy: { createdAt: "desc" },
       take: 200,
     });

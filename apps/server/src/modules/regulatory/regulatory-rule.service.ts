@@ -18,6 +18,10 @@ export interface ResolvedRule<T = any> {
   effectiveFrom: Date;
   authority: string | null;
   legalReference: string | null;
+  ruleType?: string | null;
+  jurisdiction?: string | null;
+  eligibilityExpression?: string | null;
+  benefitExpression?: string | null;
 }
 
 @Injectable()
@@ -68,6 +72,10 @@ export class RegulatoryRuleService {
       effectiveFrom: r.effectiveFrom,
       authority: r.authority,
       legalReference: r.legalReference,
+      ruleType: r.ruleType,
+      jurisdiction: r.jurisdiction,
+      eligibilityExpression: r.eligibilityExpression,
+      benefitExpression: r.benefitExpression,
     };
   }
 
@@ -97,6 +105,10 @@ export class RegulatoryRuleService {
       authority?: string;
       legalReference?: string;
       category?: string;
+      ruleType?: string;
+      jurisdiction?: string;
+      eligibilityExpression?: string;
+      benefitExpression?: string;
       config: any;
       effectiveFrom: Date;
       effectiveTo?: Date | null;
@@ -118,6 +130,10 @@ export class RegulatoryRuleService {
         authority: data.authority,
         legalReference: data.legalReference,
         category: data.category,
+        ruleType: data.ruleType,
+        jurisdiction: data.jurisdiction,
+        eligibilityExpression: data.eligibilityExpression,
+        benefitExpression: data.benefitExpression,
         version,
         config: data.config as any,
         effectiveFrom: data.effectiveFrom,

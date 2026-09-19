@@ -23,6 +23,20 @@ import { MssService } from "./mss.service";
 import { ProgramsService } from "./programs.service";
 import { DisasterOfflineService } from "./disaster-offline.service";
 import { BilingualService } from "./bilingual.service";
+import {
+  AmountDto,
+  AssignFreeBedDto,
+  BrainDeathStepDto,
+  ClassifyVipDto,
+  CreateBipannaCaseDto,
+  CreateRuleDto,
+  CreateSsuAssessmentDto,
+  DecideSsuDto,
+  EnqueueSeniorDto,
+  SettleBipannaDto,
+  StartBrainDeathDto,
+  VipAccessDto,
+} from "./dto/regulatory.dto";
 
 /**
  * Nepal Regulatory & Special Patient Care API (spec §65).
@@ -49,13 +63,17 @@ export class RegulatoryController {
   @Post("rules")
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Create a new regulatory rule version" })
-  createRule(@Body() body: any, @Req() req: any) {
+  createRule(@Body() body: CreateRuleDto, @Req() req: any) {
     return this.rules.createVersion(req.user.tenantId, {
       ruleKey: body.ruleKey,
       ruleName: body.ruleName,
       authority: body.authority,
       legalReference: body.legalReference,
       category: body.category,
+      ruleType: body.ruleType,
+      jurisdiction: body.jurisdiction,
+      eligibilityExpression: body.eligibilityExpression,
+      benefitExpression: body.benefitExpression,
       config: body.config,
       effectiveFrom: new Date(body.effectiveFrom),
       effectiveTo: body.effectiveTo ? new Date(body.effectiveTo) : null,
@@ -94,6 +112,13 @@ export class RegulatoryController {
 
   // ---------------- Free-bed quota ----------------
 
+  @Get("free-beds")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List free-bed allocations" })
+  listFreeBeds(@Query("patientId") patientId: string | undefined, @Query("status") status: string | undefined, @Req() req: any) {
+    return this.regulatory.listFreeBedAllocations(req.user.tenantId, { patientId, status });
+  }
+
   @Get("free-beds/dashboard")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Free-bed quota compliance dashboard" })
@@ -104,7 +129,7 @@ export class RegulatoryController {
   @Post("free-beds")
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Assign an eligible patient under the free-bed quota" })
-  assignFreeBed(@Body() body: any, @Req() req: any) {
+  assignFreeBed(@Body() body: AssignFreeBedDto, @Req() req: any) {
     return this.regulatory.assignFreeBed(req.user.tenantId, {
       patientId: body.patientId,
       encounterId: body.encounterId,
@@ -129,7 +154,7 @@ export class RegulatoryController {
   @Post("ssu/assessments")
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Create an SSU socioeconomic assessment" })
-  createSsuAssessment(@Body() body: any, @Req() req: any) {
+  createSsuAssessment(@Body() body: CreateSsuAssessmentDto, @Req() req: any) {
     return this.regulatory.createSsuAssessment(req.user.tenantId, {
       patientId: body.patientId,
       encounterId: body.encounterId,
@@ -149,7 +174,7 @@ export class RegulatoryController {
   @Post("ssu/assessments/:id/committee-decision")
   @Permissions(PermissionAction.APPROVE)
   @ApiOperation({ summary: "Record an SSU committee decision (SoD enforced)" })
-  decideSsu(@Param("id") id: string, @Body() body: any, @Req() req: any) {
+  decideSsu(@Param("id") id: string, @Body() body: DecideSsuDto, @Req() req: any) {
     return this.regulatory.decideSsuAssessment(req.user.tenantId, id, {
       decision: body.decision,
       members: body.members,
@@ -160,6 +185,13 @@ export class RegulatoryController {
       hospitalContribution: body.hospitalContribution,
       patientContribution: body.patientContribution,
     });
+  }
+
+  @Get("ssu/assessments")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List SSU socioeconomic assessments" })
+  listSsuAssessments(@Query("patientId") patientId: string | undefined, @Query("status") status: string | undefined, @Req() req: any) {
+    return this.regulatory.listSsuAssessments(req.user.tenantId, { patientId, status });
   }
 
   @Get("ssu/assessments/:id/reconcile")
@@ -174,7 +206,7 @@ export class RegulatoryController {
   @Post("bipanna/cases")
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Create a Bipanna case (disease list from active rule)" })
-  createBipannaCase(@Body() body: any, @Req() req: any) {
+  createBipannaCase(@Body() body: CreateBipannaCaseDto, @Req() req: any) {
     return this.regulatory.createBipannaCase(req.user.tenantId, {
       patientId: body.patientId,
       diseaseCategory: body.diseaseCategory,
@@ -183,14 +215,28 @@ export class RegulatoryController {
     });
   }
 
+  @Get("bipanna/cases")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List Bipanna cases (with claims)" })
+  listBipannaCases(@Query("patientId") patientId: string | undefined, @Query("status") status: string | undefined, @Req() req: any) {
+    return this.regulatory.listBipannaCases(req.user.tenantId, { patientId, status });
+  }
+
+  @Get("bipanna/claims")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "List Bipanna reimbursement claims" })
+  listBipannaClaims(@Query("caseId") caseId: string | undefined, @Query("status") status: string | undefined, @Req() req: any) {
+    return this.regulatory.listBipannaClaims(req.user.tenantId, { caseId, status });
+  }
+
   @Post("bipanna/cases/:id/approve-assistance")
   @Permissions(PermissionAction.APPROVE)
   @ApiOperation({ summary: "Approve Bipanna assistance (ceiling from rule)" })
-  approveBipanna(@Param("id") id: string, @Body() body: any, @Req() req: any) {
+  approveBipanna(@Param("id") id: string, @Body() body: AmountDto, @Req() req: any) {
     return this.regulatory.approveBipannaAssistance(
       req.user.tenantId,
       id,
-      Number(body.amount),
+      body.amount,
       req.user.id,
     );
   }
@@ -198,11 +244,11 @@ export class RegulatoryController {
   @Post("bipanna/cases/:id/utilize")
   @Permissions(PermissionAction.EDIT)
   @ApiOperation({ summary: "Record assistance utilization (over-utilization blocked)" })
-  utilizeBipanna(@Param("id") id: string, @Body() body: any, @Req() req: any) {
+  utilizeBipanna(@Param("id") id: string, @Body() body: AmountDto, @Req() req: any) {
     return this.regulatory.utilizeBipannaAssistance(
       req.user.tenantId,
       id,
-      Number(body.amount),
+      body.amount,
       body.reference,
       req.user.id,
     );
@@ -211,11 +257,11 @@ export class RegulatoryController {
   @Post("bipanna/cases/:id/claims")
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Submit a Bipanna claim (≤ utilized)" })
-  claimBipanna(@Param("id") id: string, @Body() body: any, @Req() req: any) {
+  claimBipanna(@Param("id") id: string, @Body() body: AmountDto, @Req() req: any) {
     return this.regulatory.submitBipannaClaim(
       req.user.tenantId,
       id,
-      Number(body.amount),
+      body.amount,
       req.user.id,
     );
   }
@@ -223,12 +269,13 @@ export class RegulatoryController {
   @Post("bipanna/cases/:id/settlement")
   @Permissions(PermissionAction.APPROVE)
   @ApiOperation({ summary: "Record claim approval/receipt/rejection" })
-  settleBipanna(@Param("id") id: string, @Body() body: any, @Req() req: any) {
+  settleBipanna(@Param("id") id: string, @Body() body: SettleBipannaDto, @Req() req: any) {
     return this.regulatory.settleBipannaClaim(req.user.tenantId, id, {
-      approvedClaim: Number(body.approvedClaim),
-      received: Number(body.received),
-      rejected: Number(body.rejected),
+      approvedClaim: body.approvedClaim,
+      received: body.received,
+      rejected: body.rejected,
       userId: req.user.id,
+      claimId: body.claimId,
     });
   }
 
@@ -237,7 +284,7 @@ export class RegulatoryController {
   @Post("brain-death/cases")
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Start a brain-death documentation protocol" })
-  startBrainDeath(@Body() body: any, @Req() req: any) {
+  startBrainDeath(@Body() body: StartBrainDeathDto, @Req() req: any) {
     return this.regulatory.startBrainDeathProtocol(req.user.tenantId, {
       patientId: body.patientId,
       admissionId: body.admissionId,
@@ -249,7 +296,7 @@ export class RegulatoryController {
   @Post("brain-death/cases/:id/steps")
   @Permissions(PermissionAction.EDIT)
   @ApiOperation({ summary: "Record a protocol step / status change (certification gated)" })
-  brainDeathStep(@Param("id") id: string, @Body() body: any, @Req() req: any) {
+  brainDeathStep(@Param("id") id: string, @Body() body: BrainDeathStepDto, @Req() req: any) {
     return this.regulatory.recordBrainDeathStep(req.user.tenantId, id, {
       status: body.status,
       step: body.step,
@@ -270,12 +317,12 @@ export class RegulatoryController {
   @Post("senior/queue")
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Enqueue a senior-citizen priority token" })
-  enqueueSenior(@Body() body: any, @Req() req: any) {
+  enqueueSenior(@Body() body: EnqueueSeniorDto, @Req() req: any) {
     return this.regulatory.enqueueSenior(req.user.tenantId, {
       patientId: body.patientId,
       servicePoint: body.servicePoint,
       encounterId: body.encounterId,
-      dateOfBirth: new Date(body.dateOfBirth),
+      dateOfBirth: new Date(body.dateOfBirth ?? Date.now()),
       emergencyTriageLevel: body.emergencyTriageLevel,
       overrideReason: body.overrideReason,
       handledBy: req.user.id,
@@ -301,7 +348,7 @@ export class RegulatoryController {
   @Post("vip/classify")
   @Permissions(PermissionAction.CREATE)
   @ApiOperation({ summary: "Create an authorized VIP/VVIP classification" })
-  classifyVip(@Body() body: any, @Req() req: any) {
+  classifyVip(@Body() body: ClassifyVipDto, @Req() req: any) {
     return this.regulatory.classifyVip(req.user.tenantId, {
       patientId: body.patientId,
       level: body.level,
@@ -315,7 +362,7 @@ export class RegulatoryController {
   @Post("vip/:patientId/access")
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Gate a VIP record access attempt (logs + break-glass)" })
-  vipAccess(@Param("patientId") patientId: string, @Body() body: any, @Req() req: any) {
+  vipAccess(@Param("patientId") patientId: string, @Body() body: VipAccessDto, @Req() req: any) {
     return this.regulatory.assertVipAccess(req.user.tenantId, patientId, req.user, {
       action: body.action ?? "VIEW",
       reason: body.reason ?? "",
@@ -354,6 +401,13 @@ export class RegulatoryController {
   @ApiOperation({ summary: "Auditable funding waterfall for a bill" })
   fundingWaterfall(@Param("invoiceId") invoiceId: string, @Req() req: any) {
     return this.regulatory.getFundingWaterfall(req.user.tenantId, invoiceId);
+  }
+
+  @Get("benefits/:patientId/ledger")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Auditable benefit ledger for a patient (§65.13/§65.19/§65.50)" })
+  benefitLedger(@Param("patientId") patientId: string, @Req() req: any) {
+    return this.regulatory.listBenefitLedger(req.user.tenantId, patientId);
   }
 
   @Get("invoices/:invoiceId/double-funding-check")

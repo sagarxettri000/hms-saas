@@ -20,6 +20,7 @@ export function buildPdf(options: {
   subtitle?: string;
   columns: PdfColumn[];
   rows: string[][];
+  watermark?: string;
 }): Buffer {
   const pageWidth = 595.28;
   const pageHeight = 841.89;
@@ -30,6 +31,16 @@ export function buildPdf(options: {
 
   const content: string[] = [];
   let y = pageHeight - margin;
+
+  // Watermark rendered under the header so it never obscures data (§35.2).
+  if (options.watermark) {
+    content.push("q");
+    content.push("/F1 42 Tf");
+    content.push("0.82 0.84 0.87 rg");
+    content.push("1 0 0 1 130 400 Tm");
+    content.push(`${pdfString(options.watermark)} Tj`);
+    content.push("Q");
+  }
 
   content.push("BT");
   content.push("/F1 18 Tf");

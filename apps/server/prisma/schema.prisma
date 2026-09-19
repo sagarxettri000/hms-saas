@@ -710,6 +710,7 @@ model Tenant {
   ssuAssessments         SsuAssessment[]
   ssuCommitteeDecisions  SsuCommitteeDecision[]
   bipannaCases           BipannaCase[]
+  bipannaClaims          BipannaClaim[]
   brainDeathCases        BrainDeathCase[]
   donorAlerts            DonorAlert[]
   seniorQueueEntries     SeniorQueueEntry[]
@@ -867,6 +868,8 @@ model Bed {
   status     BedStatus @default(AVAILABLE)
   ratePerDay Decimal   @default(0) @db.Decimal(10, 2)
   isActive   Boolean   @default(true)
+  freeBedEligible  Boolean @default(false)
+  quotaCategory    String?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
@@ -4522,6 +4525,10 @@ model RegulatoryRule {
   authority       String?
   legalReference  String?
   category        String?
+  ruleType        String?
+  jurisdiction    String?
+  eligibilityExpression String?
+  benefitExpression     String?
   version         Int                  @default(1)
   config          Json
   effectiveFrom   DateTime
@@ -4649,10 +4656,38 @@ model BipannaCase {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   ledgerEntries     SubsidyLedgerEntry[]
+  claims            BipannaClaim[]
 
   @@index([tenantId, status])
   @@index([tenantId, patientId])
   @@map("bipanna_cases")
+}
+
+/// Government reimbursement claim raised against an approved case (§65.9–§65.11).
+model BipannaClaim {
+  id             String             @id @default(cuid())
+  tenantId       String
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  caseId         String
+  case           BipannaCase        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  claimNumber    String             @unique
+  amount         Decimal            @db.Decimal(12, 2)
+  status         BipannaClaimStatus @default(SUBMITTED)
+  periodFrom     DateTime?
+  patientId      String?
+  submittedBy    String?
+  approvedAmount Decimal?           @db.Decimal(12, 2)
+  rejectedAmount Decimal?           @db.Decimal(12, 2)
+  settledAmount  Decimal?           @db.Decimal(12, 2)
+  settledAt      DateTime?
+  approvalRef    String?
+  documents      Json?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([tenantId, status])
+  @@index([tenantId, caseId])
+  @@map("bipanna_claims")
 }
 
 /// Brain-death documentation/coordination workflow (§65.20–§65.22).

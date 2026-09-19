@@ -77,10 +77,12 @@ export class ExportsController {
     @Res() res: Response,
     @Query("from") from?: string,
     @Query("to") to?: string,
+    @Query("watermark") watermark?: string,
   ) {
     const pdf = await this.exportsService.revenuePdf(req.user.tenantId, {
       from,
       to,
+      watermark,
     });
     return res.send(pdf);
   }
@@ -95,10 +97,12 @@ export class ExportsController {
     @Res() res: Response,
     @Query("from") from?: string,
     @Query("to") to?: string,
+    @Query("watermark") watermark?: string,
   ) {
     const pdf = await this.exportsService.doctorWorkloadPdf(req.user.tenantId, {
       from,
       to,
+      watermark,
     });
     return res.send(pdf);
   }

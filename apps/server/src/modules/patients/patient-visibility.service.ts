@@ -105,7 +105,15 @@ export class PatientVisibilityService {
    */
   async buildActiveListFilter(user: VisibilityUser): Promise<any> {
     const ctx = await this.getContext(user);
-    if (ctx.mode !== "CLINICAL") return {};
+
+    // §65.56/§65.58: VIP patients are excluded from list/search results for
+    // everyone except roles explicitly configured to see them in lists.
+    // (Authorized users still open the record via the logged VIP gate.)
+    const vipFilter = await this.buildVipListExclusion(user);
+
+    if (ctx.mode !== "CLINICAL") {
+      return vipFilter ? { AND: [vipFilter] } : {};
+    }
 
     const or: any[] = [
       // Current clinical context in the user's department.
@@ -124,7 +132,21 @@ export class PatientVisibilityService {
       // clinical worklist visibility at all (never "patient exists").
       return { id: { in: ["__no_clinical_context__"] } };
     }
-    return { OR: or };
+    return vipFilter ? { AND: [{ OR: or }, vipFilter] } : { OR: or };
+  }
+
+  /** §65.56: ACTIVE VIP patients vanish from lists unless role-allowlisted. */
+  private async buildVipListExclusion(user: VisibilityUser): Promise<any | null> {
+    if (!(this.prisma as any).vipClassification) return null;
+    const rule = await (this.prisma as any).regulatoryRule
+      ?.findFirst({
+        where: { tenantId: user.tenantId, ruleKey: "vip_access_policy", status: "ACTIVE" },
+        orderBy: { version: "desc" },
+      })
+      .catch(() => null);
+    const listRoles: string[] = rule?.config?.listVisibilityRoles ?? [];
+    if (listRoles.includes(user.role ?? "")) return null;
+    return { vipClassifications: { none: { status: "ACTIVE" } } };
   }
 
   /**
@@ -180,6 +202,103 @@ export class PatientVisibilityService {
         "You do not have an authorized clinical relationship with this patient",
       );
     }
+  }
+
+  /**
+   * Full record-access gate for patient detail endpoints:
+   * 1. clinical-context isolation (§64.16)
+   * 2. VIP/VVIP restricted-record protocol (§65.32–§65.34): need-to-know
+   *    allowlist, every access logged, break-glass with justification and
+   *    a high-priority compliance exception. Admins do NOT auto-pass.
+   */
+  async assertPatientRecordAccess(
+    user: VisibilityUser,
+    patientId: string,
+    opts?: {
+      reason?: string;
+      breakGlass?: boolean;
+      ip?: string;
+      sessionId?: string;
+      module?: string;
+    },
+  ): Promise<void> {
+    await this.assertCanAccess(user, patientId);
+
+    if (!(this.prisma as any).vipClassification) return;
+    const vip = await this.prisma.vipClassification.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        patientId,
+        status: "ACTIVE",
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: new Date() } }],
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!vip) return;
+
+    const policy: any = (vip.accessPolicy as any) ?? {};
+    const allowedRoles: string[] = policy.allowedRoles ?? [];
+    const allowedUsers: string[] = policy.allowedUsers ?? [];
+
+    if (allowedUsers.includes(user.id) || allowedRoles.includes(user.role ?? "")) {
+      await this.prisma.vipAccessLog
+        .create({
+          data: {
+            tenantId: user.tenantId,
+            patientId,
+            vipClassificationId: vip.id,
+            userId: user.id,
+            userRole: user.role,
+            action: "VIEW",
+            recordModule: opts?.module,
+            ipAddress: opts?.ip,
+            sessionId: opts?.sessionId,
+            accessReason: opts?.reason,
+          },
+        })
+        .catch(() => undefined);
+      return;
+    }
+
+    // §65.34 break-glass: substantive reason + high-priority audit trail.
+    if (opts?.breakGlass && (opts.reason ?? "").trim().length >= 10) {
+      await this.prisma.vipAccessLog
+        .create({
+          data: {
+            tenantId: user.tenantId,
+            patientId,
+            vipClassificationId: vip.id,
+            userId: user.id,
+            userRole: user.role,
+            action: "BREAK_GLASS",
+            recordModule: opts?.module,
+            ipAddress: opts?.ip,
+            sessionId: opts?.sessionId,
+            accessReason: opts?.reason,
+          },
+        })
+        .catch(() => undefined);
+      if ((this.prisma as any).regulatoryException) {
+        await this.prisma.regulatoryException
+          .create({
+            data: {
+              tenantId: user.tenantId,
+              kind: "VIP_BREAK_GLASS",
+              severity: "CRITICAL",
+              message: `BREAK-GLASS VIP access by ${user.id}: ${opts?.reason}`,
+              details: { patientId, userId: user.id, reason: opts?.reason } as any,
+              patientId,
+            },
+          })
+          .catch(() => undefined);
+      }
+      return;
+      return;
+    }
+
+    throw new ForbiddenException(
+      "This record is classified — access requires authorization (break-glass is available with a substantive justification)",
+    );
   }
 
   // ------------------------------------------------------------------

@@ -705,6 +705,20 @@ model Tenant {
   patientLocations        PatientLocation[]
   patientTransfers        PatientTransfer[]
   revenueSplitRules       RevenueSplitRule[]
+  regulatoryRules        RegulatoryRule[]
+  freeBedAllocations     FreeBedAllocation[]
+  ssuAssessments         SsuAssessment[]
+  ssuCommitteeDecisions  SsuCommitteeDecision[]
+  bipannaCases           BipannaCase[]
+  brainDeathCases        BrainDeathCase[]
+  donorAlerts            DonorAlert[]
+  seniorQueueEntries     SeniorQueueEntry[]
+  vipClassifications     VipClassification[]
+  vipAccessLogs          VipAccessLog[]
+  govSyncRecords         GovSyncRecord[]
+  regulatoryEvents       RegulatoryEvent[]
+  regulatoryExceptions   RegulatoryException[]
+  subsidyLedgerEntries   SubsidyLedgerEntry[]
   revenueAllocations      RevenueAllocation[]
   consultantAssignments   ConsultantAssignment[]
   claimItems              ClaimItem[]
@@ -842,6 +856,7 @@ model Bed {
   @@index([status])
   patientLocations PatientLocation[]
   transfersTo      PatientTransfer[] @relation("TransferToBed")
+  freeBedStays     FreeBedAllocation[]
 
   @@map("beds")
   @@index([roomId])
@@ -1367,6 +1382,13 @@ model Patient {
   creditAccounts      CreditAccount[]
   insuranceClaims     InsuranceClaim[]
   medicalTourismCases MedicalTourismCase[]
+  freeBedStays         FreeBedAllocation[]     @relation("FreeBedPatient")
+  ssuAssessments       SsuAssessment[]         @relation("SsuPatient")
+  bipannaCases         BipannaCase[]           @relation("BipannaPatient")
+  brainDeathCases      BrainDeathCase[]        @relation("BrainDeathPatient")
+  seniorQueueEntries   SeniorQueueEntry[]      @relation("SeniorQueuePatient")
+  vipClassifications   VipClassification[]     @relation("VipPatient")
+  vipAccessLogs        VipAccessLog[]          @relation("VipAccessPatient")
   adverseEvents       AdverseEvent[]
   documentSignatures  DocumentSignature[]
   followUps           FollowUp[]
@@ -4345,4 +4367,457 @@ model PatientTransfer {
   @@index([tenantId, status])
   @@index([fromLocationId])
   @@map("patient_transfers")
+}
+
+// ============================================================
+// NEPAL REGULATORY, SOCIAL CARE & SPECIAL PATIENT MANAGEMENT
+// All thresholds/percentages/amounts are configuration-driven
+// and effective-dated (spec §65.1/§65.17/§65.27/§65.44/§65.45).
+// ============================================================
+
+enum RegulatoryRuleStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum FreeBedStatus {
+  OCCUPIED
+  RELEASED
+}
+
+enum SsuAssessmentStatus {
+  DRAFT
+  RECOMMENDED
+  COMMITTEE_REVIEW
+  APPROVED
+  REJECTED
+  RETURNED
+}
+
+enum BipannaCaseStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum BipannaClaimStatus {
+  PREPARED
+  SUBMITTED
+  APPROVED
+  REJECTED
+  SETTLED
+}
+
+enum BrainDeathStatus {
+  NOT_SUSPECTED
+  SUSPECTED
+  UNDER_ASSESSMENT
+  PROTOCOL_IN_PROGRESS
+  CERTIFICATION_PENDING
+  CERTIFIED
+  DONATION_DISCUSSION
+  DONOR_CONSENTED
+  DONOR_DECLINED
+  NOT_ELIGIBLE
+  TRANSFERRED_FOR_COORDINATION
+  CLOSED
+}
+
+enum DonorAlertStatus {
+  SENT
+  ACKNOWLEDGED
+  RESPONDED
+  CLOSED
+}
+
+enum QueuePriority {
+  NORMAL
+  SENIOR_PRIORITY
+}
+
+enum VipAccessAction {
+  VIEW
+  EXPORT
+  PRINT
+  BREAK_GLASS
+  CLASSIFY
+  REVOKE
+}
+
+enum VipClassificationStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum GovSyncStatus {
+  NOT_REQUIRED
+  PENDING
+  QUEUED
+  SUBMITTED
+  ACKNOWLEDGED
+  ACCEPTED
+  REJECTED
+  FAILED
+  RETRYING
+  CANCELLED
+}
+
+enum SubsidyLedgerEntryType {
+  APPROVAL
+  UTILIZATION
+  REVERSAL
+  ADJUSTMENT
+  CLAIM
+  SETTLEMENT
+}
+
+/// Versioned, effective-dated regulatory configuration (§65.1/§65.44).
+/// Never edited in place — a change creates a new version (§65.45).
+model RegulatoryRule {
+  id              String               @id @default(cuid())
+  tenantId        String
+  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ruleKey         String
+  ruleName        String
+  authority       String?
+  legalReference  String?
+  category        String?
+  version         Int                  @default(1)
+  config          Json
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
+  status          RegulatoryRuleStatus @default(DRAFT)
+  createdBy       String?
+  approvedBy      String?
+  approvedAt      DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@unique([tenantId, ruleKey, version])
+  @@index([tenantId, ruleKey, status])
+  @@map("regulatory_rules")
+}
+
+/// One free-bed stay of an eligible patient (§65.2/§65.9).
+model FreeBedAllocation {
+  id                  String        @id @default(cuid())
+  tenantId            String
+  tenant              Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId           String
+  patient             Patient       @relation("FreeBedPatient", fields: [patientId], references: [id], onDelete: Cascade)
+  encounterId         String?
+  admissionId         String?
+  bedId               String?
+  bed                 Bed?          @relation(fields: [bedId], references: [id], onDelete: SetNull)
+  eligibilityBasis    String?
+  verificationDocRef  String?
+  verificationAuthority String?
+  status              FreeBedStatus @default(OCCUPIED)
+  admittedAt          DateTime      @default(now())
+  dischargedAt        DateTime?
+  ruleVersion         Int
+  ruleId              String
+  createdBy           String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([tenantId, status])
+  @@index([tenantId, patientId])
+  @@map("free_bed_allocations")
+}
+
+/// SSU socioeconomic assessment + subsidy recommendation (§65.10).
+model SsuAssessment {
+  id                    String               @id @default(cuid())
+  tenantId              String
+  tenant                Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId             String
+  patient               Patient              @relation("SsuPatient", fields: [patientId], references: [id], onDelete: Cascade)
+  encounterId           String?
+  invoiceId             String?
+  economicTier          String?
+  diseaseCategory       String?
+  treatmentCategory     String?
+  householdIncome       Decimal?             @db.Decimal(12, 2)
+  assessmentNotes       String?
+  documents             Json?
+  status                SsuAssessmentStatus  @default(DRAFT)
+  recommendedBy         String?
+  recommendedAt         DateTime?
+  recommendedSubsidy    Decimal?             @db.Decimal(12, 2)
+  approvedSubsidy       Decimal?             @db.Decimal(12, 2)
+  governmentContribution Decimal?            @db.Decimal(12, 2)
+  hospitalContribution  Decimal?             @db.Decimal(12, 2)
+  patientContribution   Decimal?             @db.Decimal(12, 2)
+  totalBillAmount       Decimal?             @db.Decimal(12, 2)
+  ruleId                String?
+  ruleVersion           Int?
+  createdBy             String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  committeeDecisions    SsuCommitteeDecision[]
+  ledgerEntries         SubsidyLedgerEntry[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, patientId])
+  @@map("ssu_assessments")
+}
+
+/// Committee decision with segregation of duties (§65.12).
+model SsuCommitteeDecision {
+  id             String               @id @default(cuid())
+  tenantId       String
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assessmentId   String
+  assessment     SsuAssessment        @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  members        Json
+  decision       String
+  approvedAmount Decimal?             @db.Decimal(12, 2)
+  reason         String?
+  documents      Json?
+  decidedBy      String?
+  decidedAt      DateTime             @default(now())
+  createdAt      DateTime             @default(now())
+
+  @@index([tenantId, assessmentId])
+  @@map("ssu_committee_decisions")
+}
+
+/// Bipanna Nagarik Kosh case with utilization against approved ceiling (§65.15–§65.19).
+model BipannaCase {
+  id                String             @id @default(cuid())
+  tenantId          String
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  caseNumber        String             @unique
+  patientId         String
+  patient           Patient            @relation("BipannaPatient", fields: [patientId], references: [id], onDelete: Cascade)
+  diseaseCategory   String
+  diagnosis         String?
+  eligibilityStatus String?
+  status            BipannaCaseStatus  @default(ACTIVE)
+  approvedAmount    Decimal            @default(0) @db.Decimal(12, 2)
+  utilizedAmount    Decimal            @default(0) @db.Decimal(12, 2)
+  rejectedAmount    Decimal            @default(0) @db.Decimal(12, 2)
+  returnedAmount    Decimal            @default(0) @db.Decimal(12, 2)
+  claimedAmount     Decimal            @default(0) @db.Decimal(12, 2)
+  receivedAmount    Decimal            @default(0) @db.Decimal(12, 2)
+  approvedClaimAmount Decimal          @default(0) @db.Decimal(12, 2)
+  ruleId            String
+  ruleVersion       Int
+  documents         Json?
+  createdBy         String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  ledgerEntries     SubsidyLedgerEntry[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, patientId])
+  @@map("bipanna_cases")
+}
+
+/// Brain-death documentation/coordination workflow (§65.20–§65.22).
+model BrainDeathCase {
+  id                String            @id @default(cuid())
+  tenantId          String
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId         String
+  patient           Patient           @relation("BrainDeathPatient", fields: [patientId], references: [id], onDelete: Cascade)
+  admissionId       String?
+  encounterId       String?
+  caseNumber        String            @unique
+  status            BrainDeathStatus  @default(SUSPECTED)
+  checklist         Json?
+  certifiedBy       String?
+  certifiedAt       DateTime?
+  certificationRef  String?
+  createdBy         String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  donorAlerts       DonorAlert[]
+
+  @@index([tenantId, status])
+  @@map("brain_death_cases")
+}
+
+/// Donor-coordination alert with full delivery audit (§65.23/§65.25).
+model DonorAlert {
+  id              String            @id @default(cuid())
+  tenantId        String
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  brainDeathCaseId String
+  brainDeathCase  BrainDeathCase    @relation(fields: [brainDeathCaseId], references: [id], onDelete: Cascade)
+  trigger         String?
+  recipientOrg    String?
+  recipientUser   String?
+  channel         String?
+  status          DonorAlertStatus  @default(SENT)
+  sentBy          String?
+  acknowledgedAt  DateTime?
+  response        String?
+  closedAt        DateTime?
+  createdAt       DateTime          @default(now())
+
+  @@index([tenantId, brainDeathCaseId])
+  @@map("donor_alerts")
+}
+
+/// Senior-citizen priority queue entry (§65.28–§65.30).
+model SeniorQueueEntry {
+  id              String         @id @default(cuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId       String
+  patient         Patient        @relation("SeniorQueuePatient", fields: [patientId], references: [id], onDelete: Cascade)
+  encounterId     String?
+  servicePoint    String
+  token           String
+  priority        QueuePriority  @default(SENIOR_PRIORITY)
+  ageAtEntry      Int
+  ruleId          String
+  ruleVersion     Int
+  queuedAt        DateTime       @default(now())
+  servedAt        DateTime?
+  completedAt     DateTime?
+  waitingSeconds  Int?
+  overrideReason  String?
+  handledBy       String?
+  createdAt       DateTime       @default(now())
+
+  @@index([tenantId, servicePoint, priority])
+  @@index([tenantId, patientId])
+  @@map("senior_queue_entries")
+}
+
+/// VIP/VVIP restricted-access classification (§65.31/§65.39/§65.58).
+model VipClassification {
+  id              String                  @id @default(cuid())
+  tenantId        String
+  tenant          Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId       String
+  patient         Patient                 @relation("VipPatient", fields: [patientId], references: [id], onDelete: Cascade)
+  level           String
+  accessPolicy    Json?
+  effectiveFrom   DateTime                @default(now())
+  effectiveTo     DateTime?
+  status          VipClassificationStatus @default(ACTIVE)
+  authorizedBy    String?
+  createdBy       String?
+  createdAt       DateTime                @default(now())
+
+  @@index([tenantId, patientId, status])
+  @@map("vip_classifications")
+}
+
+/// Immutable VIP access log incl. break-glass (§65.33/§65.34).
+model VipAccessLog {
+  id             String           @id @default(cuid())
+  tenantId       String
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId      String
+  patient        Patient          @relation("VipAccessPatient", fields: [patientId], references: [id], onDelete: Cascade)
+  vipClassificationId String?
+  userId         String?
+  userRole       String?
+  action         VipAccessAction
+  recordModule   String?
+  ipAddress      String?
+  sessionId      String?
+  accessReason   String?
+  dataExported   String?
+  createdAt      DateTime         @default(now())
+
+  @@index([tenantId, patientId])
+  @@index([tenantId, userId])
+  @@map("vip_access_logs")
+}
+
+/// Government-portal synchronization record (§65.5–§65.7/§65.43).
+model GovSyncRecord {
+  id                 String        @id @default(cuid())
+  tenantId           String
+  tenant             Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requestId          String        @unique
+  externalTxnId      String?
+  entityType         String
+  entityId           String
+  payloadVersion     String?
+  payload            Json?
+  response           Json?
+  httpStatus         Int?
+  status             GovSyncStatus @default(PENDING)
+  retryCount         Int           @default(0)
+  lastAttemptAt      DateTime?
+  lastSuccessAt      DateTime?
+  errorMessage       String?
+  initiatedBy        String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@unique([tenantId, entityType, entityId, requestId])
+  @@index([tenantId, status])
+  @@map("gov_sync_records")
+}
+
+/// Centralized immutable regulatory event log (§65.40).
+model RegulatoryEvent {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  eventType   String
+  entityType  String
+  entityId    String
+  patientId   String?
+  payload     Json?
+  userId      String?
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, eventType])
+  @@index([tenantId, createdAt])
+  @@map("regulatory_events")
+}
+
+/// Compliance exception register (§65.4/§65.48).
+model RegulatoryException {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind        String
+  severity    String   @default("WARNING")
+  entityType  String?
+  entityId    String?
+  patientId   String?
+  message     String
+  details     Json?
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, kind])
+  @@map("regulatory_exceptions")
+}
+
+/// Auditable subsidy/assistance ledger shared by SSU + Bipanna (§65.13/§65.19/§65.50).
+model SubsidyLedgerEntry {
+  id           String                @id @default(cuid())
+  tenantId     String
+  tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  program      String
+  ssuAssessmentId String?
+  ssuAssessment SsuAssessment?       @relation(fields: [ssuAssessmentId], references: [id], onDelete: SetNull)
+  bipannaCaseId   String?
+  bipannaCase    BipannaCase?       @relation(fields: [bipannaCaseId], references: [id], onDelete: SetNull)
+  patientId    String?
+  invoiceId    String?
+  entryType    SubsidyLedgerEntryType
+  amount       Decimal               @db.Decimal(12, 2)
+  funder       String?
+  balanceAfter Decimal?
+  reference    String?
+  notes        String?
+  createdBy    String?
+  createdAt    DateTime              @default(now())
+
+  @@index([tenantId, program, patientId])
+  @@index([tenantId, invoiceId])
+  @@map("subsidy_ledger_entries")
 }

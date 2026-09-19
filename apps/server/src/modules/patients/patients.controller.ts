@@ -102,8 +102,17 @@ export class PatientsController {
   @ApiOperation({ summary: "Find patient by MRN" })
   async findByMrn(@Param("mrn") mrn: string, @Req() req: any) {
     const patient = await this.patientsService.findByMrn(req.user.tenantId, mrn);
-    // §64.16: direct lookups obey the same authorization as lists.
-    if (patient) await this.visibility.assertCanAccess(req.user, (patient as any).id);
+    // §64.16 + §65.32: direct lookups obey clinical isolation AND the
+    // VIP restricted-record protocol (logged, break-glass supported).
+    if (patient) {
+      await this.visibility.assertPatientRecordAccess(req.user, (patient as any).id, {
+        reason: `MRN lookup: ${mrn}`,
+        breakGlass: req.headers["x-break-glass"] === "true",
+        ip: req.ip,
+        sessionId: req.user?.sessionId,
+        module: "patients/by-mrn",
+      });
+    }
     return patient;
   }
 
@@ -111,7 +120,15 @@ export class PatientsController {
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Get patient details with full record" })
   async findById(@Param("id") id: string, @Req() req: any) {
-    await this.visibility.assertCanAccess(req.user, id);
+    // §65.32: VIP records require need-to-know authorization; every access
+    // is logged; break-glass requires a substantive justification header.
+    await this.visibility.assertPatientRecordAccess(req.user, id, {
+      reason: req.headers["x-access-reason"] as string | undefined,
+      breakGlass: req.headers["x-break-glass"] === "true",
+      ip: req.ip,
+      sessionId: req.user?.sessionId,
+      module: "patients/detail",
+    });
     const patient = await this.patientsService.findById(req.user.tenantId, id);
     // Apply the same PHI masking used by findAll/search so restricted roles
     // (e.g. RECEPTIONIST) cannot read identity documents via the detail route.

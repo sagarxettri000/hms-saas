@@ -210,7 +210,7 @@ async function main() {
   check("invoice paid amount == 400", paid === 400, `got ${paid}`);
 
   // Two-phase refund: REQUESTED → approve posts the balance effect.
-  const refund = await api("POST", "/billing/refunds", { invoiceId: INV.id, paymentId: PAY.id, amount: 100, reason: `${RUN} synthetic refund` }, T);
+  const refund = await api("POST", "/billing/refunds", { invoiceId: INV.id, paymentId: PAY.id, amount: 100, reason: `${RUN} synthetic refund` }, TR);
   const REF = unwrap(refund.json);
   check("refund requested (two-phase)", [200, 201].includes(refund.status) && REF?.status === "REQUESTED", JSON.stringify(refund.json).slice(0, 140));
 
@@ -301,16 +301,19 @@ async function main() {
   // ---------- PHASE APP: appointments (run-unique minute to avoid the
   // legitimate double-booking 409 across runs) ----------
   const minute = String(parseInt(RUN.slice(-4), 36) % 60).padStart(2, "0");
+  const appointmentDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
   const appt = await api("POST", "/appointments", {
     patientId: A.id, doctorId: doc.id,
-    appointmentDate: new Date().toISOString().slice(0, 10), startTime: `16:${minute}`,
+    appointmentDate, startTime: `16:${minute}`,
   }, T);
   const AP = unwrap(appt.json);
   check("appointment booked", appt.status === 201 && !!AP?.id, JSON.stringify(appt.json).slice(0, 160));
 
   const badTime = await api("POST", "/appointments", {
     patientId: A.id, doctorId: doc.id,
-    appointmentDate: new Date().toISOString().slice(0, 10), startTime: "18:00", endTime: "17:00",
+    appointmentDate, startTime: "18:00", endTime: "17:00",
   }, T);
   check("appointment end<=start refused (400)", badTime.status === 400, badTime.status);
 

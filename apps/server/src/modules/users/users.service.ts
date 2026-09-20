@@ -214,6 +214,7 @@ export class UsersService {
     role?: string;
     departmentId?: string;
     status?: string;
+    actorRole?: string;
   }) {
     const page = Number(params.page) || 1;
     const limit = Math.min(Number(params.limit) || 20, MAX_LIMIT);
@@ -262,7 +263,14 @@ export class UsersService {
       this.prisma.user.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const restrictedDirectory = ["AUDITOR", "PATIENT"].includes(
+      params.actorRole || "",
+    );
+    const safeData = restrictedDirectory
+      ? data.map(({ email: _email, phone: _phone, ...user }) => user)
+      : data;
+
+    return { data: safeData, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async getStats(tenantId?: string) {

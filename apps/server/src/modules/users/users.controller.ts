@@ -55,6 +55,7 @@ export class UsersController {
   findAll(@Query() query: any, @Req() req: any) {
     return this.usersService.findAll({
       ...query,
+      actorRole: req.user.role,
       tenantId:
         req.user.role === "PLATFORM_SUPER_ADMIN"
           ? query.tenantId

@@ -49,6 +49,19 @@ export class DischargeBillingService {
 
     const admission = await this.prisma.admission.findFirst({
       where: { id: dto.admissionId, tenantId },
+      include: {
+        bedAllocations: {
+          orderBy: { allocatedAt: "asc" },
+          include: {
+            bed: {
+              include: {
+                room: { select: { name: true, ratePerDay: true } },
+                ward: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
     });
     if (!admission) throw new NotFoundException("Admission not found");
 
@@ -105,8 +118,123 @@ export class DischargeBillingService {
         },
       );
 
-      return bill;
+      await this.syncAutoCharges(tx, tenantId, bill.id, admission, false);
+      const details = await tx.dischargeBillDetail.findMany({
+        where: { dischargeBillId: bill.id },
+        orderBy: { serviceDate: "asc" },
+      });
+      return { ...bill, details };
     });
+  }
+
+  /** Build authoritative IPD charges from bed stay periods and unbilled charges. */
+  private async syncAutoCharges(
+    tx: any,
+    tenantId: string,
+    billId: string,
+    admission: any,
+    replaceBedCharges: boolean,
+  ) {
+    if (replaceBedCharges) {
+      await tx.dischargeBillDetail.deleteMany({
+        where: {
+          tenantId,
+          dischargeBillId: billId,
+          sourceModule: "IPD",
+          sourceTransactionId: { startsWith: "BED_ALLOCATION:" },
+        },
+      });
+    }
+
+    const details: any[] = [];
+    const allocations = Array.isArray(admission.bedAllocations)
+      ? admission.bedAllocations
+      : [];
+    const endAt = admission.dischargeDate || new Date();
+    for (const allocation of allocations) {
+      const startAt = new Date(allocation.allocatedAt || admission.admissionDate);
+      const end = new Date(allocation.releasedAt || endAt);
+      const stayMs = Math.max(0, end.getTime() - startAt.getTime());
+      const days = Math.max(1, Math.ceil(stayMs / (24 * 60 * 60 * 1000)));
+      const bed = allocation.bed || {};
+      const roomRate = Number(bed.room?.ratePerDay || 0);
+      const unitRate = Number(bed.ratePerDay || 0) || roomRate;
+      const location = [bed.ward?.name, bed.room?.name, bed.bedNumber]
+        .filter(Boolean)
+        .join(" / ");
+
+      details.push({
+        tenantId,
+        dischargeBillId: billId,
+        serviceCode: "IPD-BED",
+        serviceName: `Bed stay${location ? ` - ${location}` : ""}`,
+        sourceModule: "IPD",
+        sourceTransactionId: `BED_ALLOCATION:${allocation.id}`,
+        serviceDate: startAt,
+        description: `${days} day${days === 1 ? "" : "s"} (${startAt.toISOString()} to ${end.toISOString()})`,
+        quantity: days,
+        unit: "day",
+        unitRate,
+        grossAmount: days * unitRate,
+        discount: 0,
+        tax: 0,
+        insuranceAmount: 0,
+        patientAmount: days * unitRate,
+        netAmount: days * unitRate,
+        manuallyAdded: false,
+      });
+    }
+
+    const existing = await tx.dischargeBillDetail.findMany({
+      where: { dischargeBillId: billId },
+      select: { chargeTransactionId: true },
+    });
+    const existingChargeIds = new Set(
+      existing.map((detail: any) => detail.chargeTransactionId).filter(Boolean),
+    );
+    const charges = await tx.chargeTransaction.findMany({
+      where: {
+        tenantId,
+        admissionId: admission.id,
+        billingStatus: "UNBILLED",
+        status: { not: "CANCELLED" },
+      },
+      include: { service: true },
+      orderBy: { serviceDate: "asc" },
+    });
+    for (const charge of charges) {
+      if (existingChargeIds.has(charge.id)) continue;
+      const grossAmount = Number(charge.grossAmount || 0);
+      const tax = Number(charge.taxAmount || 0);
+      const discount = Number(charge.discountAmount || 0);
+      const netAmount = Number(charge.netAmount || grossAmount + tax - discount);
+      details.push({
+        tenantId,
+        dischargeBillId: billId,
+        chargeTransactionId: charge.id,
+        serviceId: charge.serviceId || null,
+        serviceCode: charge.service?.code || null,
+        serviceName: this.getServiceName(charge),
+        sourceModule: charge.sourceModule,
+        sourceTransactionId: charge.sourceTransactionId || null,
+        serviceDate: charge.serviceDate,
+        description: charge.service?.name || null,
+        quantity: Number(charge.quantity || 1),
+        unit: "unit",
+        unitRate: Number(charge.unitRate || 0),
+        grossAmount,
+        discount,
+        tax,
+        insuranceAmount: Number(charge.insuranceAmount || 0),
+        patientAmount: Number(charge.patientAmount || netAmount),
+        netAmount,
+        manuallyAdded: false,
+      });
+    }
+
+    if (details.length > 0) {
+      await tx.dischargeBillDetail.createMany({ data: details });
+    }
   }
 
   // ========================
@@ -277,12 +405,38 @@ export class DischargeBillingService {
           "Cannot finalize a bill with no charge details",
         );
 
+      const admission = await tx.admission.findFirst({
+        where: { id: bill.admissionId, tenantId },
+        include: {
+          bedAllocations: {
+            orderBy: { allocatedAt: "asc" },
+            include: {
+              bed: {
+                include: {
+                  room: { select: { name: true, ratePerDay: true } },
+                  ward: { select: { name: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+      if (!admission) throw new NotFoundException("Admission not found");
+      if (Array.isArray(admission.bedAllocations)) {
+        await this.syncAutoCharges(tx, tenantId, billId, admission, true);
+      }
+      const details = Array.isArray(admission.bedAllocations)
+        ? await tx.dischargeBillDetail.findMany({
+            where: { dischargeBillId: billId },
+          })
+        : bill.details;
+
       // Server-side recalculation - do NOT trust frontend values
-      const subtotal = bill.details.reduce(
+      const subtotal = details.reduce(
         (sum, d) => sum + Number(d.grossAmount),
         0,
       );
-      const tax = bill.details.reduce((sum, d) => sum + Number(d.tax), 0);
+      const tax = details.reduce((sum, d) => sum + Number(d.tax), 0);
       const discount = Number(bill.discount || 0);
       const netAmount = subtotal - discount + tax;
 
@@ -362,8 +516,8 @@ export class DischargeBillingService {
           issuedDate: new Date(),
           notes: `Auto-generated from discharge bill ${billNumber}`,
           createdBy: userId,
-          items: {
-            create: bill.details.map((d) => ({
+            items: {
+            create: details.map((d) => ({
               tenantId,
               serviceName: d.serviceName,
               serviceCode: d.serviceCode || undefined,
@@ -430,7 +584,7 @@ export class DischargeBillingService {
         billNumber,
         netAmount,
         dueAmount,
-        chargesCount: bill.details.length,
+        chargesCount: details.length,
       });
 
       return finalizedBill;

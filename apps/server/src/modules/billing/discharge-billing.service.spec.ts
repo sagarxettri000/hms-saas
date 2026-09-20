@@ -125,6 +125,53 @@ describe("DischargeBillingService", () => {
       const createArgs = prisma.dischargeBill.create.mock.calls[0][0];
       expect(createArgs.data.details).toBeUndefined();
     });
+
+    it("creates bed charges from each allocation stay period", async () => {
+      const admissionDate = new Date("2026-01-01T10:00:00.000Z");
+      const dischargeDate = new Date("2026-01-03T10:00:00.000Z");
+      const prisma = mockPrisma({
+        admission: {
+          findFirst: jest.fn().mockResolvedValue({
+            id: admissionId,
+            tenantId,
+            patientId,
+            admissionDate,
+            dischargeDate,
+            bedAllocations: [
+              {
+                id: "alloc1",
+                allocatedAt: admissionDate,
+                releasedAt: dischargeDate,
+                bed: {
+                  bedNumber: "B-01",
+                  ratePerDay: 0,
+                  room: { name: "Room 1", ratePerDay: 1500 },
+                  ward: { name: "General Ward" },
+                },
+              },
+            ],
+          }),
+        },
+      });
+      prisma.$transaction = jest
+        .fn()
+        .mockImplementation(async (fn: any) => fn(prisma));
+      const service = new DischargeBillingService(prisma as any);
+
+      await service.createDraftBill(tenantId, { patientId, admissionId }, userId);
+
+      expect(prisma.dischargeBillDetail.createMany).toHaveBeenCalledWith({
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            sourceTransactionId: "BED_ALLOCATION:alloc1",
+            quantity: 2,
+            unitRate: 1500,
+            grossAmount: 3000,
+            netAmount: 3000,
+          }),
+        ]),
+      });
+    });
   });
 
   describe("addManualCharge", () => {

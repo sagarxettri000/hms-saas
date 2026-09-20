@@ -8,6 +8,11 @@ const AUTH_PATHS = [
   '/auth/reset-password',
 ];
 
+const GET_CACHE_TTL_MS = 5000;
+const getCache = new Map<string, { expiresAt: number; value: any }>();
+const getInFlight = new Map<string, Promise<any>>();
+let cacheGeneration = 0;
+
 function isAuthPath(path: string): boolean {
   return AUTH_PATHS.some((p) => path.startsWith(p));
 }
@@ -61,7 +66,37 @@ async function request(path: string, options: RequestInit = {}, retry = true): P
 }
 
 export function api(path: string, options: RequestInit = {}) {
-  return request(path, options);
+  const method = (options.method || 'GET').toUpperCase();
+  if (method !== 'GET') {
+    getCache.clear();
+    cacheGeneration += 1;
+    getInFlight.clear();
+    return request(path, options);
+  }
+
+  const tenantId = typeof window !== 'undefined' ? localStorage.getItem('tenantId') || '' : '';
+  const cacheKey = `${tenantId}:${path}`;
+  const cached = getCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.value);
+  if (cached) getCache.delete(cacheKey);
+
+  const pending = getInFlight.get(cacheKey);
+  if (pending) return pending;
+
+  const generation = cacheGeneration;
+  let next: Promise<any>;
+  next = request(path, options)
+    .then((value) => {
+      if (generation === cacheGeneration) {
+        getCache.set(cacheKey, { expiresAt: Date.now() + GET_CACHE_TTL_MS, value });
+      }
+      return value;
+    })
+    .finally(() => {
+      if (getInFlight.get(cacheKey) === next) getInFlight.delete(cacheKey);
+    });
+  getInFlight.set(cacheKey, next);
+  return next;
 }
 
 // Response-unwrapping helpers shared across pages. `api()` returns the full

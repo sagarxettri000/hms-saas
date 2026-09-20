@@ -400,11 +400,6 @@ export class DischargeBillingService {
       if (!bill) throw new NotFoundException("Discharge bill not found");
       if (bill.status !== "DRAFT")
         throw new ConflictException("Only DRAFT bills can be finalized");
-      if (bill.details.length === 0)
-        throw new BadRequestException(
-          "Cannot finalize a bill with no charge details",
-        );
-
       const admission = await tx.admission.findFirst({
         where: { id: bill.admissionId, tenantId },
         include: {
@@ -430,6 +425,10 @@ export class DischargeBillingService {
             where: { dischargeBillId: billId },
           })
         : bill.details;
+      if (details.length === 0)
+        throw new BadRequestException(
+          "Cannot finalize a bill with no charge details",
+        );
 
       // Server-side recalculation - do NOT trust frontend values
       const subtotal = details.reduce(

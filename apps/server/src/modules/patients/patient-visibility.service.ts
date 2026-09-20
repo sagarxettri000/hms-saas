@@ -135,6 +135,39 @@ export class PatientVisibilityService {
     return vipFilter ? { AND: [{ OR: or }, vipFilter] } : { OR: or };
   }
 
+  /**
+   * ER isolation for the administrative master index (§64). A patient whose
+   * care is confined to the ER never appears in the main patient list/search;
+   * they surface only once they are transferred into a real bed/ward (or any
+   * non-ER location). Applies to every role, including admins.
+   *
+   * Hidden iff the patient has an ACTIVE ER location, OR has only ever had ER
+   * locations (covers a patient discharged straight from the ER). A completed
+   * ward transfer writes an IPD_WARD location, so the patient appears again.
+   */
+  buildErIsolationFilter(): any {
+    return {
+      NOT: {
+        OR: [
+          {
+            locations: {
+              some: {
+                status: { in: [...ACTIVE_STATUSES] },
+                locationType: "ER",
+              },
+            },
+          },
+          {
+            AND: [
+              { locations: { some: { locationType: "ER" } } },
+              { locations: { none: { locationType: { not: "ER" } } } },
+            ],
+          },
+        ],
+      },
+    };
+  }
+
   /** §65.56: ACTIVE VIP patients vanish from lists unless role-allowlisted. */
   private async buildVipListExclusion(user: VisibilityUser): Promise<any | null> {
     if (!(this.prisma as any).vipClassification) return null;

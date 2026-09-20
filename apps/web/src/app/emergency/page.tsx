@@ -808,8 +808,6 @@ function NewErBillModal({ onClose, onDone }: { onClose: () => void; onDone: () =
   const [presets, setPresets] = useState<ErServicePreset[]>([]);
   const [lines, setLines] = useState<Array<{ serviceName: string; serviceCode?: string; quantity: number; rate: number }>>([]);
   const [isCredit, setIsCredit] = useState(false);
-  const [takePayment, setTakePayment] = useState(true);
-  const [method, setMethod] = useState('CASH');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -818,6 +816,16 @@ function NewErBillModal({ onClose, onDone }: { onClose: () => void; onDone: () =
       .then((r: any) => setPresets(toList(r)))
       .catch(() => setPresets([]));
   }, []);
+
+  // Link the patient's latest active ER case so the invoice is tied to it.
+  useEffect(() => {
+    if (!patientId) { setCaseId(''); return; }
+    let active = true;
+    api(`/emergency?patientId=${patientId}&status=ACTIVE&limit=1`)
+      .then((r: any) => { if (active) setCaseId(toList(r)[0]?.id || ''); })
+      .catch(() => { if (active) setCaseId(''); });
+    return () => { active = false; };
+  }, [patientId]);
 
   const total = lines.reduce((s, l) => s + l.quantity * l.rate, 0);
 
@@ -850,7 +858,6 @@ function NewErBillModal({ onClose, onDone }: { onClose: () => void; onDone: () =
           emergencyCaseId: caseId || undefined,
           items: lines,
           isCredit,
-          payment: !isCredit && takePayment ? { method, amount: total } : undefined,
           notes: 'Emergency services',
         }),
       });
@@ -872,12 +879,12 @@ function NewErBillModal({ onClose, onDone }: { onClose: () => void; onDone: () =
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, margin: '10px 0' }}>
           <label>Patient *
             <AsyncSearchSelect
-              endpoint="/patients"
+              endpoint="/emergency/billing/patients"
               valueKey="id"
               labelKeys={['firstName', 'lastName', 'mrn']}
               value={patientId}
               onChange={(v: string) => setPatientId(v)}
-              placeholder="Search patient by name / MRN…"
+              placeholder="Search ER patient by name / MRN…"
             />
           </label>
           <label>Linked ER case (optional)
@@ -917,21 +924,9 @@ function NewErBillModal({ onClose, onDone }: { onClose: () => void; onDone: () =
           </label>
         </div>
 
-        {!isCredit && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input type="checkbox" checked={takePayment} onChange={(e) => setTakePayment(e.target.checked)} /> Take payment now
-            </label>
-            {takePayment && (
-              <select className="input" style={{ maxWidth: 140 }} value={method} onChange={(e) => setMethod(e.target.value)}>
-                <option value="CASH">Cash</option>
-                <option value="CARD">Card</option>
-                <option value="ONLINE">Online</option>
-                <option value="BANK">Bank</option>
-              </select>
-            )}
-          </div>
-        )}
+        <p className="note" style={{ marginTop: 8 }}>
+          The bill is created unpaid. Record payment from the ER billing list with “Pay”.
+        </p>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
           <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? 'Saving…' : 'Create ER bill'}</button>

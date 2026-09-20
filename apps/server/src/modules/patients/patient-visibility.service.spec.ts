@@ -295,3 +295,30 @@ describe("PatientVisibilityService — lifecycle helpers", () => {
     expect(prisma.patientLocation.update).not.toHaveBeenCalled();
   });
 });
+
+describe("PatientVisibilityService — ER master-index isolation (§64)", () => {
+  it("hides a patient with an active ER location", () => {
+    const svc = new PatientVisibilityService(makePrisma() as any);
+    const filter = svc.buildErIsolationFilter();
+    expect(filter).toEqual({
+      NOT: {
+        OR: [
+          {
+            locations: {
+              some: {
+                status: { in: ["ACTIVE", "TEMPORARY"] },
+                locationType: "ER",
+              },
+            },
+          },
+          {
+            AND: [
+              { locations: { some: { locationType: "ER" } } },
+              { locations: { none: { locationType: { not: "ER" } } } },
+            ],
+          },
+        ],
+      },
+    });
+  });
+});

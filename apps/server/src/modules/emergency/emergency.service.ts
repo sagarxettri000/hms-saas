@@ -42,11 +42,6 @@ export interface CreateEmergencyInvoiceDto {
   taxPercent?: number;
   isCredit?: boolean;
   notes?: string;
-  payment?: {
-    method?: string;
-    amount?: number;
-    referenceNumber?: string;
-  };
 }
 
 // Charges commonly raised in the ER. Free-text line items are also accepted;
@@ -771,6 +766,65 @@ export class EmergencyService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
+  /**
+   * ER billing patient picker: only patients who have an emergency case,
+   * tenant-scoped and searchable by name/MRN/mobile.
+   */
+  async listErPatients(tenantId: string, query: any) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(50, Math.max(1, Number(query.limit) || 12));
+    const where: any = {
+      tenantId,
+      deletedAt: null,
+      emergencyCases: { some: {} },
+    };
+    if (query.search) {
+      where.OR = [
+        { firstName: { contains: query.search, mode: "insensitive" } },
+        { lastName: { contains: query.search, mode: "insensitive" } },
+        { mrn: { contains: query.search, mode: "insensitive" } },
+        { mobile: { contains: query.search } },
+      ];
+    }
+    const [data, total] = await Promise.all([
+      this.prisma.patient.findMany({
+        where,
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          middleName: true,
+          mrn: true,
+          mobile: true,
+          patientType: true,
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.patient.count({ where }),
+    ]);
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  /** Resolve a single ER patient (AsyncSearchSelect label lookup). */
+  async getErPatient(tenantId: string, id: string) {
+    const patient = await this.prisma.patient.findFirst({
+      where: { id, tenantId, deletedAt: null },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        middleName: true,
+        mrn: true,
+        mobile: true,
+        patientType: true,
+      },
+    });
+    if (!patient) throw new NotFoundException("Patient not found");
+    return patient;
+  }
+
   /** Create an EMERGENCY invoice through the shared billing engine. */
   async createInvoice(
     tenantId: string,
@@ -790,20 +844,33 @@ export class EmergencyService {
       if (!Number.isFinite(rate) || rate < 0)
         throw new BadRequestException("Item rate must be zero or greater");
     }
-    if (dto.payment) {
-      const amt = Number(dto.payment.amount ?? 0);
-      if (!Number.isFinite(amt) || amt < 0)
-        throw new BadRequestException("Payment amount must be zero or greater");
-    }
+    // ER billing is scoped to patients with an emergency case: the picker
+    // only offers them, and the rule is enforced here as well.
+    const patient = await this.prisma.patient.findFirst({
+      where: { id: dto.patientId, tenantId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!patient) throw new NotFoundException("Patient not found");
 
     let admissionId: string | undefined;
     if (dto.emergencyCaseId) {
       const ec = await this.prisma.emergencyCase.findFirst({
         where: { id: dto.emergencyCaseId, tenantId },
-        select: { id: true, admissionId: true },
+        select: { id: true, patientId: true, admissionId: true },
       });
       if (!ec) throw new NotFoundException("Emergency case not found");
+      if (ec.patientId !== dto.patientId)
+        throw new BadRequestException(
+          "Emergency case does not belong to the patient",
+        );
       admissionId = ec.admissionId || undefined;
+    } else {
+      const erCase = await this.prisma.emergencyCase.findFirst({
+        where: { tenantId, patientId: dto.patientId },
+        select: { id: true },
+      });
+      if (!erCase)
+        throw new BadRequestException("Patient has no emergency case");
     }
 
     const invoice = await this.billing.createInvoice(
@@ -821,25 +888,6 @@ export class EmergencyService {
       } as any,
       userId,
     );
-
-    // Optional immediate settlement so the ER can close a cash-and-carry visit
-    if (dto.payment && !dto.isCredit) {
-      const amount = Number(
-        dto.payment.amount ?? (invoice as any).dueAmount ?? 0,
-      );
-      if (amount > 0) {
-        await this.billing.createPayment(
-          tenantId,
-          {
-            invoiceId: invoice.id,
-            amount,
-            method: dto.payment.method || "CASH",
-            referenceNumber: dto.payment.referenceNumber,
-          } as any,
-          userId,
-        );
-      }
-    }
 
     return this.prisma.invoice.findUnique({
       where: { id: invoice.id },

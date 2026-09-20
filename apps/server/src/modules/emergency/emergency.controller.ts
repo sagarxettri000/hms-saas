@@ -88,6 +88,25 @@ export class EmergencyController {
     );
   }
 
+  // ER billing patient picker — only patients with an emergency case. Kept
+  // static (before :id) and separate from the shared /patients master index,
+  // which deliberately hides ER-only patients.
+  @Get("billing/patients")
+  @Roles(...ER_BILLING_ROLES)
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Search ER patients for the billing form" })
+  listErPatients(@Query() query: any, @Req() req: any) {
+    return this.emergencyService.listErPatients(req.user.tenantId, query);
+  }
+
+  @Get("billing/patients/:id")
+  @Roles(...ER_BILLING_ROLES)
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Resolve a single ER patient" })
+  getErPatient(@Param("id") id: string, @Req() req: any) {
+    return this.emergencyService.getErPatient(req.user.tenantId, id);
+  }
+
   // ---------- Cases ----------
 
   @Get()

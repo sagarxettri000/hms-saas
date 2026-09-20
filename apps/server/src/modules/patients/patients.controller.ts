@@ -62,7 +62,7 @@ export class PatientsController {
   async findAll(@Query() query: PatientSearchParams, @Req() req: any) {
     // §64.15: search results respect clinical visibility — the backend
     // returns only authorized records (never "SELECT * then hide in UI").
-    const visibility = await this.visibility.buildActiveListFilter(req.user);
+    const visibility = await this.buildListFilter(req.user);
     const result = await this.patientsService.findAll(req.user.tenantId, {
       ...query,
       visibilityFilter: visibility,
@@ -85,7 +85,7 @@ export class PatientsController {
   @Permissions(PermissionAction.VIEW)
   @ApiOperation({ summary: "Global patient search" })
   async search(@Query() query: PatientSearchParams, @Req() req: any) {
-    const visibility = await this.visibility.buildActiveListFilter(req.user);
+    const visibility = await this.buildListFilter(req.user);
     const result = await this.patientsService.findAll(req.user.tenantId, {
       ...query,
       visibilityFilter: visibility,
@@ -95,6 +95,18 @@ export class PatientsController {
       result.data,
     );
     return result;
+  }
+
+  /**
+   * Compose §64 clinical visibility with ER master-index isolation. The ER
+   * filter applies to every role so an ER-only patient never leaks into the
+   * shared patient list/search (they reappear after a transfer to a bed).
+   */
+  private async buildListFilter(user: any) {
+    const visibility = await this.visibility.buildActiveListFilter(user);
+    return {
+      AND: [visibility, this.visibility.buildErIsolationFilter()],
+    };
   }
 
   @Get("by-mrn/:mrn")

@@ -10,8 +10,10 @@ import { NormalizeBodyInterceptor } from "./common/interceptors/normalize-body.i
 import { RequestLoggerInterceptor } from "./common/interceptors/request-logger.interceptor";
 import { ZodValidationPipe } from "./common/pipes/zod-validation.pipe";
 import { RlsContextInterceptor } from "./common/rls/rls-context.interceptor";
+import { validateProductionConfig } from "./config/production-config";
 
 async function bootstrap() {
+  validateProductionConfig();
   const app = await NestFactory.create(AppModule, {
     logger:
       process.env.NODE_ENV === "production" ? ["error", "warn"] : undefined,

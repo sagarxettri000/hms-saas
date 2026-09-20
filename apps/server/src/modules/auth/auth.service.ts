@@ -60,11 +60,11 @@ export class AuthService {
       return jwt.sign(payload, privatePem, {
         algorithm: "RS256",
         keyid: accessSigningKid() ?? undefined,
-        expiresIn: "8h",
+        expiresIn: "30m",
       });
     }
     return this.jwtService.sign(payload, {
-      expiresIn: "8h",
+      expiresIn: "30m",
     });
   }
 

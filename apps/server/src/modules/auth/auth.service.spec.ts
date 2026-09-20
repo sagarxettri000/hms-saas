@@ -131,7 +131,7 @@ describe("AuthService", () => {
       );
 
       const jwtCall = (jwt.sign as jest.Mock).mock.calls[0];
-      expect(jwtCall[2]).toMatchObject({ expiresIn: "8h" });
+      expect(jwtCall[2]).toMatchObject({ expiresIn: "30m" });
     });
 
     it("rejects invalid credentials", async () => {

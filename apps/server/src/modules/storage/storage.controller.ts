@@ -1,5 +1,6 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Delete,
   ForbiddenException,
@@ -32,6 +33,47 @@ interface UploadedFileLike {
   mimetype: string;
 }
 
+const SAFE_UPLOAD_TYPES = new Set([
+  "application/dicom",
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+function assertSafeUpload(
+  file: UploadedFileLike | undefined,
+): asserts file is UploadedFileLike {
+  if (!file?.buffer?.length) {
+    throw new BadRequestException("A non-empty file is required");
+  }
+  if (!SAFE_UPLOAD_TYPES.has(file.mimetype.toLowerCase())) {
+    throw new BadRequestException("Unsupported or unsafe file type");
+  }
+  if (file.originalname.length > 180) {
+    throw new BadRequestException("File name is too long");
+  }
+
+  const type = file.mimetype.toLowerCase();
+  const signature = file.buffer.subarray(0, 8).toString("hex");
+  const isPdf =
+    type === "application/pdf" &&
+    file.buffer.subarray(0, 5).toString() === "%PDF-";
+  const isPng = type === "image/png" && signature === "89504e470d0a1a0a";
+  const isJpeg = type === "image/jpeg" && signature.startsWith("ffd8ff");
+  const isWebp =
+    type === "image/webp" &&
+    file.buffer.subarray(0, 4).toString() === "RIFF" &&
+    file.buffer.subarray(8, 12).toString() === "WEBP";
+  const isDicom =
+    type === "application/dicom" &&
+    file.buffer.length >= 132 &&
+    file.buffer.subarray(128, 132).toString() === "DICM";
+  if (!(isPdf || isPng || isJpeg || isWebp || isDicom)) {
+    throw new BadRequestException("File content does not match its declared type");
+  }
+}
+
 @ApiTags("Storage")
 @Controller("storage")
 @UseGuards(JwtAuthGuard, PermissionsGuard, TenantGuard)
@@ -53,6 +95,7 @@ export class StorageController {
     @UploadedFile() file: UploadedFileLike,
     @Body("folder") folder?: string,
   ) {
+    assertSafeUpload(file);
     const tenantId = (req.user as any)?.tenantId;
     if (!tenantId) {
       throw new ForbiddenException("Tenant context is required");

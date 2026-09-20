@@ -90,7 +90,7 @@ export class AuthController {
     res.cookie("hms_access", result.accessToken, {
       ...this.cookieOptions(false),
       path: "/",
-      maxAge: 8 * 60 * 60 * 1000,
+      maxAge: 30 * 60 * 1000,
     });
     return result;
   }
@@ -205,7 +205,7 @@ export class AuthController {
     res.cookie("hms_access", result.accessToken, {
       ...common,
       path: "/",
-      maxAge: 8 * 60 * 60 * 1000,
+      maxAge: 30 * 60 * 1000,
     });
     res.cookie("hms_refresh", result.refreshToken, {
       ...common,

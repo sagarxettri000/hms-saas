@@ -11,12 +11,14 @@ import { NormalizeBodyInterceptor } from "./common/interceptors/normalize-body.i
 import { RequestLoggerInterceptor } from "./common/interceptors/request-logger.interceptor";
 import { ZodValidationPipe } from "./common/pipes/zod-validation.pipe";
 import { RlsContextInterceptor } from "./common/rls/rls-context.interceptor";
+import { validateProductionConfig } from "./config/production-config";
 
 let cachedApp: Express | undefined;
 
 export async function bootstrapNest(): Promise<Express> {
   if (cachedApp) return cachedApp;
 
+  validateProductionConfig();
   const app = await NestFactory.create(AppModule, new ExpressAdapter(), {
     logger:
       process.env.NODE_ENV === "production" ? ["error", "warn"] : undefined,

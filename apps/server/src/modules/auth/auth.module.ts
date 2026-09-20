@@ -14,7 +14,7 @@ import { TwoFactorSetupGuard } from "./guards/two-factor-setup.guard";
     JwtModule.register({
       global: true,
       secret: JwtStrategy.secretOrKey(),
-      signOptions: { expiresIn: "8h" },
+      signOptions: { expiresIn: "30m" },
     }),
   ],
   controllers: [AuthController],

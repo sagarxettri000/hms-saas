@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -1518,6 +1519,15 @@ export class BillingService {
     if (!refund) throw new NotFoundException("Refund not found");
     if (refund.status !== "REQUESTED")
       throw new ConflictException("Refund is not in requested state");
+
+    // Separation of duties: the person who requested a refund can never
+    // approve it, whatever roles they hold (fraud control — a cashier with
+    // both CREATE and APPROVE must not be able to pay themselves).
+    if (userId && refund.requestedBy && refund.requestedBy === userId) {
+      throw new ForbiddenException(
+        "Cannot approve a refund you requested (separation of duties)",
+      );
+    }
 
     const refundable = await this.getRefundableAmount(
       tenantId,

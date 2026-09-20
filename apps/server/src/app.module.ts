@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
-import { APP_GUARD } from "@nestjs/core";
+import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { PrismaModule } from "./prisma/prisma.module";
 import { CorrelationIdMiddleware } from "./common/middleware/correlation-id.middleware";
 import { cookieParserMiddleware } from "./common/middleware/cookie-parser.middleware";
@@ -68,6 +68,8 @@ import { TenantGuard } from "./common/guards/tenant.guard";
 import { MustChangePasswordGuard } from "./common/guards/must-change-password.guard";
 import { CsrfCookieGuard } from "./common/guards/csrf-cookie.guard";
 import { RlsBootstrap } from "./common/rls/rls.bootstrap";
+import { ReadOnlyRoleGuard } from "./common/guards/write-guard.interceptor";
+import { DomainSeparationGuard } from "./common/guards/domain-role.guard";
 import { AppController } from "./app.controller";
 
 @Module({
@@ -169,6 +171,14 @@ import { AppController } from "./app.controller";
     {
       provide: APP_GUARD,
       useClass: TenantGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ReadOnlyRoleGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: DomainSeparationGuard,
     },
     RlsBootstrap,
   ],

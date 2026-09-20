@@ -777,9 +777,13 @@ function BillingTab() {
                   <td>{formatMoney(inv.paidAmount)}</td>
                   <td>{formatMoney(inv.dueAmount)}</td>
                   <td><span className="badge">{inv.status}</span></td>
-                  <td>
-                    <button className="btn btn-secondary" onClick={() => setPayTarget(inv)}>Pay</button>
-                    <button className="btn btn-ghost" style={{ marginLeft: 6 }} onClick={() => setReceipt(inv)}>Receipt</button>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {Number(inv.totalAmount || 0) > Number(inv.paidAmount || 0) ? (
+                      <button className="btn btn-secondary" onClick={() => setPayTarget(inv)}>Pay</button>
+                    ) : null}
+                    {Number(inv.paidAmount || 0) > 0 ? (
+                      <button className="btn btn-ghost" style={{ marginLeft: 6 }} onClick={() => setReceipt(inv)}>Receipt</button>
+                    ) : null}
                   </td>
                 </tr>
               ))}

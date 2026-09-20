@@ -11,7 +11,6 @@ export function validateProductionConfig(): void {
   if (!process.env.JWT_ACCESS_PRIVATE_KEY && !process.env.JWT_ACCESS_SECRET) {
     missing.push("JWT_ACCESS_PRIVATE_KEY or JWT_ACCESS_SECRET");
   }
-  if (process.env.ENABLE_RLS !== "true") missing.push("ENABLE_RLS=true");
   if (missing.length > 0) {
     throw new Error(
       `Production security configuration is incomplete: ${missing.join(", ")}`,

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, listOf } from '@/lib/api';
 import { ENCOUNTER_TYPES } from '@/lib/options';
 
 interface EncounterModalProps {
@@ -24,8 +24,7 @@ export default function EncounterModal({ patient, onClose, onCreated }: Encounte
     api('/doctors?limit=500')
       .then((res: any) => {
         if (!active) return;
-        const payload = res?.data as any;
-        const list = Array.isArray(payload) ? payload : payload?.data ?? [];
+        const list = listOf(res);
         setDoctors(
           list.map((d: any) => ({
             value: d.id,

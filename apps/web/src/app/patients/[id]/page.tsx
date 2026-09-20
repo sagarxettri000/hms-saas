@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, listOf } from '@/lib/api';
 import EncounterModal from '@/components/EncounterModal';
 import AdmitModal from '@/components/AdmitModal';
 import DischargeModal from '@/components/DischargeModal';
@@ -467,7 +467,7 @@ export default function PatientDetailPage() {
     try {
       const res: any = await api('/follow-ups/doctors');
       const payload = res?.data?.data ?? res?.data ?? res;
-      const todoctors = Array.isArray(payload) ? payload : payload?.data ?? [];
+      const todoctors = listOf(res);
       setDoctorOptions(todoctors);
     } catch {
       setDoctorOptions([]);

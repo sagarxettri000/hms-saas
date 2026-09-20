@@ -155,8 +155,7 @@ export default function DoctorsPage() {
         if (profileId) {
           try {
             const fuRes: any = await api(`/follow-ups?doctorId=${profileId}&limit=200`);
-            const payload = fuRes?.data?.data ?? fuRes?.data ?? fuRes;
-            setMyFollowUps(Array.isArray(payload) ? payload : payload?.data ?? []);
+            setMyFollowUps(listOf(fuRes));
           } catch {
             setMyFollowUps([]);
           }

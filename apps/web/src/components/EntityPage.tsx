@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, listOf } from '@/lib/api';
 import { badgeTone, formatMoney, pick } from '@/lib/hooks';
 import type { ApiResponse, Column, FormField, ListPayload, Row, Action } from '@/lib/types';
 import PatientPrescriptions from '@/components/PatientPrescriptions';
@@ -82,8 +82,7 @@ function LineItemsEditor({
       const qs = new URLSearchParams({ limit: '8', isActive: 'true' });
       if (term.trim()) qs.set('search', term.trim());
       const res: ApiResponse<any> = await api(`/billing/services?${qs.toString()}`);
-      const payload = res.data as any;
-      const list = Array.isArray(payload) ? payload : payload.data ?? [];
+      const list = listOf(res);
       setResults(list);
       setShowResults(true);
     } catch {
@@ -311,8 +310,7 @@ function ProcurementLineItemsEditor({
       const qs = new URLSearchParams({ limit: '8' });
       if (term.trim()) qs.set('search', term.trim());
       const res: ApiResponse<any> = await api(`/pharmacy/inventory?${qs.toString()}`);
-      const payload = res.data as any;
-      const list = Array.isArray(payload) ? payload : payload.data ?? [];
+      const list = listOf(res);
       setResults(list);
       setShowResults(true);
     } catch {
@@ -782,8 +780,7 @@ function CreateModal({
         const src = f.optionsFrom!;
         try {
           const res: ApiResponse<any> = await api(`${src.endpoint}?limit=500`);
-          const payload = res.data as any;
-          const list = Array.isArray(payload) ? payload : payload.data ?? [];
+          const list = listOf(res);
           const valueKey = src.valueKey || 'id';
           const labelKeys = src.labelKeys || ['name'];
           const options = list.map((row: Row) => ({
@@ -974,8 +971,7 @@ function EditModal({
         const src = f.optionsFrom!;
         try {
           const res: ApiResponse<any> = await api(`${src.endpoint}?limit=500`);
-          const payload = res.data as any;
-          const list = Array.isArray(payload) ? payload : payload.data ?? [];
+          const list = listOf(res);
           const valueKey = src.valueKey || 'id';
           const labelKeys = src.labelKeys || ['name'];
           const options = list.map((r: Row) => ({

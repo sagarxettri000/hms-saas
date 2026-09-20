@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import DischargeModal from '@/components/DischargeModal';
 import { compareBeds } from '../../lib/bedOrder';
-import { api } from '@/lib/api';
+import { api, listOf } from '@/lib/api';
 import { GENDERS } from '@/lib/options';
 import type { ApiResponse, Row } from '@/lib/types';
 
@@ -107,8 +107,7 @@ export default function AdmissionsPage() {
       const admList: Row[] = admPayload ? (Array.isArray(admPayload) ? admPayload : (admPayload.data ?? [])) : [];
       setAdmissions(admList);
       setTotal(admPayload && !Array.isArray(admPayload) ? (admPayload.total ?? 0) : admList.length);
-      const docPayload = (docRes.status === 'fulfilled' ? docRes.value.data : null) as any;
-      const docList: Row[] = docPayload ? (Array.isArray(docPayload) ? docPayload : (docPayload.data ?? [])) : [];
+      const docList: Row[] = listOf(docRes.status === 'fulfilled' ? docRes.value : null);
       setDoctors(docList);
       const deptPayload = (deptRes.status === 'fulfilled' ? deptRes.value.data : null) as any;
       const deptList: Row[] = deptPayload ? (Array.isArray(deptPayload) ? deptPayload : (deptPayload.data ?? [])) : [];
@@ -137,8 +136,7 @@ export default function AdmissionsPage() {
       setSearching(true);
       try {
         const res: ApiResponse<any> = await api(`/patients?search=${encodeURIComponent(term.trim())}&limit=10`);
-        const payload = res.data as any;
-        const list = Array.isArray(payload) ? payload : payload.data ?? [];
+        const list = listOf(res);
         setSearchResults(list);
       } catch {
         setSearchResults([]);

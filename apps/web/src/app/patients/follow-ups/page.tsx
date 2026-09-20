@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, listOf } from '@/lib/api';
 import AsyncSearchSelect from '@/components/AsyncSearchSelect';
 import { formatDate } from '@/lib/hooks';
 import type { ApiResponse, Row } from '@/lib/types';
@@ -66,8 +66,7 @@ export default function FollowUpsPage() {
       const qs = new URLSearchParams({ limit: '200' });
       if (status) qs.set('status', status);
       const res: ApiResponse<any> = await api(`/follow-ups?${qs.toString()}`);
-      const payload = res.data?.data ?? res.data;
-      const list = Array.isArray(payload) ? payload : payload?.data ?? [];
+      const list = listOf(res);
       setRows(list);
     } catch (err) {
       setRows([]);
@@ -90,8 +89,7 @@ export default function FollowUpsPage() {
   async function loadDoctors() {
     try {
       const res: ApiResponse<any> = await api('/follow-ups/doctors');
-      const payload = res.data?.data ?? res.data;
-      const list = Array.isArray(payload) ? payload : payload?.data ?? [];
+      const list = listOf(res);
       setDoctorOptions(list);
     } catch {
       setDoctorOptions([]);

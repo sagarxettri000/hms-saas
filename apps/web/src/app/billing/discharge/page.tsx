@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, listOf } from '@/lib/api';
 import type { ApiResponse, Row } from '@/lib/types';
 
 const DISCHARGE_STATUS_OPTIONS = [
@@ -47,8 +47,7 @@ export default function DischargePage() {
       const mapped = mapAdmissionStatus(status);
       if (mapped) q.set('status', mapped);
       const res: ApiResponse<any> = await api(`/admissions?${q.toString()}`);
-      const payload = res.data as any;
-      setAdmissions(Array.isArray(payload) ? payload : payload.data ?? []);
+      setAdmissions(listOf(res));
     } catch {
       setAdmissions([]);
     } finally {

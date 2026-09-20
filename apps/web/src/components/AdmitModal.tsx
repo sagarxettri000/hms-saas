@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, listOf } from '@/lib/api';
 
 const ADMISSION_TYPES = [
   { value: 'GENERAL', label: 'General' },
@@ -34,16 +34,14 @@ export default function AdmitModal({
     api('/departments?limit=500')
       .then((res: any) => {
         if (!active) return;
-        const payload = res?.data as any;
-        const list = Array.isArray(payload) ? payload : payload?.data ?? [];
+        const list = listOf(res);
         setDepartments(list.map((d: any) => ({ value: d.id, label: d.name || d.id })));
       })
       .catch(() => {});
     api('/departments/beds?limit=500')
       .then((res: any) => {
         if (!active) return;
-        const payload = res?.data as any;
-        const list = Array.isArray(payload) ? payload : payload?.data ?? [];
+        const list = listOf(res);
         setBeds(
           (list as any[])
             .filter((b) => b.status === 'AVAILABLE')
@@ -54,8 +52,7 @@ export default function AdmitModal({
     api('/doctors?limit=500')
       .then((res: any) => {
         if (!active) return;
-        const payload = res?.data as any;
-        const list = Array.isArray(payload) ? payload : payload?.data ?? [];
+        const list = listOf(res);
         setDoctors(
           list.map((d: any) => ({
             value: d.id,

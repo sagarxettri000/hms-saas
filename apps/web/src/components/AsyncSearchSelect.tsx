@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, listOf } from '@/lib/api';
 import type { ApiResponse } from '@/lib/types';
 
 interface AsyncSearchSelectProps {
@@ -80,8 +80,7 @@ export default function AsyncSearchSelect({
       try {
         const qs = new URLSearchParams({ limit: '12', search: term.trim() });
         const res: ApiResponse<any> = await api(`${endpoint}?${qs.toString()}`);
-        const payload = res.data as any;
-        const list: any[] = Array.isArray(payload) ? payload : payload.data ?? [];
+        const list = listOf(res);
         setResults(list);
         setOpen(true);
       } catch {

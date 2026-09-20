@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/hooks';
+import { usePrintGuard } from '@/lib/usePrintGuard';
 
 const DISCHARGE_TYPES = [
   { value: 'RECOVERED', label: 'Recovered' },
@@ -112,6 +113,10 @@ export default function DischargeModal({
   const isDraft = bill?.status === 'DRAFT';
   const isFinalized = bill?.status === 'FINALIZED';
   const dueAmount = Number(bill?.dueAmount ?? 0);
+
+  // Duplicate-print guard for the discharge receipt, shared with billing.
+  const printGuard = usePrintGuard(`receiptPrinted:${receiptData?.id ?? bill?.id ?? 'discharge'}`);
+  const receiptPaid = Number(receiptData?.paidAmount ?? bill?.paidAmount ?? 0) > 0;
 
   const subtotal = useMemo(
     () => details.reduce((sum, d) => sum + Number(d.grossAmount || 0), 0),
@@ -589,9 +594,32 @@ export default function DischargeModal({
               </div>
             </div>
 
-            <div className="form-actions no-print">
-              <button className="btn btn-secondary" onClick={onDone}>Done</button>
-              <button className="btn" onClick={() => window.print()}>Print receipt</button>
+            <div className="form-actions no-print" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+              {printGuard.confirming ? (
+                <div className="alert" role="alertdialog" style={{ margin: 0, textAlign: 'left', background: 'var(--warning-light, #fef3c7)', color: '#92400e', border: '1px solid #fde68a' }}>
+                  <strong>This receipt has already been printed.</strong>
+                  <div style={{ marginTop: 4 }}>
+                    Printing it again may cause a duplicate. Please check before you continue.
+                  </div>
+                  <div className="form-actions" style={{ marginTop: 10 }}>
+                    <button className="btn btn-secondary" onClick={printGuard.cancelPrint}>Cancel</button>
+                    <button className="btn" onClick={printGuard.confirmPrint} disabled={printGuard.countdown > 0} autoFocus>
+                      {printGuard.countdown > 0 ? `Please wait (${printGuard.countdown})…` : 'Confirm print'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="form-actions">
+                  <button className="btn btn-secondary" onClick={onDone}>Done</button>
+                  {receiptPaid ? (
+                    <button className="btn" onClick={() => printGuard.requestPrint(() => window.print())}>Print receipt</button>
+                  ) : (
+                    <span className="muted" style={{ alignSelf: 'center', fontSize: 12 }}>
+                      No payment recorded yet — the receipt can be printed once this bill is paid.
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -52,4 +52,15 @@ describe('ReceiptModal — duplicate-print guard', () => {
     await user.click(screen.getByRole('button', { name: 'Confirm print' }));
     expect(window.print).toHaveBeenCalledTimes(2);
   });
+
+  it('hides the print action until the bill has a payment', async () => {
+    (api as jest.Mock).mockResolvedValue({
+      data: { ...INVOICE, id: 'inv2', paidAmount: 0, dueAmount: 100, payments: [] },
+    });
+    render(<ReceiptModal invoice={{ id: 'inv2', type: 'OPD' }} onClose={() => {}} />);
+
+    await waitFor(() => expect(screen.getByText('Close')).toBeInTheDocument());
+    expect(screen.queryByText('Print invoice')).not.toBeInTheDocument();
+    expect(screen.getByText(/No payment recorded yet/i)).toBeInTheDocument();
+  });
 });

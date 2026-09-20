@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { formatDate, formatDateTime, formatMoney } from '@/lib/hooks';
+import { usePrintGuard } from '@/lib/usePrintGuard';
 import { INVOICE_TYPES, PAYMENT_METHODS } from '@/lib/options';
 import type { Row } from '@/lib/types';
 import Barcode from '@/components/Barcode';
@@ -84,54 +85,9 @@ export default function ReceiptModal({
   const [pharmacyBilling, setPharmacyBilling] = useState<{ vatNumber?: string; panNumber?: string }>({});
   const [printedAt] = useState(() => new Date());
 
-  // Duplicate-print guard: once this invoice's receipt has been printed, a
-  // second attempt must be confirmed on purpose after a short countdown.
-  const printedKey = `receiptPrinted:${invoice.id}`;
-  const [alreadyPrinted, setAlreadyPrinted] = useState(false);
-  const [reprintPrompt, setReprintPrompt] = useState(false);
-  const [countdown, setCountdown] = useState(0);
-
-  useEffect(() => {
-    try {
-      setAlreadyPrinted(Boolean(localStorage.getItem(printedKey)));
-    } catch {
-      setAlreadyPrinted(false);
-    }
-  }, [printedKey]);
-
-  useEffect(() => {
-    if (!reprintPrompt) return;
-    setCountdown(3);
-    const timer = setInterval(() => {
-      setCountdown((c) => {
-        if (c <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return c - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [reprintPrompt]);
-
-  function commitPrint() {
-    try {
-      localStorage.setItem(printedKey, new Date().toISOString());
-    } catch {
-      // storage unavailable (private mode) — printing still proceeds
-    }
-    setAlreadyPrinted(true);
-    setReprintPrompt(false);
-    window.print();
-  }
-
-  function handlePrint() {
-    if (alreadyPrinted) {
-      setReprintPrompt(true);
-      return;
-    }
-    commitPrint();
-  }
+  // Duplicate-print guard shared with the other billing print surfaces: the
+  // first print goes through, a repeat must be confirmed after a countdown.
+  const printGuard = usePrintGuard(`receiptPrinted:${invoice.id}`);
 
   useEffect(() => {
     let cancelled = false;
@@ -495,18 +451,18 @@ export default function ReceiptModal({
         </div>
 
         <div className="form-actions no-print" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
-          {reprintPrompt ? (
+          {printGuard.confirming ? (
             <div className="alert" role="alertdialog" style={{ margin: 0, textAlign: 'left', background: 'var(--warning-light, #fef3c7)', color: '#92400e', border: '1px solid #fde68a' }}>
               <strong>This receipt has already been printed.</strong>
               <div style={{ marginTop: 4 }}>
                 Printing it again may cause a duplicate. Please check before you continue.
               </div>
               <div className="form-actions" style={{ marginTop: 10 }}>
-                <button className="btn btn-secondary" onClick={() => setReprintPrompt(false)}>
+                <button className="btn btn-secondary" onClick={printGuard.cancelPrint}>
                   Cancel
                 </button>
-                <button className="btn" onClick={commitPrint} disabled={countdown > 0} autoFocus>
-                  {countdown > 0 ? `Please wait (${countdown})…` : 'Confirm print'}
+                <button className="btn" onClick={printGuard.confirmPrint} disabled={printGuard.countdown > 0} autoFocus>
+                  {printGuard.countdown > 0 ? `Please wait (${printGuard.countdown})…` : 'Confirm print'}
                 </button>
               </div>
             </div>
@@ -515,9 +471,15 @@ export default function ReceiptModal({
               <button className="btn btn-secondary" onClick={onClose}>
                 Close
               </button>
-              <button className="btn" onClick={handlePrint} disabled={payments.length === 0} title={payments.length === 0 ? 'Print invoice is available after a payment is recorded' : undefined}>
-                Print invoice
-              </button>
+              {paidAmount > 0 || Number(data.totalAmount || 0) <= 0 ? (
+                <button className="btn" onClick={() => printGuard.requestPrint(() => window.print())}>
+                  Print invoice
+                </button>
+              ) : (
+                <span className="muted" style={{ alignSelf: 'center', fontSize: 12 }}>
+                  No payment recorded yet — the receipt can be printed once this bill is paid.
+                </span>
+              )}
             </div>
           )}
         </div>

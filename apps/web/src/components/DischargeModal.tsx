@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { api } from '@/lib/api';
+import { api, listOf } from '@/lib/api';
 import { formatMoney } from '@/lib/hooks';
 import { usePrintGuard } from '@/lib/usePrintGuard';
 
@@ -140,7 +140,15 @@ export default function DischargeModal({
       const body: Record<string, any> = { dischargeType: values.dischargeType };
       if (values.dischargeSummary) body.dischargeSummary = values.dischargeSummary;
       if (values.finalDiagnosis) body.finalDiagnosis = values.finalDiagnosis;
-      await api(`/admissions/${admission.id}/discharge`, { method: 'POST', body: JSON.stringify(body) });
+      try {
+        await api(`/admissions/${encodeURIComponent(admission.id)}/discharge`, { method: 'POST', body: JSON.stringify(body) });
+      } catch (err: any) {
+        if (err?.statusCode !== 404 || !admission.admissionNumber) throw err;
+        const lookup = await api(`/admissions?search=${encodeURIComponent(admission.admissionNumber)}&includeEmergency=true&limit=1`);
+        const match = listOf(lookup)[0];
+        if (!match?.id) throw err;
+        await api(`/admissions/${encodeURIComponent(match.id)}/discharge`, { method: 'POST', body: JSON.stringify(body) });
+      }
       if (billingDenied) {
         setStep('done');
         return;

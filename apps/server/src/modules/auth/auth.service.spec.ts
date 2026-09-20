@@ -123,6 +123,17 @@ describe("AuthService", () => {
       (jwt.sign as jest.Mock).mockReturnValue("mock-access-token");
     });
 
+    it("uses a clinical-friendly access token lifetime", async () => {
+      await service.login(
+        { email: "test@test.com", password: "Password123" },
+        "agent",
+        "1.2.3.4",
+      );
+
+      const jwtCall = (jwt.sign as jest.Mock).mock.calls[0];
+      expect(jwtCall[2]).toMatchObject({ expiresIn: "8h" });
+    });
+
     it("rejects invalid credentials", async () => {
       prisma.user.findUnique.mockResolvedValue(null);
       await expect(

@@ -560,12 +560,9 @@ function BillingPageInner() {
 }
 
 export default function BillingPage() {
-return (
-<Suspense fallback={<p className="muted">Loading...</p>}>
-<div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
-<a className="btn btn-primary" href="/billing/discharge">Discharge Billing</a>
-</div>
-<BillingPageInner />
-</Suspense>
-);
+  return (
+    <Suspense fallback={<p className="muted">Loading...</p>}>
+      <BillingPageInner />
+    </Suspense>
+  );
 }

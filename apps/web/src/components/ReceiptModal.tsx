@@ -245,6 +245,12 @@ export default function ReceiptModal({
                     <span className="inv-label">User / Created By</span>
                     <span className="inv-value">{createdByName}</span>
                   </div>
+                  {data.assignedCashierName ? (
+                    <div className="inv-row">
+                      <span className="inv-label">Cashier</span>
+                      <span className="inv-value">{data.assignedCashierName}</span>
+                    </div>
+                  ) : null}
                   <div className="inv-row">
                     <span className="inv-label">Printed Date/Time</span>
                     <span className="inv-value">{formatDateTime(printedAt)}</span>
@@ -371,6 +377,7 @@ export default function ReceiptModal({
                         <th>Ref</th>
                         <th>Date</th>
                         <th>Method</th>
+                        <th>Cashier</th>
                         <th className="inv-col-num">Amount</th>
                       </tr>
                     </thead>
@@ -380,6 +387,7 @@ export default function ReceiptModal({
                           <td className="mono">{p.paymentNumber || p.id.slice(0, 8)}</td>
                           <td>{p.paidAt ? formatDate(p.paidAt) : '—'}</td>
                           <td>{labelOf(PAYMENT_METHODS, p.method)}</td>
+                          <td>{p.cashierName || '—'}</td>
                           <td className="inv-col-num mono">{formatMoney(p.amount)}</td>
                         </tr>
                       ))}
@@ -411,6 +419,7 @@ export default function ReceiptModal({
                         <th>Ref</th>
                         <th>Date</th>
                         <th>Method</th>
+                        <th>Cashier</th>
                         <th>Reason</th>
                         <th className="inv-col-num">Amount</th>
                       </tr>
@@ -421,6 +430,7 @@ export default function ReceiptModal({
                           <td className="mono">{r.refundNumber || r.id.slice(0, 8)}</td>
                           <td>{r.createdAt ? formatDate(r.createdAt) : r.refundedAt ? formatDate(r.refundedAt) : '—'}</td>
                           <td>{labelOf(PAYMENT_METHODS, r.refundMethod)}</td>
+                          <td>{r.cashierName || '—'}</td>
                           <td>{r.reason || '—'}</td>
                           <td className="inv-col-num mono">-{formatMoney(r.amount)}</td>
                         </tr>

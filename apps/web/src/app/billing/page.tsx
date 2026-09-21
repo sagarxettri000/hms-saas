@@ -11,6 +11,7 @@ import { INVOICE_TYPES, PAYMENT_METHODS } from '@/lib/options';
 import type { ApiResponse, Row } from '@/lib/types';
 
 const PATIENT_REF = { valueKey: 'id', labelKeys: ['firstName', 'lastName', 'mrn', 'mobile'], endpoint: '/patients' };
+const CASHIER_REF = { valueKey: 'id', labelKeys: ['firstName', 'lastName'], endpoint: '/billing/cashiers' };
 
 function CommandCenter() {
   const [a, setA] = useState<Row | null>(null);
@@ -301,6 +302,14 @@ function BillingPageInner() {
             { key: 'totalAmount', label: 'Total', render: (r) => formatMoney(r.totalAmount) },
             { key: 'paidAmount', label: 'Paid', render: (r) => formatMoney(r.paidAmount) },
             { key: 'status', label: 'Status', badge: true },
+            {
+              key: 'cashier',
+              label: 'Cashier',
+              render: (r) =>
+                r.assignedCashierName ||
+                [r.assignedCashier?.firstName, r.assignedCashier?.lastName].filter(Boolean).join(' ') ||
+                '—',
+            },
           ],
           actions: [
             {
@@ -333,6 +342,7 @@ function BillingPageInner() {
             { name: 'patientId', label: 'Patient', required: true, type: 'searchSelect', optionsFrom: PATIENT_REF },
             { name: 'type', label: 'Type', type: 'select', options: INVOICE_TYPES },
             { name: 'schemeId', label: 'Scheme', type: 'select', optionsFrom: schemeRef },
+            { name: 'cashierId', label: 'Cashier', type: 'select', optionsFrom: CASHIER_REF },
             { name: 'encounterId', label: 'Encounter ID' },
             { name: 'items', label: 'Line items', type: 'items', required: true, full: true },
             { name: 'discountAmount', label: 'Discount (NPR)', type: 'number' },
@@ -353,6 +363,14 @@ function BillingPageInner() {
             { key: 'amount', label: 'Amount', render: (r) => formatMoney(r.amount) },
             { key: 'method', label: 'Method', badge: true },
             { key: 'status', label: 'Status', badge: true },
+            {
+              key: 'cashier',
+              label: 'Cashier',
+              render: (r) =>
+                r.cashierName ||
+                [r.cashier?.firstName, r.cashier?.lastName].filter(Boolean).join(' ') ||
+                '—',
+            },
           ],
           fields: [
             { name: 'patientId', label: 'Patient', required: true, type: 'searchSelect', optionsFrom: PATIENT_REF },
@@ -361,6 +379,7 @@ function BillingPageInner() {
             } },
             { name: 'amount', label: 'Amount', type: 'number', required: true },
             { name: 'method', label: 'Method', type: 'select', options: PAYMENT_METHODS, defaultValue: 'CASH' },
+            { name: 'cashierId', label: 'Cashier', type: 'select', optionsFrom: CASHIER_REF },
             { name: 'referenceNumber', label: 'Reference / Txn no.' },
             { name: 'notes', label: 'Notes', type: 'textarea', full: true },
           ],
@@ -442,6 +461,14 @@ function BillingPageInner() {
             { key: 'amount', label: 'Amount', render: (r) => formatMoney(r.amount) },
             { key: 'refundMethod', label: 'Method', badge: true },
             { key: 'status', label: 'Status', badge: true },
+            {
+              key: 'cashier',
+              label: 'Cashier',
+              render: (r) =>
+                r.cashierName ||
+                [r.cashier?.firstName, r.cashier?.lastName].filter(Boolean).join(' ') ||
+                '—',
+            },
           ],
           actions: [
             {
@@ -458,6 +485,7 @@ function BillingPageInner() {
             { name: 'amount', label: 'Amount', type: 'number', required: true },
             { name: 'reason', label: 'Reason', required: true, type: 'textarea', full: true },
             { name: 'refundMethod', label: 'Refund method', type: 'select', options: PAYMENT_METHODS, defaultValue: 'CASH' },
+            { name: 'cashierId', label: 'Cashier', type: 'select', optionsFrom: CASHIER_REF },
           ],
         },
         {

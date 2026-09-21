@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { api } from '@/lib/api';
+import { useEffect, useState } from 'react';
+import { api, listOf } from '@/lib/api';
 import { formatMoney } from '@/lib/hooks';
 import { PAYMENT_METHODS } from '@/lib/options';
-import type { Row } from '@/lib/types';
+import type { ApiResponse, Row } from '@/lib/types';
 
 function makeIdempotencyKey() {
   return `pay-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -21,11 +21,27 @@ export default function PaymentModal({
 }) {
   const [amount, setAmount] = useState<number>(Number(invoice.totalAmount || 0) - Number(invoice.paidAmount || 0) || 0);
   const [method, setMethod] = useState('CASH');
+  const [cashierId, setCashierId] = useState('');
+  const [cashiers, setCashiers] = useState<Row[]>([]);
   const [referenceNumber, setReferenceNumber] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [idempotencyKey] = useState(makeIdempotencyKey);
+
+  useEffect(() => {
+    let active = true;
+    api('/billing/cashiers?limit=500')
+      .then((res: ApiResponse<Row[]>) => {
+        if (active) setCashiers(listOf(res));
+      })
+      .catch(() => {
+        if (active) setCashiers([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,6 +59,7 @@ export default function PaymentModal({
           invoiceId: invoice.id,
           amount: Number(amount),
           method,
+          cashierId: cashierId || undefined,
           referenceNumber,
           notes,
           idempotencyKey,
@@ -84,6 +101,17 @@ export default function PaymentModal({
               {PAYMENT_METHODS.map((m) => (
                 <option key={m.value} value={m.value}>
                   {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label className="label">Cashier</label>
+            <select className="input" value={cashierId} onChange={(e) => setCashierId(e.target.value)}>
+              <option value="">— Current user (default) —</option>
+              {cashiers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {[c.firstName, c.lastName].filter(Boolean).join(' ')}
                 </option>
               ))}
             </select>

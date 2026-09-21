@@ -68,6 +68,7 @@ describe("BillingService", () => {
       },
       user: {
         findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
       },
       $transaction: jest.fn().mockImplementation((fn) => fn(prisma)),
       generateNumber: undefined,
@@ -152,6 +153,79 @@ describe("BillingService", () => {
         service.createPayment("t1", { invoiceId: "i1", amount: 50 }),
       ).rejects.toThrow(ConflictException);
     });
+
+    it("records the acting user as cashier when none is specified", async () => {
+      prisma.invoice.findFirst.mockResolvedValue({
+        id: "i1",
+        tenantId: "t1",
+        status: "PARTIAL",
+        patientId: "p1",
+        totalAmount: 100,
+        paidAmount: 40,
+        dueAmount: 60,
+        isCredit: false,
+      });
+      prisma.user.findFirst.mockResolvedValue({
+        id: "u1",
+        firstName: "Ram",
+        middleName: null,
+        lastName: "Sharma",
+      });
+      const payment = await service.createPayment(
+        "t1",
+        { invoiceId: "i1", amount: 50 },
+        "u1",
+      );
+      expect(payment.cashierId).toBe("u1");
+      expect(payment.cashierName).toBe("Ram Sharma");
+    });
+
+    it("records an explicitly selected cashier", async () => {
+      prisma.invoice.findFirst.mockResolvedValue({
+        id: "i1",
+        tenantId: "t1",
+        status: "PARTIAL",
+        patientId: "p1",
+        totalAmount: 100,
+        paidAmount: 40,
+        dueAmount: 60,
+        isCredit: false,
+      });
+      prisma.user.findFirst.mockResolvedValue({
+        id: "u2",
+        firstName: "Sita",
+        middleName: "",
+        lastName: "Gurung",
+      });
+      const payment = await service.createPayment(
+        "t1",
+        { invoiceId: "i1", amount: 50, cashierId: "u2" },
+        "u1",
+      );
+      expect(payment.cashierId).toBe("u2");
+      expect(payment.cashierName).toBe("Sita Gurung");
+    });
+
+    it("rejects an invalid cashier selection", async () => {
+      prisma.invoice.findFirst.mockResolvedValue({
+        id: "i1",
+        tenantId: "t1",
+        status: "PARTIAL",
+        patientId: "p1",
+        totalAmount: 100,
+        paidAmount: 40,
+        dueAmount: 60,
+        isCredit: false,
+      });
+      prisma.user.findFirst.mockResolvedValue(null);
+      await expect(
+        service.createPayment(
+          "t1",
+          { invoiceId: "i1", amount: 50, cashierId: "ghost" },
+          "u1",
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe("createRefund", () => {
@@ -169,6 +243,9 @@ describe("BillingService", () => {
         }),
       },
       invoice: { findFirst: jest.fn() },
+      user: {
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
       refund: {
         create: jest
           .fn()
@@ -217,6 +294,22 @@ describe("BillingService", () => {
       );
       expect(refund.patientId).toBe("p1");
       expect(refund.amount).toBe(40);
+    });
+
+    it("records the acting cashier on the refund", async () => {
+      prisma.user.findFirst.mockResolvedValue({
+        id: "u1",
+        firstName: "Ram",
+        middleName: null,
+        lastName: "Sharma",
+      });
+      const refund = await service.createRefund(
+        "t1",
+        { patientId: "p1", paymentId: "pay1", amount: 40, reason: "overpaid" },
+        "u1",
+      );
+      expect(refund.cashierId).toBe("u1");
+      expect(refund.cashierName).toBe("Ram Sharma");
     });
   });
 
@@ -370,6 +463,7 @@ describe("BillingService", () => {
         invoice: { create: jest.fn() },
         user: {
           findMany: jest.fn().mockResolvedValue([]),
+          findFirst: jest.fn().mockResolvedValue(null),
         },
         $transaction: jest.fn().mockImplementation(async (fn) => {
           const tx = {
@@ -925,6 +1019,69 @@ describe("BillingService", () => {
         hospital,
       );
       expect(block).toEqual({ panNumber: "HOSP-PAN", vatNumber: "HOSP-VAT" });
+    });
+  });
+
+  describe("cashier assignment", () => {
+    const eligibleUser = {
+      id: "u-cash",
+      firstName: "Ram",
+      middleName: null,
+      lastName: "Sharma",
+    };
+
+    it("resolves an eligible cashier and composes the display name", async () => {
+      const prisma = {
+        user: { findFirst: jest.fn().mockResolvedValue(eligibleUser) },
+      };
+      const service = makeService(prisma as any);
+      const cashier = await (service as any).resolveCashier("t1", "u-cash");
+      expect(cashier).toEqual({ id: "u-cash", name: "Ram Sharma" });
+      expect(prisma.user.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: "u-cash", tenantId: "t1" }),
+        }),
+      );
+    });
+
+    it("rejects a missing or non-eligible cashier", async () => {
+      const prisma = {
+        user: { findFirst: jest.fn().mockResolvedValue(null) },
+      };
+      const service = makeService(prisma as any);
+      await expect(
+        (service as any).resolveCashier("t1", "ghost"),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it("lists only active billing-capable users", async () => {
+      const prisma = {
+        user: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: "u1",
+              firstName: "Ram",
+              middleName: null,
+              lastName: "Sharma",
+              email: "ram@hms.test",
+              role: "RECEPTIONIST",
+              departmentId: null,
+            },
+          ]),
+        },
+      };
+      const service = makeService(prisma as any);
+      const list = await service.listCashiers("t1", "ram");
+      expect(list).toHaveLength(1);
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenantId: "t1",
+            isActive: true,
+            role: { in: expect.any(Array) },
+          }),
+        }),
+      );
     });
   });
 });

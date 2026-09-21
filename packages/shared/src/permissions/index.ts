@@ -14,6 +14,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, PermissionAction[]> = {
     PermissionAction.EXPORT,
     PermissionAction.VERIFY,
     PermissionAction.SIGN,
+    PermissionAction.ASSIGN_CASHIER,
   ],
   [UserRole.RECEPTIONIST]: [
     PermissionAction.VIEW,
@@ -25,6 +26,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, PermissionAction[]> = {
     PermissionAction.APPROVE,
     PermissionAction.REJECT,
     PermissionAction.VERIFY,
+    PermissionAction.ASSIGN_CASHIER,
   ],
   [UserRole.RECEPTION_SUPERVISOR]: [
     PermissionAction.VIEW,
@@ -35,6 +37,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, PermissionAction[]> = {
     PermissionAction.PRINT,
     PermissionAction.EXPORT,
     PermissionAction.DISCOUNT,
+    PermissionAction.ASSIGN_CASHIER,
   ],
   [UserRole.DOCTOR]: [
     PermissionAction.VIEW,
@@ -121,6 +124,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, PermissionAction[]> = {
     PermissionAction.ADMINISTER,
     PermissionAction.VERIFY,
     PermissionAction.SIGN,
+    PermissionAction.ASSIGN_CASHIER,
   ],
   [UserRole.INSURANCE_OFFICER]: [
     PermissionAction.VIEW,
@@ -344,6 +348,7 @@ export const RESOURCE_PERMISSIONS = {
     PermissionAction.REFUND,
     PermissionAction.DISCOUNT,
     PermissionAction.SETTLE,
+    PermissionAction.ASSIGN_CASHIER,
   ],
   PAYMENT: [
     PermissionAction.VIEW,

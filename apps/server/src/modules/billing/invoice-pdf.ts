@@ -128,6 +128,8 @@ interface InvoiceData {
   paidAmount: any;
   dueAmount: any;
   isCredit: boolean;
+  /** Cashier held responsible for this billing transaction (snapshot). */
+  assignedCashierName?: string;
   printCount: number;
   patient?: {
     firstName: string;
@@ -179,6 +181,8 @@ interface InvoiceData {
     status: string;
     transactionId?: string;
     referenceNumber?: string;
+    /** Cashier who collected this payment (snapshot). */
+    cashierName?: string;
   }[];
   refunds: {
     refundNumber: string;
@@ -437,8 +441,13 @@ export function buildInvoicePdf(
     p.gap(14);
     infoRow(p, "Scheme/Cat:", inv.scheme.name, MARGIN, p.y, 56);
   }
+  if (inv.assignedCashierName) {
+    if (inv.scheme?.name || consultant || patAddr) p.gap(14);
+    infoRow(p, "Cashier:", inv.assignedCashierName, MARGIN, p.y, 56);
+  }
   if (inv.admission?.department?.name) {
-    if (consultant || inv.scheme?.name || patAddr) p.gap(14);
+    if (consultant || inv.scheme?.name || patAddr || inv.assignedCashierName)
+      p.gap(14);
     else p.gap(0);
     infoRow(p, "Department:", inv.admission.department.name, MARGIN, p.y);
     p.gap(14);
@@ -611,6 +620,10 @@ export function buildReceiptPdf(
   }
   if (payment.referenceNumber) {
     infoRow(p, "Reference:", payment.referenceNumber, MARGIN, p.y);
+    p.gap(14);
+  }
+  if (payment.cashierName) {
+    infoRow(p, "Cashier:", payment.cashierName, MARGIN, p.y);
     p.gap(14);
   }
   p.gap(10);

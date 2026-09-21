@@ -334,7 +334,7 @@ async function seedPermissions() {
   const actions = [
     'VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'REJECT',
     'PRINT', 'EXPORT', 'REFUND', 'DISCOUNT', 'SETTLE', 'ADMINISTER',
-    'VERIFY', 'SIGN', 'CONFIGURE',
+    'VERIFY', 'SIGN', 'CONFIGURE', 'ASSIGN_CASHIER',
   ];
 
   for (const action of actions) {
@@ -349,9 +349,9 @@ async function seedPermissions() {
     { name: 'PLATFORM_SUPER_ADMIN', permissions: actions },
     { name: 'HOSPITAL_ADMIN', permissions: actions },
     { name: 'HOSPITAL_OWNER', permissions: actions },
-    { name: 'DEPARTMENT_HEAD', permissions: ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'REJECT', 'PRINT', 'EXPORT', 'VERIFY', 'SIGN'] },
-    { name: 'RECEPTIONIST', permissions: ['VIEW', 'CREATE', 'EDIT', 'PRINT', 'EXPORT', 'SETTLE', 'REFUND', 'APPROVE', 'REJECT', 'VERIFY'] },
-    { name: 'RECEPTION_SUPERVISOR', permissions: ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'REJECT', 'PRINT', 'EXPORT', 'DISCOUNT'] },
+    { name: 'DEPARTMENT_HEAD', permissions: ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'REJECT', 'PRINT', 'EXPORT', 'VERIFY', 'SIGN', 'ASSIGN_CASHIER'] },
+    { name: 'RECEPTIONIST', permissions: ['VIEW', 'CREATE', 'EDIT', 'PRINT', 'EXPORT', 'SETTLE', 'REFUND', 'APPROVE', 'REJECT', 'VERIFY', 'ASSIGN_CASHIER'] },
+    { name: 'RECEPTION_SUPERVISOR', permissions: ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'REJECT', 'PRINT', 'EXPORT', 'DISCOUNT', 'ASSIGN_CASHIER'] },
     { name: 'DOCTOR', permissions: ['VIEW', 'CREATE', 'EDIT', 'PRINT', 'EXPORT', 'SIGN', 'VERIFY'] },
     { name: 'NURSE', permissions: ['VIEW', 'CREATE', 'EDIT', 'PRINT', 'VERIFY'] },
     { name: 'WARD_INCHARGE', permissions: ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'REJECT', 'PRINT', 'EXPORT', 'VERIFY'] },
@@ -360,7 +360,7 @@ async function seedPermissions() {
     { name: 'RADIOLOGIST', permissions: ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'REJECT', 'PRINT', 'EXPORT', 'VERIFY', 'SIGN'] },
     { name: 'RADIOLOGY_TECHNICIAN', permissions: ['VIEW', 'CREATE', 'EDIT', 'PRINT', 'VERIFY'] },
     { name: 'PHARMACIST', permissions: ['VIEW', 'CREATE', 'EDIT', 'PRINT', 'EXPORT', 'VERIFY', 'ADMINISTER'] },
-    { name: 'FINANCE_MANAGER', permissions: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'REJECT', 'PRINT', 'EXPORT', 'REFUND', 'DISCOUNT', 'SETTLE', 'ADMINISTER', 'VERIFY', 'SIGN'] },
+    { name: 'FINANCE_MANAGER', permissions: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'REJECT', 'PRINT', 'EXPORT', 'REFUND', 'DISCOUNT', 'SETTLE', 'ADMINISTER', 'VERIFY', 'SIGN', 'ASSIGN_CASHIER'] },
     { name: 'INSURANCE_OFFICER', permissions: ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'REJECT', 'PRINT', 'EXPORT', 'VERIFY'] },
     { name: 'HR_MANAGER', permissions: ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'REJECT', 'PRINT', 'EXPORT', 'ADMINISTER'] },
     { name: 'INVENTORY_MANAGER', permissions: ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'REJECT', 'PRINT', 'EXPORT', 'VERIFY'] },

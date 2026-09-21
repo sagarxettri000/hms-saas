@@ -49,6 +49,8 @@ export enum PermissionAction {
   VERIFY = 'VERIFY',
   SIGN = 'SIGN',
   CONFIGURE = 'CONFIGURE',
+  /** Select/assign the cashier responsible for a billing transaction. */
+  ASSIGN_CASHIER = 'ASSIGN_CASHIER',
 }
 
 export enum TenantStatus {

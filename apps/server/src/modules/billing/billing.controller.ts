@@ -189,6 +189,18 @@ export class BillingController {
     res.send(buffer);
   }
 
+  // ---------- Cashiers ----------
+
+  @Get("cashiers")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({
+    summary:
+      "List active billing-capable users available to select as cashier for a transaction",
+  })
+  listCashiers(@Query("search") search: string | undefined, @Req() req: any) {
+    return this.billingService.listCashiers(req.user.tenantId, search);
+  }
+
   // ---------- Payments ----------
 
   @Get("payments")

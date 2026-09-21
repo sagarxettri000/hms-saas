@@ -94,6 +94,7 @@ enum PermissionAction {
   VERIFY
   SIGN
   CONFIGURE
+  ASSIGN_CASHIER
 }
 
 enum UserStatus {
@@ -1128,6 +1129,9 @@ model User {
   leaves              Leave[]
   attendanceRecords   AttendanceRecord[]
   documentSignatures  DocumentSignature[]
+  invoicesAsCashier   Invoice[]            @relation("InvoiceAssignedCashier")
+  paymentsAsCashier   Payment[]            @relation("PaymentCashier")
+  refundsAsCashier    Refund[]             @relation("RefundCashier")
 
   @@index([tenantId])
   @@index([role])
@@ -2775,6 +2779,12 @@ model Invoice {
   dueDate              DateTime?
   notes                String?
   createdBy            String?
+  // Cashier held responsible for this billing transaction (who did the billing).
+  assignedCashierId    String?
+  assignedCashier      User?     @relation("InvoiceAssignedCashier", fields: [assignedCashierId], references: [id], onDelete: SetNull)
+  // Snapshot of the cashier's display name at assignment time (traceability even after user renames/deactivations).
+  assignedCashierName  String?
+  assignedCashierAt    DateTime?
   settledBy            String?
   settledAt            DateTime?
   createdAt            DateTime        @default(now())
@@ -2800,6 +2810,7 @@ model Invoice {
   @@index([patientId])
   @@index([schemeId])
   @@index([tenantId, issuedDate, status])
+  @@index([assignedCashierId])
 }
 
 model BillingScheme {
@@ -2888,6 +2899,10 @@ model Payment {
   idempotencyKey  String?
   paidAt          DateTime      @default(now())
   receivedBy      String?
+  // Cashier who collected this payment (distinct from receivedBy/system operator).
+  cashierId       String?
+  cashier         User?         @relation("PaymentCashier", fields: [cashierId], references: [id], onDelete: SetNull)
+  cashierName     String?
   notes           String?
   paymentType     PaymentType   @default(INVOICE)
   createdAt       DateTime      @default(now())
@@ -2903,6 +2918,7 @@ model Payment {
   @@index([patientId])
   @@index([tenantId, paidAt])
   @@index([tenantId, receivedBy, method])
+  @@index([cashierId])
 }
 
 model Refund {
@@ -2927,6 +2943,10 @@ model Refund {
   refundMethod    PaymentMethod @default(CASH)
   refundedAt      DateTime?
   processedBy     String?
+  // Cashier handling the refund (distinct from the original payment cashier).
+  cashierId       String?
+  cashier         User?         @relation("RefundCashier", fields: [cashierId], references: [id], onDelete: SetNull)
+  cashierName     String?
   notes           String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -2937,6 +2957,7 @@ model Refund {
   @@index([patientId])
   @@index([paymentId])
   @@index([tenantId, refundedAt, status])
+  @@index([cashierId])
 }
 
 model Deposit {

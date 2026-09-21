@@ -58,6 +58,22 @@ function mapRule(row: {
 
 const MAX_LIMIT = 100;
 
+/**
+ * Roles treated as billing/cashier-capable. Used to populate the cashier
+ * selector and to validate explicit cashier assignments. A user must be an
+ * active, tenant-scoped member of one of these roles to be selectable.
+ */
+const CASHIER_ELIGIBLE_ROLES = [
+  "RECEPTIONIST",
+  "RECEPTION_SUPERVISOR",
+  "FINANCE_MANAGER",
+  "PHARMACIST",
+  "DEPARTMENT_HEAD",
+  "HOSPITAL_ADMIN",
+  "HOSPITAL_OWNER",
+  "PLATFORM_SUPER_ADMIN",
+] as const;
+
 export interface InvoiceItemDto {
   serviceName: string;
   serviceCode?: string;
@@ -93,6 +109,8 @@ export interface CreateInvoiceDto {
   idempotencyKey?: string;
   /** Explicit billing mode (e.g. ONCO, DIALYSIS); resolved from payor if absent. */
   billingMode?: string;
+  /** Cashier held responsible for this billing transaction. Defaults to the current user when they are cashier-eligible. */
+  cashierId?: string;
 }
 
 export interface CreatePaymentDto {
@@ -103,6 +121,8 @@ export interface CreatePaymentDto {
   referenceNumber?: string;
   notes?: string;
   idempotencyKey?: string;
+  /** Cashier who collected the payment. Defaults to the current user. */
+  cashierId?: string;
 }
 
 export interface CreateRefundDto {
@@ -112,6 +132,8 @@ export interface CreateRefundDto {
   amount: number;
   reason: string;
   refundMethod?: string;
+  /** Cashier handling the refund. Defaults to the current user. */
+  cashierId?: string;
 }
 
 export interface CreateDepositDto {
@@ -259,6 +281,87 @@ export class BillingService {
     private readonly notifications: NotificationsService,
     private readonly pharmacyService: PharmacyService,
   ) {}
+
+  // ---------- Cashier assignment ----------
+
+  private cashierName(user: { firstName: string; middleName?: string | null; lastName: string }) {
+    return [user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ");
+  }
+
+  /**
+   * Resolve and validate an explicit cashier choice. Only active, tenant-scoped
+   * users holding a billing-capable role are accepted. Throws otherwise.
+   */
+  private async resolveCashier(tenantId: string, cashierId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: cashierId,
+        tenantId,
+        deletedAt: null,
+        isActive: true,
+        role: { in: CASHIER_ELIGIBLE_ROLES as unknown as any[] },
+      },
+      select: { id: true, firstName: true, middleName: true, lastName: true },
+    });
+    if (!user)
+      throw new BadRequestException(
+        "Cashier not found or not eligible for billing",
+      );
+    return { id: user.id, name: this.cashierName(user) };
+  }
+
+  /**
+   * Resolve the effective cashier for a transaction: an explicit selection wins;
+   * otherwise the acting user is used when they are themselves cashier-eligible.
+   * Returns null when no eligible cashier can be established (caller decides).
+   */
+  private async effectiveCashier(
+    tenantId: string,
+    explicitCashierId: string | undefined,
+    actingUserId: string | undefined,
+  ): Promise<{ id: string; name: string } | null> {
+    if (explicitCashierId) return this.resolveCashier(tenantId, explicitCashierId);
+    if (!actingUserId) return null;
+    try {
+      return await this.resolveCashier(tenantId, actingUserId);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Active, billing-capable users available to select as cashier for a billing
+   * transaction. Drives the "Cashier" selector on invoice/payment screens.
+   */
+  async listCashiers(tenantId: string, search?: string) {
+    return this.prisma.user.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        isActive: true,
+        role: { in: CASHIER_ELIGIBLE_ROLES as unknown as any[] },
+        ...(search
+          ? {
+              OR: [
+                { firstName: { contains: search, mode: "insensitive" } },
+                { lastName: { contains: search, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        departmentId: true,
+      },
+      orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+      take: 100,
+    });
+  }
 
   // ---------- Invoices ----------
 
@@ -528,6 +631,14 @@ export class BillingService {
       );
     }
 
+    // --- Cashier assignment (who did the billing): explicit selection wins,
+    // otherwise defaults to the acting user when cashier-eligible.
+    const cashier = await this.effectiveCashier(
+      tenantId,
+      dto.cashierId,
+      userId,
+    );
+
     const invoice = await this.prisma.$transaction(async (tx) => {
       const created = await tx.invoice.create({
         data: {
@@ -557,6 +668,9 @@ export class BillingService {
           dueDate: dto.dueDate ? this.normalizeDate(dto.dueDate) : undefined,
           notes: dto.notes,
           createdBy: userId,
+          assignedCashierId: cashier?.id,
+          assignedCashierName: cashier?.name,
+          assignedCashierAt: cashier ? new Date() : undefined,
           items: {
             create: items.map(({ serviceCategoryId: _sc, ...itemData }) => ({
               ...itemData,
@@ -630,7 +744,10 @@ export class BillingService {
       return created;
     });
 
-    await this.logAudit(tenantId, userId, "CREATE", "Invoice", invoice.id);
+    await this.logAudit(tenantId, userId, "CREATE", "Invoice", invoice.id, {
+      cashierId: cashier?.id ?? null,
+      cashierName: cashier?.name ?? null,
+    });
 
     this.prisma.user
       .findMany({
@@ -702,6 +819,9 @@ export class BillingService {
           patient: {
             select: { id: true, firstName: true, lastName: true, mrn: true },
           },
+          assignedCashier: {
+            select: { id: true, firstName: true, lastName: true, role: true },
+          },
           items: true,
         },
         orderBy: { issuedDate: "desc" },
@@ -765,6 +885,9 @@ export class BillingService {
           invoice: {
             select: { id: true, invoiceNumber: true, totalAmount: true },
           },
+          cashier: {
+            select: { id: true, firstName: true, lastName: true, role: true },
+          },
         },
         orderBy: { paidAt: "desc" },
         skip: (page - 1) * limit,
@@ -804,6 +927,15 @@ export class BillingService {
         },
         scheme: {
           select: { id: true, name: true, code: true, discountPercent: true },
+        },
+        assignedCashier: {
+          select: {
+            id: true,
+            firstName: true,
+            middleName: true,
+            lastName: true,
+            role: true,
+          },
         },
         patient: {
           select: {
@@ -1319,6 +1451,14 @@ export class BillingService {
       if (existing) return existing;
     }
 
+    // Cashier who collected this payment: explicit selection wins, otherwise
+    // the acting (authenticated) user is recorded.
+    const cashier = await this.effectiveCashier(
+      tenantId,
+      dto.cashierId,
+      userId,
+    );
+
     return this.prisma.$transaction(async (tx) => {
       const invoice = await tx.invoice.findFirst({
         where: { id: dto.invoiceId, tenantId },
@@ -1353,6 +1493,8 @@ export class BillingService {
             status: "COMPLETED",
             referenceNumber: dto.referenceNumber,
             receivedBy: userId,
+            cashierId: cashier?.id,
+            cashierName: cashier?.name,
             notes: dto.notes,
             idempotencyKey: dto.idempotencyKey,
           },
@@ -1494,6 +1636,13 @@ export class BillingService {
       "refundNumber",
     );
 
+    // Cashier handling the refund (explicit selection or the acting user).
+    const cashier = await this.effectiveCashier(
+      tenantId,
+      dto.cashierId,
+      userId,
+    );
+
     const refund = await this.prisma.refund.create({
       data: {
         tenantId,
@@ -1505,6 +1654,8 @@ export class BillingService {
         reason: dto.reason,
         refundMethod: (dto.refundMethod || "CASH") as any,
         requestedBy: userId,
+        cashierId: cashier?.id,
+        cashierName: cashier?.name,
       },
     });
 
@@ -1935,6 +2086,9 @@ export class BillingService {
           },
           invoice: { select: { id: true, invoiceNumber: true } },
           payment: { select: { id: true, paymentNumber: true, amount: true } },
+          cashier: {
+            select: { id: true, firstName: true, lastName: true, role: true },
+          },
         },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,

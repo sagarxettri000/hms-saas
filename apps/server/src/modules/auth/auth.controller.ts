@@ -41,6 +41,19 @@ export class AuthController {
     return this.authService.register(dto);
   }
 
+  @Post("bootstrap")
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 2, ttl: 60000 } })
+  @ApiOperation({
+    summary:
+      "Bootstrap the platform super admin (idempotent; no-op when one already exists)",
+  })
+  bootstrapPlatformSuperadmin() {
+    return this.authService.bootstrapPlatformSuperadmin();
+  }
+
   @Post("login")
   @Public()
   @HttpCode(HttpStatus.OK)

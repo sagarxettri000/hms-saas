@@ -484,4 +484,53 @@ describe("AuthService", () => {
       );
     });
   });
+
+  describe("bootstrapPlatformSuperadmin", () => {
+    const prisma = {
+      user: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
+      auditLog: {
+        create: jest.fn(),
+      },
+    };
+    const jwtService = { sign: jest.fn() };
+    const mailService = { send: jest.fn().mockResolvedValue(false) };
+    const service = makeService(prisma, jwtService, mailService);
+
+    beforeEach(() => jest.clearAllMocks());
+
+    it("creates the platform super admin when none exists", async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue({
+        id: "bootstrap-1",
+        email: "superadmin@nbmaitri.com",
+      });
+      prisma.auditLog.create.mockRejectedValue(new Error("audit failure"));
+
+      const result = await service.bootstrapPlatformSuperadmin();
+
+      expect(result.created).toBe(true);
+      expect(result.email).toBe("superadmin@nbmaitri.com");
+      expect(prisma.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            email: "superadmin@nbmaitri.com",
+            role: UserRole.PLATFORM_SUPER_ADMIN,
+            status: "ACTIVE",
+          }),
+        }),
+      );
+    });
+
+    it("is idempotent when an admin already exists", async () => {
+      prisma.user.findFirst.mockResolvedValue({ id: "existing-admin" });
+
+      await expect(service.bootstrapPlatformSuperadmin()).resolves.toEqual(
+        expect.objectContaining({ created: false, alreadyInitialized: true }),
+      );
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    });
+  });
 });

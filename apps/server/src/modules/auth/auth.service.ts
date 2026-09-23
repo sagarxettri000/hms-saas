@@ -111,6 +111,60 @@ export class AuthService {
     };
   }
 
+  /**
+   * Bootstrap the platform super administrator. Idempotent and non-destructive:
+   * only runs when the platform currently has ZERO platform super admins, so a
+   * fresh (unseeded) production deployment self-heals via a single API call.
+   * When an admin already exists this returns without touching anything — it
+   * never deletes, updates, or clobbers existing accounts.
+   */
+  async bootstrapPlatformSuperadmin() {
+    const existing = await this.prisma.user.findFirst({
+      where: { role: UserRole.PLATFORM_SUPER_ADMIN },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return {
+        created: false,
+        alreadyInitialized: true,
+        message: "Platform already has a super administrator.",
+      };
+    }
+
+    const email = "superadmin@nbmaitri.com";
+    const passwordHash = await bcrypt.hash("SuperAdmin@123", 12);
+
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        firstName: "Platform",
+        lastName: "Super Admin",
+        role: UserRole.PLATFORM_SUPER_ADMIN,
+        status: "ACTIVE",
+        emailVerifiedAt: new Date(),
+      },
+    });
+
+    await this.logAudit(
+      user.id,
+      null,
+      "CREATE",
+      "User",
+      user.id,
+      "PLATFORM_SUPER_ADMIN",
+      { source: "bootstrap" },
+    );
+
+    return {
+      created: true,
+      id: user.id,
+      email: user.email,
+      message: "Platform super administrator created.",
+    };
+  }
+
   private checkUserAccessible(user: {
     status: string;
     deletedAt: Date | null;

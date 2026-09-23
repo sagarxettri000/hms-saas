@@ -138,7 +138,6 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { label: 'Notifications', href: '/notifications', icon: '◐', roles: [...ADMIN, ...SUPER] },
       { label: 'Audit Logs', href: '/audit', icon: '▤', roles: [...ADMIN, ...SUPER] },
-      { label: 'Tenants', href: '/tenants', icon: '▦', roles: [...ADMIN, ...SUPER] },
       { label: 'Webhooks & Keys', href: '/webhooks', icon: '⇌', roles: [...ADMIN, ...SUPER] },
       { label: 'Settings', href: '/settings', icon: '⚙', roles: [...ADMIN, ...SUPER] },
     ],
@@ -159,7 +158,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const isPublic = pathname === '/' || PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
   const [userName, setUserName] = useState('');
-  const [tenantName, setTenantName] = useState('');
   const [role, setRole] = useState('');
   const [flags, setFlags] = useState<Record<string, boolean>>({});
 
@@ -170,14 +168,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       // session's name/role/tenant in its React state (AppShell persists across
       // navigations, so a plain 1x mount effect would stay stale forever).
       setUserName('');
-      setTenantName('');
       setRole('');
       return;
     }
     if (!localStorage.getItem('role')) { router.replace('/login'); return; }
     // Apply whatever identity we already have so the UI is never blank.
     setUserName(localStorage.getItem('userName') || 'User');
-    setTenantName(localStorage.getItem('tenantName') || 'Workspace');
     setRole(localStorage.getItem('role') || '');
     // Reconcile identity/role from the server once per session (not on every
     // soft navigation) so the sidebar's role-gated items render correctly even
@@ -199,11 +195,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           setRole(u.role);
         }
         if (u.tenantId) localStorage.setItem('tenantId', u.tenantId);
-        const tenantName = u.tenant?.name;
-        if (tenantName) {
-          localStorage.setItem('tenantName', tenantName);
-          setTenantName(tenantName);
-        }
+        if (u.tenant?.name) localStorage.setItem('tenantName', u.tenant.name);
         if (Array.isArray(u.featureFlags)) {
           const map: Record<string, boolean> = {};
           for (const f of u.featureFlags) map[f.key] = f.enabled === true;
@@ -314,7 +306,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="sidebar-footer">
           <div style={{ fontWeight: 600, marginBottom: 4 }}>{userName || 'User'}</div>
-          <div>{tenantName}</div>
         </div>
       </aside>
 
@@ -331,7 +322,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <GlobalSearch />
           <div className="topbar-right">
             <NotificationBell />
-            <span className="topbar-tenant" style={{ fontSize: 13, color: '#64748b' }}>{tenantName}</span>
             <button className="btn btn-secondary btn-sm" onClick={handleLogout}>
               Sign out
             </button>

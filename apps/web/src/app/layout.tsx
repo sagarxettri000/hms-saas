@@ -3,6 +3,7 @@ import { Inter, Noto_Sans_Devanagari } from 'next/font/google';
 import './globals.css';
 import './auth-glass.css';
 import AppShell from '@/components/AppShell';
+import { Analytics } from '@vercel/analytics/next';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -28,6 +29,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.variable} ${devanagari.variable}`}>
         <AppShell>{children}</AppShell>
+        <Analytics />
       </body>
     </html>
   );

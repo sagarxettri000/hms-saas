@@ -91,6 +91,17 @@ export class AdmissionsService {
 
     const admissionNumber = await this.generateAdmissionNumber(tenantId);
 
+    // §30 invariant / §2: a normal IPD admission is only ever born ADMITTED
+    // (or activated) once BOTH a valid bed and a valid primary consultant are
+    // present and validated. If either is missing the admission is created in
+    // PENDING (assignment-incomplete) — it is never silently ADMITTED and it
+    // never appears as an ACTIVE IPD in reports (§21). The §5/§13 gate runs
+    // again, atomically, at activation.
+    const canActivateNow =
+      Boolean(bed) &&
+      Boolean(dto.admittingDoctorId) &&
+      Boolean(dto.bedId);
+
     const admission = await this.prisma.admission.create({
       data: {
         tenantId,
@@ -103,7 +114,7 @@ export class AdmissionsService {
         departmentId: dto.departmentId || bed?.room?.ward?.departmentId,
         provisionalDiagnosis: dto.provisionalDiagnosis,
         notes: dto.notes,
-        status: "ADMITTED",
+        status: canActivateNow ? "ADMITTED" : "PENDING",
         createdBy: userId,
       },
       include: {

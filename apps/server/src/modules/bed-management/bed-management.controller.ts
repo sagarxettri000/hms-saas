@@ -184,6 +184,41 @@ export class BedManagementController {
     );
   }
 
+  // ------------------------------------------------------------------
+  // Hospital-wide free-bed management (§65.2) — server-side source of truth
+  // for compliance, availability, and bed designation.
+  // ------------------------------------------------------------------
+
+  @Get("free-beds/summary")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Hospital-wide free-bed compliance summary (required/allocated/available/occupied by ward)" })
+  getFreeBedSummary(@Req() req: any) {
+    return this.service.getFreeBedSummary(req.user.tenantId);
+  }
+
+  @Get("free-beds/available")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Available designated free beds across all wards" })
+  getAvailableFreeBeds(@Req() req: any) {
+    return this.service.getAvailableFreeBeds(req.user.tenantId);
+  }
+
+  @Patch("beds/:id/free-bed")
+  @Permissions(PermissionAction.CONFIGURE)
+  @ApiOperation({ summary: "Designate / un-designate a bed for the free-treatment quota (audited)" })
+  setFreeBedDesignation(
+    @Param("id") id: string,
+    @Body() body: { freeBedEligible: boolean; quotaCategory?: string | null; reason?: string },
+    @Req() req: any,
+  ) {
+    return this.service.setFreeBedDesignation(
+      req.user.tenantId,
+      id,
+      body,
+      req.user?.id ?? req.user?.userId,
+    );
+  }
+
   @Delete("beds/:id")
   @Permissions(PermissionAction.DELETE)
   @ApiOperation({ summary: "Delete a bed" })

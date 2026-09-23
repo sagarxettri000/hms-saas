@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -321,13 +322,18 @@ export class EmergencyService {
     if (ec.admitted)
       throw new BadRequestException("Case is already admitted");
 
-    let bed: { id: string; wardId: string | null } | null = null;
+    let bed: { id: string; wardId: string | null; freeBedEligible: boolean } | null = null;
     if (body.bedId) {
       bed = await this.prisma.bed.findFirst({
         where: { id: body.bedId, tenantId, isActive: true },
-        select: { id: true, wardId: true },
+        select: { id: true, wardId: true, freeBedEligible: true },
       });
       if (!bed) throw new NotFoundException("Bed not found");
+      // Designated free beds go only to eligible free-treatment admissions.
+      if (bed.freeBedEligible && !(body as any).isFreeTreatment)
+        throw new ForbiddenException(
+          "This bed is designated for free-treatment patients (use a non-designated bed or mark the admission free-treatment eligible)",
+        );
       // The ER ward (bedType EMERGENCY) is preferred but not enforced — ER can
       // hold a patient in ICU etc. via the generic admissions flow.
       const occupied = await this.prisma.bed.findFirst({
@@ -575,6 +581,14 @@ export class EmergencyService {
         );
       if (newBed.id === currentAlloc.bedId)
         throw new ConflictException("Patient is already in this bed");
+      // Designated free beds go only to free-treatment transfers.
+      const erFreeStay = await this.prisma.freeBedAllocation.findFirst({
+        where: { tenantId, admissionId: ec.admission.id, status: "OCCUPIED" },
+      });
+      if (newBed.freeBedEligible && !erFreeStay && !(body as any).isFreeTreatment)
+        throw new ForbiddenException(
+          "Target bed is designated for free-treatment patients — transfer a free-stay patient or mark the transfer free-treatment eligible",
+        );
     }
 
     const admissionId = ec.admission.id;
@@ -594,8 +608,11 @@ export class EmergencyService {
       // destination ward when transferring out of the ER).
       let claimedBedId = toBedId;
       if (ward && !claimedBedId) {
+        // Hospital-wide free-bed rule: automatic picking never consumes a
+        // designated free bed — those wait for eligible free-treatment
+        // patients. Explicit free-bed choice stays available via bedId.
         const freeBed = await tx.bed.findFirst({
-          where: { tenantId, wardId: ward.id, isActive: true, status: "AVAILABLE" },
+          where: { tenantId, wardId: ward.id, isActive: true, status: "AVAILABLE", freeBedEligible: false },
           orderBy: { bedNumber: "asc" },
         });
         if (!freeBed)

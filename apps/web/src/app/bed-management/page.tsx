@@ -734,6 +734,195 @@ function BedDetailModal({ bedId, onClose }: { bedId: string; onClose: () => void
   );
 }
 
+const FREE_BADGE: React.CSSProperties = {
+  fontSize: 10,
+  fontWeight: 700,
+  padding: '2px 6px',
+  borderRadius: 4,
+  background: 'var(--primary, #2563eb)',
+  color: '#fff',
+  letterSpacing: 0.4,
+};
+
+/** Hospital-wide free-bed compliance card (§65.2/§7/§13/§25). */
+function FreeBedCard({
+  summary,
+  loading,
+  onDesignate,
+}: {
+  summary: any;
+  loading: boolean;
+  onDesignate: () => void;
+}) {
+  if (loading) return <div className="loading">Loading free-bed compliance...</div>;
+  if (!summary) return null;
+
+  const status = summary.complianceStatus as string;
+  const banner =
+    status === 'COMPLIANT'
+      ? { text: `✓ Free Bed Allocation Compliant — ${summary.allocatedFreeBeds} of ${summary.requiredFreeBeds} required free beds are allocated.`, style: { background: 'rgba(22,163,74,0.12)', color: '#15803d', border: '1px solid rgba(22,163,74,0.35)' } }
+      : status === 'OVER_ALLOCATED'
+        ? { text: `⚠ Over Allocated — ${summary.allocatedFreeBeds} free beds designated, ${summary.requiredFreeBeds} required. Review the distribution.`, style: { background: 'rgba(217,119,6,0.12)', color: '#b45309', border: '1px solid rgba(217,119,6,0.35)' } }
+        : { text: `⚠ Free Bed Allocation Incomplete — hospital requires ${summary.requiredFreeBeds} free beds but only ${summary.allocatedFreeBeds} are designated. ${summary.remainingToAllocate} more must be allocated.`, style: { background: 'rgba(220,38,38,0.10)', color: '#b91c1c', border: '1px solid rgba(220,38,38,0.30)' } };
+
+  return (
+    <div className="card" style={{ marginBottom: 20 }}>
+      <div className="row-between" style={{ marginBottom: 10 }}>
+        <div className="card-title">Free Bed Quota (Hospital-Wide)</div>
+        <button className="btn btn-sm btn-secondary" onClick={onDesignate}>Designate Free Bed</button>
+      </div>
+      <div style={banner.style as React.CSSProperties} className="alert" role="status">
+        {banner.text}
+      </div>
+      <div className="stat-grid" style={{ marginTop: 12 }}>
+        <div className="stat-card"><div className="stat-label">Applicable Bed Base</div><div className="stat-value">{summary.bedBase}</div></div>
+        <div className="stat-card"><div className="stat-label">Required ({summary.quotaPercent}%)</div><div className="stat-value stat-blue">{summary.requiredFreeBeds}</div></div>
+        <div className="stat-card"><div className="stat-label">Allocated</div><div className="stat-value">{summary.allocatedFreeBeds}</div></div>
+        <div className="stat-card"><div className="stat-label">Available</div><div className="stat-value stat-green">{summary.availableFreeBeds}</div></div>
+        <div className="stat-card"><div className="stat-label">Occupied</div><div className="stat-value stat-red">{summary.occupiedFreeBeds}</div></div>
+        <div className="stat-card"><div className="stat-label">Utilization</div><div className="stat-value">{summary.utilizationPercent}%</div></div>
+      </div>
+      {summary.capacityDrift && (
+        <div className="alert" style={{ marginTop: 10, background: 'rgba(217,119,6,0.10)', color: '#b45309' }}>
+          ⚠ Bed capacity mismatch: the free_bed_quota rule is based on {summary.capacityDrift.ruleBedBase} beds but the hospital has {summary.capacityDrift.actualOperationalBeds} operational beds. Update the rule so the requirement tracks reality.
+        </div>
+      )}
+      {summary.byWard?.length > 0 && (
+        <div className="table-wrap" style={{ marginTop: 12 }}>
+          <table className="table">
+            <thead>
+              <tr><th>Ward / Unit</th><th>Total Beds</th><th>Free Beds</th><th>Available</th><th>Occupied</th></tr>
+            </thead>
+            <tbody>
+              {summary.byWard.map((w: any) => (
+                <tr key={w.wardId ?? 'unassigned'}>
+                  <td>{w.wardName}</td>
+                  <td>{w.totalBeds}</td>
+                  <td style={{ fontWeight: 600 }}>{w.freeBeds}</td>
+                  <td>{w.availableFreeBeds}</td>
+                  <td>{w.occupiedFreeBeds}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Designation modal — pick a bed and set/unset its free-bed designation. */
+function DesignateFreeBedModal({
+  wards,
+  onClose,
+  onDone,
+}: {
+  wards: any[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [beds, setBeds] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [bedId, setBedId] = useState('');
+  const [category, setCategory] = useState('FREE');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    api('/bed-management/beds?limit=500')
+      .then((res: any) => {
+        const data = res?.data?.data ?? res?.data ?? [];
+        if (active) setBeds(Array.isArray(data) ? data : data.data ?? []);
+      })
+      .catch(() => {})
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const selected = beds.find((b: any) => b.id === bedId);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected) return;
+    const designate = !selected.freeBedEligible;
+    setSaving(true);
+    setError('');
+    try {
+      await api(`/bed-management/beds/${selected.id}/free-bed`, {
+        method: 'PATCH',
+        body: JSON.stringify({ freeBedEligible: designate, quotaCategory: designate ? category : null, reason: reason || undefined }),
+      });
+      onDone();
+    } catch (err: any) {
+      setError(err.message || 'Failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const wardName = (id: string | null) => wards.find((w: any) => w.id === id)?.name || 'No ward';
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 className="modal-title">Free Bed Designation</h3>
+          <button className="modal-close" onClick={onClose}>x</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="form-grid">
+            <div className="field field-full">
+              <label className="label">Bed *</label>
+              <select className="input" value={bedId} onChange={(e) => setBedId(e.target.value)} disabled={loading}>
+                <option value="">{loading ? 'Loading beds...' : '-- Select bed --'}</option>
+                {wards.map((w: any) => {
+                  const wb = beds.filter((b: any) => b.wardId === w.id);
+                  if (wb.length === 0) return null;
+                  return (
+                    <optgroup key={w.id} label={w.name}>
+                      {wb.map((b: any) => (
+                        <option key={b.id} value={b.id}>
+                          {b.bedNumber} — {b.freeBedEligible ? 'FREE (currently designated)' : 'Paid'} — {b.status}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
+              </select>
+            </div>
+            {selected && !selected.freeBedEligible && (
+              <div className="field">
+                <label className="label">Quota Category</label>
+                <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
+                  {['FREE', 'POOR', 'HELPLESS', 'UNCLAIMED'].map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            )}
+            <div className="field field-full">
+              <label className="label">Reason</label>
+              <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why this designation is changing (recorded in audit history)" />
+            </div>
+            {selected && (
+              <div className="field field-full note">
+                This will {selected.freeBedEligible ? 'REMOVE the free-bed designation from' : 'DESIGNATE'} bed {selected.bedNumber} ({wardName(selected.wardId)}). Every change is recorded in the free-bed audit history.
+              </div>
+            )}
+          </div>
+          {error && <div className="alert alert-error">{error}</div>}
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn" disabled={saving || !selected}>
+              {saving ? 'Saving...' : selected?.freeBedEligible ? 'Remove Designation' : 'Designate as Free Bed'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function BedManagementPage() {
   const [role, setRole] = useState('');
   const [tab, setTab] = useState('dashboard');
@@ -761,6 +950,12 @@ export default function BedManagementPage() {
   const [showCreateWard, setShowCreateWard] = useState(false);
   const [showMaintenance, setShowMaintenance] = useState(false);
   const [showBedDetail, setShowBedDetail] = useState<string | null>(null);
+
+  // Hospital-wide free-bed compliance (§65.2): required vs allocated across ALL wards.
+  const [freeSummary, setFreeSummary] = useState<any>(null);
+  const [loadingFree, setLoadingFree] = useState(true);
+  const [freeError, setFreeError] = useState('');
+  const [showDesignate, setShowDesignate] = useState<any>(null);
 
   useEffect(() => {
     setRole(localStorage.getItem('role') || '');
@@ -823,6 +1018,17 @@ export default function BedManagementPage() {
       .finally(() => setLoadingMaintenance(false));
   }, []);
 
+  const loadFreeSummary = useCallback(() => {
+    setLoadingFree(true);
+    api('/bed-management/free-beds/summary')
+      .then((res: any) => {
+        setFreeSummary(res?.data?.data ?? res?.data ?? res);
+        setFreeError('');
+      })
+      .catch(() => setFreeSummary(null))
+      .finally(() => setLoadingFree(false));
+  }, []);
+
   const loadCleaning = useCallback(() => {
     setLoadingCleaning(true);
     api('/bed-management/beds?status=CLEANING&limit=200')
@@ -834,7 +1040,7 @@ export default function BedManagementPage() {
       .finally(() => setLoadingCleaning(false));
   }, []);
 
-  useEffect(() => { loadDashboard(); }, [loadDashboard]);
+  useEffect(() => { loadDashboard(); loadFreeSummary(); }, [loadDashboard, loadFreeSummary]);
   useEffect(() => { loadWards(); loadRooms(); }, [loadWards, loadRooms]);
   useEffect(() => { if (tab === 'beds') loadBeds(); }, [tab, loadBeds]);
   useEffect(() => { if (tab === 'maintenance') loadMaintenance(); }, [tab, loadMaintenance]);
@@ -842,6 +1048,7 @@ export default function BedManagementPage() {
 
   function refreshAll() {
     loadDashboard();
+    loadFreeSummary();
     loadBeds();
     loadWards();
     loadRooms();
@@ -939,6 +1146,12 @@ export default function BedManagementPage() {
                     </div>
                   </div>
                 )}
+
+                <FreeBedCard
+                  summary={freeSummary}
+                  loading={loadingFree}
+                  onDesignate={() => setShowDesignate('pick')}
+                />
 
                 {wardStats.length > 0 && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16, marginBottom: 20 }}>
@@ -1039,7 +1252,10 @@ export default function BedManagementPage() {
                       <tr><td colSpan={8}><div className="empty">No beds found matching filters.</div></td></tr>
                     ) : beds.map((bed: any) => (
                       <tr key={bed.id}>
-                        <td style={{ fontWeight: 600 }}>{bed.bedNumber}</td>
+                        <td style={{ fontWeight: 600 }}>
+                          {bed.bedNumber}{' '}
+                          {bed.freeBedEligible && <span style={FREE_BADGE}>FREE</span>}
+                        </td>
                         <td>{BED_TYPES.find((t) => t.value === bed.bedType)?.label || bed.bedType}</td>
                         <td>{bed.ward?.name || '—'}</td>
                         <td>{bed.room?.name || '—'}</td>
@@ -1309,6 +1525,7 @@ export default function BedManagementPage() {
       {showCreateWard && <CreateWardModal onClose={() => setShowCreateWard(false)} onDone={() => { setShowCreateWard(false); refreshAll(); }} />}
       {showMaintenance && <CreateMaintenanceModal onClose={() => setShowMaintenance(false)} onDone={() => { setShowMaintenance(false); refreshAll(); }} wards={wards} beds={beds} />}
       {showBedDetail && <BedDetailModal bedId={showBedDetail} onClose={() => setShowBedDetail(null)} />}
+      {showDesignate && <DesignateFreeBedModal wards={wards} onClose={() => setShowDesignate(null)} onDone={() => { setShowDesignate(null); refreshAll(); }} />}
     </>
   );
 }

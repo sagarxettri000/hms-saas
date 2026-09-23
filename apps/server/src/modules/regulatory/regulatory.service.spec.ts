@@ -7,7 +7,7 @@ import { ConflictException, ForbiddenException, NotFoundException } from "@nestj
 import { RegulatoryService, RULE_KEYS } from "./regulatory.service";
 import { RegulatoryRuleService } from "./regulatory-rule.service";
 
-function makePrisma(over: any = {}) {
+function makePrisma(over: any = {}): any {
   return {
     regulatoryRule: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -84,7 +84,9 @@ function makePrisma(over: any = {}) {
     govSyncRecord: { create: jest.fn().mockResolvedValue({ id: "gsr-1" }), findFirst: jest.fn().mockResolvedValue(null), update: jest.fn(), findMany: jest.fn().mockResolvedValue([]), ...over.govSyncRecord },
     regulatoryEvent: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]), ...over.regulatoryEvent },
     regulatoryException: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0), ...over.regulatoryException },
-    $transaction: jest.fn((ops) => Promise.all(ops)),
+    $transaction: jest.fn((ops: any) =>
+      typeof ops === "function" ? ops(makePrisma(over)) : Promise.all(ops),
+    ),
     ...over.root,
   };
 }

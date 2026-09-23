@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -153,21 +154,73 @@ export class RegulatoryService {
       );
     }
 
-    const alloc = await this.prisma.freeBedAllocation.create({
-      data: {
-        tenantId,
-        patientId: data.patientId,
-        encounterId: data.encounterId,
-        admissionId: data.admissionId,
-        bedId: data.bedId,
-        eligibilityBasis: data.eligibilityBasis,
-        verificationDocRef: data.verificationDocRef,
-        verificationAuthority: data.verificationAuthority,
-        status: "OCCUPIED",
-        ruleId: rule.ruleId,
-        ruleVersion: rule.version,
-        createdBy: data.createdBy,
-      },
+    const alloc = await this.prisma.$transaction(async (tx) => {
+      // Physical bed claim (Rule 2/5): when a specific designated bed is
+      // chosen, occupy it atomically — the free-stay ledger and the physical
+      // bed inventory must agree, or they are reconciled here.
+      if (data.bedId) {
+        const bed = await tx.bed.findFirst({ where: { id: data.bedId, tenantId } });
+        if (!bed) throw new NotFoundException("Bed not found");
+        if (!bed.freeBedEligible)
+          throw new BadRequestException("Bed is not designated as a free bed");
+
+        const claimed = await tx.bed.updateMany({
+          where: { id: data.bedId, tenantId, status: { in: ["AVAILABLE", "CLEANING"] } },
+          data: { status: "OCCUPIED" },
+        });
+        if (claimed.count === 0)
+          throw new ConflictException("Free bed is not available (status: " + bed.status + ")");
+
+        if (data.admissionId) {
+          // Reconcile any physical allocation already sitting on this bed
+          // (e.g. assigned before the stay): release it and re-point it here.
+          const existingAlloc = await tx.bedAllocation.findFirst({
+            where: { bedId: data.bedId, status: "OCCUPIED", tenantId },
+          });
+          if (existingAlloc) {
+            await tx.bedAllocation.update({
+              where: { id: existingAlloc.id },
+              data: { status: "AVAILABLE", releasedAt: new Date() },
+            });
+            await tx.bedAllocation.create({
+              data: {
+                tenantId,
+                bedId: data.bedId,
+                admissionId: data.admissionId,
+                status: "OCCUPIED",
+                createdBy: data.createdBy,
+              },
+            });
+          } else {
+            await tx.bedAllocation.create({
+              data: {
+                tenantId,
+                bedId: data.bedId,
+                admissionId: data.admissionId,
+                status: "OCCUPIED",
+                createdBy: data.createdBy,
+              },
+            });
+          }
+        }
+      }
+
+      return tx.freeBedAllocation.create({
+        data: {
+          tenantId,
+          patientId: data.patientId,
+          encounterId: data.encounterId,
+          admissionId: data.admissionId,
+          bedId: data.bedId,
+          eligibilityBasis: data.eligibilityBasis,
+          verificationDocRef: data.verificationDocRef,
+          verificationAuthority: data.verificationAuthority,
+          status: "OCCUPIED",
+          ruleId: rule.ruleId,
+          ruleVersion: rule.version,
+          createdBy: data.createdBy,
+        },
+      });
     });
     await this.rules.logEvent(tenantId, "FREE_BED_ASSIGNED", "FreeBedAllocation", alloc.id, {
       ruleVersion: rule.version,
@@ -182,9 +235,29 @@ export class RegulatoryService {
     });
     if (!alloc) throw new NotFoundException("Free-bed allocation not found");
     if (alloc.status === "RELEASED") return alloc;
-    const updated = await this.prisma.freeBedAllocation.update({
-      where: { id: allocationId },
-      data: { status: "RELEASED", dischargedAt: new Date() },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      // Physical release (Rule 10 — no double-count): if the stay holds a bed,
+      // release the bed allocation and send the bed to CLEANING (housekeeping
+      // convention), then free it for the next eligible patient.
+      if (alloc.bedId) {
+        const activeBedAlloc = await tx.bedAllocation.findFirst({
+          where: { bedId: alloc.bedId, status: "OCCUPIED", tenantId },
+        });
+        if (activeBedAlloc) {
+          await tx.bedAllocation.update({
+            where: { id: activeBedAlloc.id },
+            data: { status: "AVAILABLE", releasedAt: new Date() },
+          });
+        }
+        await tx.bed.updateMany({
+          where: { id: alloc.bedId, tenantId, status: "OCCUPIED" },
+          data: { status: "CLEANING" },
+        });
+      }
+      return tx.freeBedAllocation.update({
+        where: { id: allocationId },
+        data: { status: "RELEASED", dischargedAt: new Date() },
+      });
     });
     await this.rules.logEvent(tenantId, "FREE_BED_RELEASED", "FreeBedAllocation", allocationId, {}, alloc.patientId, userId);
     await this.queueGovSync(tenantId, "FreeBedAllocationRelease", allocationId, userId);

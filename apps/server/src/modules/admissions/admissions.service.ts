@@ -1,12 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { RegulatoryService } from "../regulatory/regulatory.service";
 
 const MAX_LIMIT = 100;
 
@@ -20,6 +22,8 @@ export interface CreateAdmissionDto {
   provisionalDiagnosis?: string;
   bedId?: string;
   notes?: string;
+  /** Admission is free-treatment eligible — required to claim a designated free bed. */
+  isFreeTreatment?: boolean;
 }
 
 export interface UpdateAdmissionDto extends Partial<CreateAdmissionDto> {
@@ -58,6 +62,7 @@ export class AdmissionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly regulatory?: RegulatoryService,
   ) {}
 
   async create(tenantId: string, dto: CreateAdmissionDto, userId?: string) {
@@ -76,6 +81,12 @@ export class AdmissionsService {
       if (!bed) throw new NotFoundException("Bed not found");
       if (bed.status === "OCCUPIED")
         throw new ConflictException("Bed is already occupied");
+      // Rule 3: designated free beds are reserved for eligible
+      // free-treatment admissions — a paid admission cannot take one.
+      if (bed.freeBedEligible && !dto.isFreeTreatment)
+        throw new ForbiddenException(
+          "This bed is designated for free-treatment patients (use a non-designated bed or mark the admission free-treatment eligible)",
+        );
     }
 
     const admissionNumber = await this.generateAdmissionNumber(tenantId);
@@ -146,6 +157,21 @@ export class AdmissionsService {
           },
         });
       });
+
+      // Free-treatment admission onto a designated bed: open the regulatory
+      // free-bed stay so the ledger and the physical inventory agree (§65.2,
+      // Rule 2). Best-effort — an exhausted quota logs the exception upstream.
+      if (dto.isFreeTreatment && bed.freeBedEligible && this.regulatory) {
+        await this.regulatory
+          .assignFreeBed(tenantId, {
+            patientId: dto.patientId,
+            admissionId: admission.id,
+            bedId: bed.id,
+            eligibilityBasis: "FREE",
+            createdBy: userId,
+          })
+          .catch(() => undefined);
+      }
 
       // §64.5/§64.6: admission + bed assignment activates the IPD clinical
       // context — the patient becomes visible in this ward's worklists now.

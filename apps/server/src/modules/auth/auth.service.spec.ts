@@ -130,8 +130,17 @@ describe("AuthService", () => {
         "1.2.3.4",
       );
 
-      const jwtCall = (jwt.sign as jest.Mock).mock.calls[0];
-      expect(jwtCall[2]).toMatchObject({ expiresIn: "30m" });
+      // signAccessToken signs RS256 directly with jwt.sign when
+      // JWT_ACCESS_PRIVATE_KEY is configured, and falls back to the injected
+      // JwtService otherwise (CI/test envs). Assert whichever path executed.
+      const rs256Call = (jwt.sign as jest.Mock).mock.calls[0];
+      if (rs256Call) {
+        expect(rs256Call[2]).toMatchObject({ expiresIn: "30m" });
+      } else {
+        const fallback = jwtService.sign.mock.calls[0];
+        expect(fallback).toBeTruthy();
+        expect(fallback[1]).toMatchObject({ expiresIn: "30m" });
+      }
     });
 
     it("rejects invalid credentials", async () => {

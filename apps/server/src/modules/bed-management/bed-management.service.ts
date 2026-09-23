@@ -1,10 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
+import type { BedStatus } from "@prisma/client";
+import { RegulatoryRuleService } from "../regulatory/regulatory-rule.service";
+import { RULE_KEYS } from "../regulatory/regulatory.service";
 
 export interface CreateWardDto {
   name: string;
@@ -38,6 +42,10 @@ export interface CreateBedDto {
   bedNumber: string;
   bedType?: string;
   ratePerDay?: number;
+  /** Hospital-wide free-bed designation (§65.2): counts toward the quota. */
+  freeBedEligible?: boolean;
+  /** e.g. "POOR", "HELPLESS", "UNCLAIMED" — mirrors regulatory eligibility categories. */
+  quotaCategory?: string;
 }
 
 export interface UpdateBedDto extends Partial<CreateBedDto> {
@@ -48,12 +56,16 @@ export interface UpdateBedDto extends Partial<CreateBedDto> {
 export interface AllocateBedDto {
   bedId: string;
   admissionId: string;
+  /** Admission is free-treatment eligible — required to claim a designated free bed. */
+  isFreeTreatment?: boolean;
 }
 
 export interface TransferBedDto {
   toBedId: string;
   admissionId: string;
   reason?: string;
+  /** Transfer of a free-treatment-eligible admission into a designated bed. */
+  isFreeTreatment?: boolean;
 }
 
 export interface CreateMaintenanceDto {
@@ -84,7 +96,10 @@ export interface BedSearchParams {
 
 @Injectable()
 export class BedManagementService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rules: RegulatoryRuleService,
+  ) {}
 
   async getDashboard(tenantId: string) {
     const beds = await this.prisma.bed.findMany({
@@ -614,6 +629,230 @@ export class BedManagementService {
     });
   }
 
+  // ------------------------------------------------------------------
+  // Hospital-wide free-bed designation (§65.2, §65.9) — the 10% quota is a
+  // HOSPITAL-level obligation; designated beds keep their normal identity
+  // and location in any ward. Required count comes from the versioned
+  // free_bed_quota rule; this is physical-inventory truth.
+  // ------------------------------------------------------------------
+
+  /** Bed statuses that count toward the operational hospital bed total (§6). */
+  private static readonly OPERATIONAL_BED_STATUS: BedStatus[] = [
+    "AVAILABLE",
+    "OCCUPIED",
+    "CLEANING",
+    "RESERVED",
+  ];
+
+  private static quotaFromConfig(config: {
+    bedBase: number;
+    quotaPercent: number;
+    roundingMode: "FLOOR" | "CEIL" | "ROUND";
+  }) {
+    const raw = (config.bedBase * config.quotaPercent) / 100;
+    const required =
+      config.roundingMode === "CEIL"
+        ? Math.ceil(raw)
+        : config.roundingMode === "ROUND"
+          ? Math.round(raw)
+          : Math.floor(raw);
+    return required;
+  }
+
+  /**
+   * Hospital-wide free-bed compliance summary (spec §7/§13).
+   * required ← free_bed_quota rule (config-driven, versioned)
+   * allocated ← physical beds with freeBedEligible in the operational inventory
+   * available/occupied/blocked ← live operational status of those beds
+   */
+  async getFreeBedSummary(tenantId: string) {
+    const quota = await this.rules
+      .resolve<{
+        bedBase: number;
+        quotaPercent: number;
+        roundingMode: "FLOOR" | "CEIL" | "ROUND";
+        warningThresholdPercent?: number;
+      }>(tenantId, RULE_KEYS.FREE_BED)
+      .catch(() => null);
+
+    const operationalWhere = {
+      tenantId,
+      isActive: true,
+      status: { in: BedManagementService.OPERATIONAL_BED_STATUS },
+    };
+
+    const [totalOperationalBeds, designatedBeds, byWardRaw] = await Promise.all([
+      this.prisma.bed.count({ where: operationalWhere }),
+      this.prisma.bed.findMany({
+        where: { ...operationalWhere, freeBedEligible: true },
+        select: {
+          id: true,
+          bedNumber: true,
+          status: true,
+          wardId: true,
+          ward: { select: { id: true, name: true } },
+          quotaCategory: true,
+        },
+      }),
+      this.prisma.bed.groupBy({
+        by: ["wardId"],
+        where: operationalWhere,
+        _count: { _all: true },
+      }),
+    ]);
+
+    const required = quota ? BedManagementService.quotaFromConfig(quota.config) : 0;
+
+    const freeState = (status: string) =>
+      status === "OCCUPIED"
+        ? "OCCUPIED"
+        : status === "AVAILABLE" || status === "CLEANING"
+          ? "AVAILABLE"
+          : "BLOCKED";
+    const available = designatedBeds.filter((b) => freeState(b.status) === "AVAILABLE").length;
+    const occupied = designatedBeds.filter((b) => freeState(b.status) === "OCCUPIED").length;
+    const blocked = designatedBeds.length - available - occupied;
+
+    // Per-ward rollup: totals + designated split (§8/§13 department summary).
+    const wardIds = byWardRaw.map((w) => w.wardId).filter((id): id is string => !!id);
+    const wards = wardIds.length
+      ? await this.prisma.ward.findMany({ where: { id: { in: wardIds } }, select: { id: true, name: true } })
+      : [];
+    const wardNameById = new Map(wards.map((w) => [w.id, w.name]));
+    const byWard = byWardRaw
+      .map((w) => {
+        const designated = designatedBeds.filter((b) => b.wardId === w.wardId);
+        return {
+          wardId: w.wardId,
+          wardName: w.wardId ? (wardNameById.get(w.wardId) ?? "Unknown") : "Unassigned",
+          totalBeds: w._count._all,
+          freeBeds: designated.length,
+          availableFreeBeds: designated.filter((b) => freeState(b.status) === "AVAILABLE").length,
+          occupiedFreeBeds: designated.filter((b) => freeState(b.status) === "OCCUPIED").length,
+        };
+      })
+      .sort((a, b) => b.freeBeds - a.freeBeds || b.totalBeds - a.totalBeds);
+
+    const allocated = designatedBeds.length;
+    const complianceStatus =
+      allocated > required ? "OVER_ALLOCATED" : allocated === required ? "COMPLIANT" : "UNDER_ALLOCATED";
+
+    return {
+      bedBase: quota?.config.bedBase ?? totalOperationalBeds,
+      totalOperationalBeds,
+      quotaPercent: quota?.config.quotaPercent ?? 10,
+      roundingMode: quota?.config.roundingMode ?? "FLOOR",
+      ruleVersion: quota?.version ?? null,
+      requiredFreeBeds: required,
+      allocatedFreeBeds: allocated,
+      remainingToAllocate: Math.max(0, required - allocated),
+      availableFreeBeds: available,
+      occupiedFreeBeds: occupied,
+      blockedFreeBeds: blocked,
+      utilizationPercent: allocated > 0 ? Math.round((occupied / allocated) * 100) : 0,
+      complianceStatus,
+      warningThresholdPercent: quota?.config.warningThresholdPercent ?? 80,
+      // Capacity drift: the rule's bedBase should track the real inventory.
+      capacityDrift:
+        quota && quota.config.bedBase !== totalOperationalBeds
+          ? { ruleBedBase: quota.config.bedBase, actualOperationalBeds: totalOperationalBeds }
+          : null,
+      byWard,
+    };
+  }
+
+  /** Available designated beds across ALL wards (spec §15) — never ER-only. */
+  async getAvailableFreeBeds(tenantId: string) {
+    const beds = await this.prisma.bed.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+        freeBedEligible: true,
+        status: { in: ["AVAILABLE", "CLEANING"] },
+      },
+      select: {
+        id: true,
+        bedNumber: true,
+        bedType: true,
+        status: true,
+        quotaCategory: true,
+        ward: { select: { id: true, name: true } },
+        room: { select: { id: true, name: true } },
+      },
+      orderBy: [{ ward: { name: "asc" } }, { bedNumber: "asc" }],
+    });
+    return { data: beds, total: beds.length };
+  }
+
+  /**
+   * Designate / un-designate a bed for the free-bed quota (spec §9/§26).
+   * Every change is audited via RegulatoryEvent — no silent rewrites (§17).
+   */
+  async setFreeBedDesignation(
+    tenantId: string,
+    bedId: string,
+    dto: { freeBedEligible: boolean; quotaCategory?: string | null; reason?: string },
+    userId?: string,
+  ) {
+    const bed = await this.prisma.bed.findFirst({ where: { id: bedId, tenantId, isActive: true } });
+    if (!bed) throw new NotFoundException("Bed not found");
+
+    const activeStay = await this.prisma.freeBedAllocation.findFirst({
+      where: { tenantId, bedId, status: "OCCUPIED" },
+    });
+
+    if (!dto.freeBedEligible) {
+      if (activeStay)
+        throw new ConflictException(
+          "Bed has an active free-treatment patient — release the stay first",
+        );
+    } else {
+      if (bed.freeBedEligible)
+        throw new ConflictException("Bed is already designated as a free bed");
+      // Designated beds are reserved for eligible patients (Rule 3/§65.4):
+      // cannot designate a bed currently holding a paid admission.
+      if (bed.status === "OCCUPIED" && !activeStay)
+        throw new ConflictException(
+          "Bed is currently occupied by a paid admission — deallocate first",
+        );
+      // Never silently exceed the regulatory requirement (§8).
+      const summary = await this.getFreeBedSummary(tenantId);
+      if (summary.allocatedFreeBeds >= summary.requiredFreeBeds)
+        throw new ForbiddenException(
+          `Free-bed allocation would exceed the required quota (${summary.allocatedFreeBeds}/${summary.requiredFreeBeds}). Update the free_bed_quota rule first.`,
+        );
+    }
+
+    const updated = await this.prisma.bed.update({
+      where: { id: bedId },
+      data: {
+        freeBedEligible: dto.freeBedEligible,
+        quotaCategory: dto.freeBedEligible
+          ? (dto.quotaCategory ?? bed.quotaCategory ?? "FREE")
+          : null,
+      },
+      include: {
+        ward: { select: { id: true, name: true } },
+        room: { select: { id: true, name: true } },
+      },
+    });
+
+    await this.rules.logEvent(
+      tenantId,
+      dto.freeBedEligible ? "FREE_BED_DESIGNATED" : "FREE_BED_UNDESIGNATED",
+      "Bed",
+      bedId,
+      {
+        previous: { freeBedEligible: bed.freeBedEligible, quotaCategory: bed.quotaCategory },
+        new: { freeBedEligible: dto.freeBedEligible, quotaCategory: updated.quotaCategory },
+        reason: dto.reason ?? null,
+      },
+      activeStay?.patientId,
+      userId,
+    );
+    return updated;
+  }
+
   async deleteBed(tenantId: string, id: string) {
     const existing = await this.prisma.bed.findFirst({
       where: { id, tenantId, isActive: true },
@@ -621,6 +860,19 @@ export class BedManagementService {
     if (!existing) throw new NotFoundException("Bed not found");
     if (existing.status === "OCCUPIED")
       throw new ConflictException("Cannot delete an occupied bed");
+    // Rule 6: deleting a designated bed must not silently break compliance —
+    // flag it in the audit trail so the shortfall is visible.
+    if (existing.freeBedEligible) {
+      await this.rules.logEvent(
+        tenantId,
+        "FREE_BED_UNDESIGNATED",
+        "Bed",
+        id,
+        { previous: { freeBedEligible: true, quotaCategory: existing.quotaCategory }, reason: "bed deleted/deactivated" },
+        undefined,
+        undefined,
+      );
+    }
     return this.prisma.bed.update({
       where: { id },
       data: { isActive: false },
@@ -635,6 +887,12 @@ export class BedManagementService {
     if (bed.status !== "AVAILABLE")
       throw new ConflictException(
         `Bed is not available (current status: ${bed.status})`,
+      );
+    // Rule 3: designated free beds are reserved for eligible free-treatment
+    // admissions — a paid admission can never silently take one.
+    if (bed.freeBedEligible && !dto.isFreeTreatment)
+      throw new ForbiddenException(
+        "This bed is designated for free-treatment patients (use a non-designated bed or mark the admission free-treatment eligible)",
       );
 
     const admission = await this.prisma.admission.findFirst({
@@ -721,6 +979,15 @@ export class BedManagementService {
       );
     if (currentAllocation.bedId === dto.toBedId)
       throw new ConflictException("Patient is already in this bed");
+    // Rule 3 applies to transfers too: a designated bed cannot receive a paid
+    // admission unless the moving admission is itself free-treatment eligible.
+    const activeFreeStay = await this.prisma.freeBedAllocation.findFirst({
+      where: { tenantId, admissionId: dto.admissionId, status: "OCCUPIED" },
+    });
+    if (newBed.freeBedEligible && !activeFreeStay && !dto.isFreeTreatment)
+      throw new ForbiddenException(
+        "Target bed is designated for free-treatment patients — transfer a free-stay patient or mark the admission free-treatment eligible",
+      );
 
     return this.prisma.$transaction(async (tx) => {
       await tx.bedAllocation.update({
@@ -791,6 +1058,15 @@ export class BedManagementService {
             });
           }
         }
+      }
+
+      // Free-stay sync (Rule 5/§12): the patient's free-bed record follows the
+      // physical bed atomically — designation and free status are preserved.
+      if (activeFreeStay && activeFreeStay.bedId !== dto.toBedId) {
+        await tx.freeBedAllocation.update({
+          where: { id: activeFreeStay.id },
+          data: { bedId: dto.toBedId },
+        });
       }
 
       return newAlloc;

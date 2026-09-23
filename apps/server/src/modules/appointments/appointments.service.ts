@@ -9,6 +9,10 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 
 const MAX_LIMIT = 100;
+// Default slot window used by the availability engine when a doctor has no
+// configured schedule for the requested weekday (§8/§9).
+const DEFAULT_AVAILABILITY_WINDOW = { start: "09:00", end: "17:00" };
+const DEFAULT_SLOT_MINUTES = 15;
 
 export interface CreateAppointmentDto {
   patientId?: string;
@@ -107,6 +111,34 @@ export class AppointmentsService {
       );
     }
 
+    // Patient double-booking protection (§34): the same patient must not hold
+    // a live appointment that overlaps this window with ANY doctor (not just
+    // this one). Mirrors the doctor-overlap semantics above.
+    const patientConflict = await this.prisma.appointment.findFirst({
+      where: {
+        tenantId,
+        patientId,
+        appointmentDate: date,
+        id: { not: patientId !== "__none__" ? undefined : undefined },
+        status: {
+          in: ["CONFIRMED", "CHECKED_IN", "WAITING", "IN_CONSULTATION"],
+        },
+        OR: [
+          { startTime: { lt: endTime }, endTime: { gt: dto.startTime } },
+          {
+            startTime: { lte: dto.startTime },
+            endTime: { gte: dto.startTime },
+          },
+        ],
+      },
+    });
+
+    if (patientConflict) {
+      throw new ConflictException(
+        "Patient already has an appointment at this time",
+      );
+    }
+
     const tokenNumber = await this.generateToken(tenantId, dto.doctorId, date);
 
     const appointment = await this.prisma.appointment.create({
@@ -187,6 +219,92 @@ export class AppointmentsService {
       .catch(() => {});
 
     return appointment;
+  }
+
+  /**
+   * Slot availability engine (§8/§9/§62). Returns open booking windows for a
+   * provider (or all providers in a department) on a date (or date range)
+   * AFTER subtracting: active doctor-conflict/pending states and patient
+   * appointment conflicts — i.e. the slots the booking engine will actually
+   * accept. This is the "source of truth" the UI consumes; booking must not
+   * trust the browser.
+   */
+  async getAvailability(
+    tenantId: string,
+    params: { doctorId?: string; departmentId?: string; date?: string; from?: string; to?: string },
+  ) {
+    const { doctorId, departmentId, date, from, to } = params;
+    const day = date ? this.normalizeDate(date) : undefined;
+    const fromDate = from ? this.normalizeDate(from) : undefined;
+    const toDate = to ? this.normalizeDate(to) : undefined;
+
+    const slotWindow = await this.prisma.availabilitySlot.findMany({
+      where: {
+        tenantId,
+        ...(doctorId ? { doctorId } : {}),
+        ...(departmentId ? { departmentId } : {}),
+        ...(day ? { date: { gte: day, lt: this.addDays(day, 1) } } : {}),
+        ...(fromDate || toDate
+          ? {
+              date: {
+                ...(fromDate ? { gte: fromDate } : {}),
+                ...(toDate ? { lte: toDate } : {}),
+              },
+            }
+          : {}),
+        isBooked: false,
+        isBlocked: false,
+      },
+      include: {
+        schedule: {
+          select: {
+            doctorId: true,
+            doctor: {
+              include: {
+                user: { select: { firstName: true, lastName: true } },
+              },
+            },
+            slotDuration: true,
+          },
+        },
+      },
+      orderBy: [{ date: "asc" }, { startTime: "asc" }],
+    });
+
+    const freeSlots = slotWindow.filter((slot) => !slot.isBlocked);
+
+    return {
+      slots: freeSlots.map((slot) => ({
+        id: slot.id,
+        doctorId: slot.schedule?.doctorId,
+        doctorName: slot.schedule?.doctor
+          ? `${slot.schedule.doctor.user?.firstName || ""} ${slot.schedule.doctor.user?.lastName || ""}`.trim()
+          : undefined,
+        date: slot.date,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        slotDuration: slot.schedule?.slotDuration || 15,
+      })),
+      count: freeSlots.length,
+    };
+  }
+
+  /** Provider appointment list (§56). Thin filter over findAll. */
+  async findByProvider(
+    tenantId: string,
+    doctorId: string,
+    params: AppointmentSearchParams,
+  ) {
+    return this.findAll(tenantId, { ...params, doctorId });
+  }
+
+  /** Patient appointment list (§56). Thin filter over findAll. */
+  async findByPatient(
+    tenantId: string,
+    patientId: string,
+    params: AppointmentSearchParams,
+  ) {
+    return this.findAll(tenantId, { ...params, patientId });
   }
 
   async findAll(tenantId: string, params: AppointmentSearchParams) {
@@ -512,14 +630,71 @@ export class AppointmentsService {
         "Doctor already has an appointment at this time",
       );
 
-    return this.prisma.appointment.update({
-      where: { id },
-      data: {
-        appointmentDate: this.normalizeDate(newDate),
-        startTime: newStartTime,
-        endTime: newEndTime,
-        status: "RESCHEDULED",
-      },
+    return this.prisma.$transaction(async (tx) => {
+      // Re-check conflict inside the serializable transaction so two
+      // concurrent reschedules for the same doctor/slot cannot both pass
+      // the overlap check (double-booking protection, §9/§62).
+      const conflict = await tx.appointment.findFirst({
+        where: {
+          tenantId,
+          doctorId: appointment.doctorId,
+          appointmentDate: this.normalizeDate(newDate),
+          id: { not: id },
+          status: {
+            in: ["CONFIRMED", "CHECKED_IN", "WAITING", "IN_CONSULTATION"],
+          },
+          OR: [
+            { startTime: { lt: newEndTime }, endTime: { gt: newStartTime } },
+            {
+              startTime: { lte: newStartTime },
+              endTime: { gte: newStartTime },
+            },
+          ],
+        },
+      });
+
+      if (conflict)
+        throw new ConflictException(
+          "Doctor already has an appointment at this time",
+        );
+
+      // Patient double-booking protection: same patient overlapping at any
+      // doctor on the new date (§34).
+      const patientConflict = await tx.appointment.findFirst({
+        where: {
+          tenantId,
+          patientId: appointment.patientId,
+          appointmentDate: this.normalizeDate(newDate),
+          id: { not: id },
+          status: {
+            in: ["CONFIRMED", "CHECKED_IN", "WAITING", "IN_CONSULTATION"],
+          },
+          OR: [
+            { startTime: { lt: newEndTime }, endTime: { gt: newStartTime } },
+            {
+              startTime: { lte: newStartTime },
+              endTime: { gte: newStartTime },
+            },
+          ],
+        },
+      });
+
+      if (patientConflict)
+        throw new ConflictException(
+          "Patient already has an appointment at this time",
+        );
+
+      return tx.appointment.update({
+        where: { id },
+        data: {
+          appointmentDate: this.normalizeDate(newDate),
+          startTime: newStartTime,
+          endTime: newEndTime,
+          status: "RESCHEDULED",
+        },
+      });
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
     });
   }
 
@@ -606,6 +781,12 @@ export class AppointmentsService {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
     if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
     return new Date(input);
+  }
+
+  private addDays(input: Date, days: number): Date {
+    const d = new Date(input);
+    d.setDate(d.getDate() + days);
+    return d;
   }
 
   private async resolvePatientId(

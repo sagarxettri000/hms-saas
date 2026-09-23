@@ -69,6 +69,50 @@ export class AppointmentsController {
     );
   }
 
+  @Get("availability")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({
+    summary: "Open slot availability for providers (slot engine §8/§9/§56)",
+  })
+  availability(
+    @Query("doctorId") doctorId: string,
+    @Query("departmentId") departmentId: string,
+    @Query("date") date: string,
+    @Query("from") from: string,
+    @Query("to") to: string,
+    @Req() req: any,
+  ) {
+    return this.appointmentsService.getAvailability(req.user.tenantId, {
+      ...(doctorId ? { doctorId } : {}),
+      ...(departmentId ? { departmentId } : {}),
+      ...(date ? { date } : {}),
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+    });
+  }
+
+  @Get("provider/:id")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Provider appointment list (§56)" })
+  findByProvider(
+    @Param("id") id: string,
+    @Query() query: any,
+    @Req() req: any,
+  ) {
+    return this.appointmentsService.findByProvider(req.user.tenantId, id, query);
+  }
+
+  @Get("patient/:id")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({ summary: "Patient appointment list (§34/§56)" })
+  findByPatient(
+    @Param("id") id: string,
+    @Query() query: any,
+    @Req() req: any,
+  ) {
+    return this.appointmentsService.findByPatient(req.user.tenantId, id, query);
+  }
+
   @Patch(":id/check-in")
   @Permissions(PermissionAction.EDIT)
   @ApiOperation({ summary: "Check in a patient for appointment" })

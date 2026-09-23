@@ -118,6 +118,33 @@ export class AdmissionsController {
     );
   }
 
+  @Get(":id/readiness")
+  @Permissions(PermissionAction.VIEW)
+  @ApiOperation({
+    summary:
+      "§9/§13 readiness panel — live §5/§30 invariant checklist for this admission",
+  })
+  readiness(@Param("id") id: string, @Req() req: any) {
+    return this.admissionsService.validateAdmissionReady(
+      req.user.tenantId,
+      id,
+    );
+  }
+
+  @Post(":id/activate")
+  @Permissions(PermissionAction.EDIT)
+  @ApiOperation({
+    summary:
+      "§14/§15/§16 activate — PENDING→ADMITTED, atomically re-validated (§5/§11/§13)",
+  })
+  activate(@Param("id") id: string, @Req() req: any) {
+    return this.admissionsService.activateAdmission(
+      req.user.tenantId,
+      id,
+      req.user.id,
+    );
+  }
+
   @Post(":id/discharge")
   @Permissions(PermissionAction.EDIT)
   @ApiOperation({ summary: "Discharge a patient" })

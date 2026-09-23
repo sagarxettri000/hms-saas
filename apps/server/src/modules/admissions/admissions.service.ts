@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -561,6 +562,153 @@ export class AdmissionsService {
       });
       return allocation;
     });
+  }
+
+  /**
+   * §5/§9/§10/§13 readiness engine. Returns a live, structured snapshot of
+   * whether this admission satisfies the §30/§2 invariant right now — i.e.
+   * whether it may legally be an ACTIVE IPD (§3/§4). The readiness panel §9
+   * and the Activate button §13 consume this; but per §11/§14 the panel is
+   * NEVER the enforcement point. `activateAdmission` re-runs this EXACT gate
+   * atomically, inside a Serializable transaction, at the moment of
+   * activation — so a concurrent bed claim or consultant switch that
+   * invalidates this snapshot between the panel render and the confirm click
+   * is caught by the backend and the admission fails CLOSED (§5/§15/§16).
+   */
+  async validateAdmissionReady(tenantId: string, id: string) {
+    const checks = await this.computeReadiness(this.prisma, tenantId, id);
+    return {
+      admissionId: id,
+      isReady: checks.every((c) => c.ok),
+      checks,
+      missing: checks.filter((c) => !c.ok).map((c) => c.code),
+    };
+  }
+
+  /**
+   * §13/§14/§15/§16 activation gate. PENDING → ADMITTED happens ONLY here, in
+   * a Serializable interactive transaction, and only if the §30/§5 invariant
+   * is RE-VALIDATED atomically inside the same transaction (§15/§16). The UI's
+   * disabled button is never trusted (§11/§13/§14). If not ready, the whole
+   * activation is rejected all-or-nothing with ADMISSION_NOT_READY + the
+   * exact missing list (§5/§11/§23) — nothing is partially applied (§15).
+   */
+  async activateAdmission(tenantId: string, id: string, userId?: string) {
+    return this.prisma.$transaction(
+      async (tx) => {
+        const checks = await this.computeReadiness(
+          tx as any,
+          tenantId,
+          id,
+        );
+        if (!checks.every((c) => c.ok)) {
+          throw new UnprocessableEntityException({
+            code: "ADMISSION_NOT_READY",
+            message:
+              "Admission cannot be activated: mandatory IPD assignments are missing (§5/§30).",
+            missing: checks.filter((c) => !c.ok).map((c) => c.code),
+            checks,
+          });
+        }
+
+        const activated = await tx.admission.updateMany({
+          where: { id, tenantId, status: "PENDING" },
+          data: { status: "ADMITTED", updatedBy: userId },
+        });
+        if (activated.count === 0) {
+          throw new ConflictException(
+            "Admission is not in an activatable state (PENDING).",
+          );
+        }
+
+        await tx.auditLog.create({
+          data: {
+            tenantId,
+            userId,
+            entity: "Admission",
+            entityId: id,
+            action: "UPDATE" as any,
+            metadata: {
+              domain: "ADMISSION_ACTIVATED",
+              title: "Admission activated (§13/§14)",
+            },
+          },
+        });
+
+        return tx.admission.findFirst({
+          where: { id, tenantId },
+          include: {
+            patient: true,
+            bedAllocations: { include: { bed: true } },
+          },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  private async computeReadiness(client: any, tenantId: string, id: string) {
+    const admission = await client.admission.findFirst({
+      where: { id, tenantId },
+      include: {
+        patient: {
+          select: { id: true, firstName: true, lastName: true, mrn: true },
+        },
+        admittingDoctor: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+          },
+        },
+        bedAllocations: {
+          where: { status: "OCCUPIED" },
+          include: { bed: true },
+          orderBy: { allocatedAt: "desc" },
+          take: 1,
+        },
+      },
+    });
+    if (!admission) throw new NotFoundException("Admission not found");
+
+    const allocation = admission.bedAllocations?.[0];
+    const bed = allocation?.bed;
+
+    const bedOk = Boolean(
+      bed &&
+        bed.isActive === true &&
+        bed.isBlocked === false &&
+        ["AVAILABLE", "OCCUPIED"].includes(bed.status),
+    );
+
+    return [
+      {
+        code: "PATIENT",
+        label: "Patient",
+        ok: Boolean(admission.patient),
+        detail: admission.patient
+          ? `${admission.patient.firstName} ${admission.patient.lastName}`.trim()
+          : undefined,
+      },
+      {
+        code: "BED_ASSIGNMENT",
+        label: "Bed assignment (§6/§30)",
+        ok: Boolean(allocation),
+        detail: bed?.bedNumber,
+      },
+      {
+        code: "BED_VALID",
+        label: "Valid bed (§6/§30)",
+        ok: bedOk,
+        detail: bed ? `${bed.bedNumber} · ${bed.status}` : undefined,
+      },
+      {
+        code: "PRIMARY_CONSULTANT",
+        label: "Primary consultant (§18/§30)",
+        ok: Boolean(admission.admittingDoctor),
+        detail: admission.admittingDoctor?.user
+          ? `${admission.admittingDoctor.user.firstName} ${admission.admittingDoctor.user.lastName}`.trim()
+          : undefined,
+      },
+    ];
   }
 
   async transferBed(

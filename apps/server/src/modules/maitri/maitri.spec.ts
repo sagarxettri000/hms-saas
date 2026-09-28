@@ -1,0 +1,207 @@
+import {
+  isOutOfScope,
+  composeResultReply,
+  friendlyToolError,
+} from "./maitri-orchestrator.service";
+import { RuleBasedProvider } from "./ai-provider";
+import {
+  maitriCanUseTool,
+  maitriRoleHasAction,
+  isMaitriAdminRole,
+} from "@hms/shared";
+
+// ---------------------------------------------------------------------------
+// Out-of-scope gate (spec 3): HMS-only assistant
+// ---------------------------------------------------------------------------
+
+describe("out-of-scope refusal", () => {
+  it.each([
+    "What's the weather tomorrow?",
+    "Tell me a joke",
+    "Write my homework essay",
+    "Who won the game last night?",
+    "Book me a flight to Kathmandu",
+    "What is the capital of France?",
+  ])("refuses: %s", (msg) => {
+    expect(isOutOfScope(msg)).toBe(true);
+  });
+
+  it.each([
+    "Find patient Sita Rai",
+    "How many beds are available?",
+    "Show low stock medicines",
+    "Open pharmacy",
+    "Book Sita tomorrow at 10",
+  ])("allows HMS request: %s", (msg) => {
+    expect(isOutOfScope(msg)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Permission matrix (spec 37): backend-enforced, never model-decided
+// ---------------------------------------------------------------------------
+
+describe("maitri permission matrix", () => {
+  it("gives a receptionist patient read but not staff create", () => {
+    expect(maitriCanUseTool("RECEPTIONIST", [{ module: "patients", action: "VIEW" }])).toBe(true);
+    expect(maitriCanUseTool("RECEPTIONIST", [{ module: "staff", action: "CREATE" }])).toBe(false);
+  });
+
+  it("gives a pharmacist pharmacy access but not billing write", () => {
+    expect(maitriCanUseTool("PHARMACIST", [{ module: "pharmacy", action: "VIEW" }])).toBe(true);
+    expect(maitriCanUseTool("PHARMACIST", [{ module: "billing", action: "CREATE" }])).toBe(false);
+  });
+
+  it("gives a doctor lab view but not pharmacy access", () => {
+    expect(maitriCanUseTool("DOCTOR", [{ module: "laboratory", action: "VIEW" }])).toBe(true);
+    expect(maitriCanUseTool("DOCTOR", [{ module: "pharmacy", action: "VIEW" }])).toBe(false);
+  });
+
+  it("denies HR-only modules to clinical roles", () => {
+    expect(maitriCanUseTool("NURSE", [{ module: "staff", action: "VIEW" }])).toBe(false);
+    expect(maitriCanUseTool("HR_MANAGER", [{ module: "staff", action: "VIEW" }])).toBe(true);
+    expect(maitriCanUseTool("HR_MANAGER", [{ module: "staff", action: "CREATE" }])).toBe(true);
+  });
+
+  it("denies unknown roles everything", () => {
+    expect(maitriCanUseTool("UNKNOWN_ROLE", [{ module: "patients", action: "VIEW" }])).toBe(false);
+    expect(maitriRoleHasAction("UNKNOWN_ROLE", "VIEW")).toBe(false);
+  });
+
+  it("allows admin bypass roles", () => {
+    expect(isMaitriAdminRole("PLATFORM_SUPER_ADMIN")).toBe(true);
+    expect(isMaitriAdminRole("HOSPITAL_ADMIN")).toBe(true);
+    expect(isMaitriAdminRole("NURSE")).toBe(false);
+    expect(maitriCanUseTool("PLATFORM_SUPER_ADMIN", [{ module: "staff", action: "CREATE" }])).toBe(true);
+  });
+
+  it("requires ALL listed permission pairs to pass", () => {
+    expect(
+      maitriCanUseTool("RECEPTIONIST", [
+        { module: "patients", action: "VIEW" },
+        { module: "patients", action: "CREATE" },
+      ]),
+    ).toBe(true);
+    expect(
+      maitriCanUseTool("RECEPTIONIST", [
+        { module: "patients", action: "VIEW" },
+        { module: "pharmacy", action: "VIEW" },
+      ]),
+    ).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rule-based fallback provider: only allowlisted tools, honest refusals
+// ---------------------------------------------------------------------------
+
+describe("rule-based fallback provider", () => {
+  const fullTools = [
+    { name: "navigate_to_module", description: "", inputSchema: {} },
+    { name: "search_patient", description: "", inputSchema: {} },
+    { name: "get_bed_availability", description: "", inputSchema: {} },
+    { name: "get_low_stock_medicines", description: "", inputSchema: {} },
+    { name: "get_todays_appointments", description: "", inputSchema: {} },
+  ] as any;
+
+  function providerWith(tools: any[]) {
+    const p = new RuleBasedProvider();
+    return p.generate({
+      systemPrompt: "test",
+      messages: [{ role: "user", content: msg() }],
+      tools,
+    });
+  }
+
+  let msg: () => string = () => "";
+
+  it("maps 'open pharmacy' to the navigation tool only", async () => {
+    msg = () => "open pharmacy";
+    const res = await providerWith(fullTools);
+    expect(res.toolCalls).toHaveLength(1);
+    expect(res.toolCalls![0].name).toBe("navigate_to_module");
+    expect(res.toolCalls![0].arguments.target).toBe("pharmacy_medicines");
+  });
+
+  it("maps a patient lookup to search_patient with an extracted query", async () => {
+    msg = () => "find patient Sita Rai";
+    const res = await providerWith(fullTools);
+    expect(res.toolCalls![0].name).toBe("search_patient");
+    const q = String(res.toolCalls![0].arguments.query);
+    expect(q.toLowerCase()).toContain("sita");
+  });
+
+  it("maps bed availability questions to the bed tool", async () => {
+    msg = () => "how many beds are available?";
+    const res = await providerWith(fullTools);
+    expect(res.toolCalls![0].name).toBe("get_bed_availability");
+  });
+
+  it("never invents a tool outside the provided allowlist", async () => {
+    msg = () => "open pharmacy";
+    const res = await providerWith([{ name: "search_patient", description: "", inputSchema: {} } as any]);
+    // navigation tool not offered → no tool call, no fabricated answer
+    expect(res.toolCalls ?? []).toHaveLength(0);
+  });
+
+  it("declines open-ended chat honestly instead of hallucinating", async () => {
+    msg = () => "explain quantum computing to me";
+    const res = await providerWith(fullTools);
+    expect(res.content).toContain("Maitri HMS");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Honest reply composition (spec 45/49): reflect real data, never fake success
+// ---------------------------------------------------------------------------
+
+describe("composeResultReply", () => {
+  it("reports no matches honestly", () => {
+    const reply = composeResultReply("search_patient", []);
+    expect(reply).toMatch(/couldn't find/i);
+  });
+
+  it("reports found patients from real data", () => {
+    const reply = composeResultReply("search_patient", [
+      { id: "p1", name: "Sita Rai", mrn: "MRN-1024" },
+    ]);
+    expect(reply).toContain("Sita Rai");
+    expect(reply).toContain("MRN-1024");
+  });
+
+  it("reports bed numbers from real data", () => {
+    const reply = composeResultReply("get_bed_availability", {
+      totalBeds: 40,
+      availableBeds: 14,
+    });
+    expect(reply).toContain("14");
+    expect(reply).toContain("40");
+  });
+
+  it("never claims success for empty data", () => {
+    const reply = composeResultReply("get_todays_appointments", { count: 0 });
+    expect(reply).toMatch(/no appointments/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Error mapping (spec 24): no raw stack traces to users
+// ---------------------------------------------------------------------------
+
+describe("friendlyToolError", () => {
+  it("translates conflicts into slot suggestions", () => {
+    const reply = friendlyToolError("create_appointment", "Slot conflict: overlap with existing appointment");
+    expect(reply).toMatch(/no longer available/i);
+  });
+
+  it("translates authorization errors without leaking policy", () => {
+    const reply = friendlyToolError("x", "ForbiddenException: Insufficient permissions");
+    expect(reply).toMatch(/don't have permission/i);
+  });
+
+  it("hides raw error details for generic failures", () => {
+    const reply = friendlyToolError("x", "ECONNREFUSED 10.0.0.1:5432 at /app/src/db.ts:42");
+    expect(reply).not.toContain("ECONNREFUSED");
+    expect(reply).not.toContain("/app/src");
+  });
+});

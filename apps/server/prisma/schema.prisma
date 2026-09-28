@@ -753,6 +753,7 @@ model Tenant {
 
   @@index([status])
   @@index([createdAt])
+  aiSessions               AiSession[]
   @@map("tenants")
 }
 
@@ -1136,6 +1137,7 @@ model User {
   @@index([tenantId])
   @@index([role])
   @@index([status])
+  aiSessions          AiSession[]
   @@map("users")
   @@index([departmentId])
 }
@@ -5749,4 +5751,58 @@ model BloodUnitReturn {
 
   @@index([tenantId, unitId])
   @@map("blood_unit_returns")
+}
+// ============================================================
+// MAITRI ASSISTANT (AI copilot) — sessions, messages, tool calls
+// ============================================================
+
+model AiSession {
+  id              String    @id @default(cuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentRoute    String?
+  contextModule   String?
+  contextEntity   String?
+  contextEntityId String?
+  context         Json?
+  lastActivityAt  DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  messages        AiMessage[]
+  toolCalls       AiToolCall[]
+
+  @@index([userId, lastActivityAt])
+  @@index([tenantId, createdAt])
+  @@map("ai_sessions")
+}
+
+model AiMessage {
+  id        String    @id @default(cuid())
+  sessionId String
+  session   AiSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      String // "user" | "assistant"
+  content   String
+  createdAt DateTime  @default(now())
+
+  @@index([sessionId, createdAt])
+  @@map("ai_messages")
+}
+
+model AiToolCall {
+  id              String    @id @default(cuid())
+  sessionId       String
+  session         AiSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId          String
+  toolName        String
+  inputSummary    Json?
+  status          String // success | error | denied
+  executionTimeMs Int?
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([userId, createdAt])
+  @@index([toolName, status])
+  @@map("ai_tool_calls")
 }

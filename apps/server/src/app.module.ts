@@ -60,6 +60,7 @@ import { PreauthorizationsModule } from "./modules/preauthorizations/preauthoriz
 import { ControlledSubstancesModule } from "./modules/controlled-substances/controlled-substances.module";
 import { StockTransfersModule } from "./modules/stock-transfers/stock-transfers.module";
 import { QualityChecklistsModule } from "./modules/quality-checklists/quality-checklists.module";
+import { MaitriModule } from "./modules/maitri/maitri.module";
 import { NursingHandoversModule } from "./modules/nursing-handovers/nursing-handovers.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "./common/guards/permissions.guard";
@@ -141,6 +142,7 @@ import { AppController } from "./app.controller";
     ControlledSubstancesModule,
     StockTransfersModule,
     QualityChecklistsModule,
+    MaitriModule,
     NursingHandoversModule,
   ],
   providers: [

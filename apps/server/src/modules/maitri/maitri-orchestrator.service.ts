@@ -57,6 +57,15 @@ export class MaitriOrchestratorService implements OnModuleInit {
   private provider: AIProvider;
   private tools: MaitriTool[];
   private pendingConfirmations = new Map<string, PendingConfirmation>();
+  /**
+   * Session-scoped slot memory for failure recovery (spec I/50): when a
+   * booking conflicts, the previously listed slots are offered again and a
+   * bare time like “10:30” continues the same action.
+   */
+  private sessionSlots = new Map<
+    string,
+    { date: string; doctorId?: string; doctorName?: string; times: string[] }
+  >();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -96,6 +105,7 @@ export class MaitriOrchestratorService implements OnModuleInit {
       for (const [id, pending] of this.pendingConfirmations) {
         if (pending.expiresAt < now) this.pendingConfirmations.delete(id);
       }
+      if (this.sessionSlots.size > 500) this.sessionSlots.clear();
     }, 60_000).unref?.();
   }
 
@@ -191,6 +201,18 @@ export class MaitriOrchestratorService implements OnModuleInit {
       return;
     }
 
+    // ---- cross-turn continuation (spec 15/29/I) ----------------------------
+    // A bare “10:30” right after offered slots resumes the same booking
+    // instead of forcing the user to repeat patient/doctor/date.
+    const rememberedSlots = this.sessionSlots.get(session.id);
+    let effectiveMessage = userMessage;
+    if (rememberedSlots && /^\s*([01]?\d|2[0-3]):[0-5]\d\s*$/.test(userMessage)) {
+      effectiveMessage = `__slot_pick__ ${rememberedSlots.date} ${userMessage.trim()}${rememberedSlots.doctorId ? ` ${rememberedSlots.doctorId}` : ""}`;
+      yield { type: "thinking", message: "Continuing with the selected time" };
+    } else if (rememberedSlots && userMessage.trim().length > 0) {
+      this.sessionSlots.delete(session.id);
+    }
+
     // ---- minimal model request ----------------------------------------------
     yield { type: "thinking", message: "Thinking" };
     const tools = this.tools.map(toToolSpec);
@@ -203,21 +225,69 @@ export class MaitriOrchestratorService implements OnModuleInit {
       { role: "user" as const, content: userMessage },
     ];
 
+    // ---- pending-form continuation (spec 15/29): “Employee ID 2048.” -------
+    let formTarget: string | null = null;
+    if (effectiveMessage === userMessage) {
+      const pending = await this.loadPendingForm(session.id);
+      if (pending && looksLikeFieldValue(userMessage)) {
+        formTarget = pending;
+      }
+    }
+
     let toolCalls: { name: string; arguments: Record<string, unknown> }[] = [];
     let modelText = "";
     let providerFailed = false;
-    try {
-      const response = await this.provider.generate({
-        systemPrompt,
-        messages: convo,
-        tools,
-        maxTokens: 500,
-      });
-      toolCalls = response.toolCalls ?? [];
-      modelText = response.content ?? "";
-    } catch (err: any) {
-      providerFailed = true;
-      this.logger.error(`Provider error: ${err?.message}`);
+    let clientFormUpdate: { target: string; fields: Record<string, unknown> } | null = null;
+    if (effectiveMessage.startsWith("__slot_pick__")) {
+      // Deterministic continuation: no model call needed to pick a slot.
+      const [, date, time, doctorId] = effectiveMessage.split(/\s+/);
+      toolCalls = [
+        {
+          name: "create_appointment",
+          arguments: {
+            appointmentDate: date,
+            startTime: time,
+            ...(doctorId ? { doctorId } : {}),
+          },
+        },
+      ];
+    } else if (formTarget) {
+      // Continue populating the existing form (spec 15/29): extract only the
+      // new field values from this message; the client merges them in.
+      try {
+        const response = await this.provider.generate({
+          systemPrompt:
+            'Extract the NEW field values the user supplied for a pending HMS form. Reply with ONLY a compact JSON object mapping field names to values. Known form target: ' +
+            formTarget +
+            '. If nothing extractable, reply {}.',
+          messages: [...convo],
+          maxTokens: 200,
+        });
+        const merged = extractJsonObject(response.content ?? "");
+        if (merged && Object.keys(merged).length > 0) {
+          clientFormUpdate = { target: formTarget, fields: merged };
+          modelText = `Added the information to the ${formTarget} form.`;
+        } else {
+          modelText = `I noted that. The ${formTarget} form is still open — tell me the remaining details or say “submit” when ready.`;
+        }
+      } catch (err: any) {
+        providerFailed = true;
+        this.logger.error(`Provider error: ${err?.message}`);
+      }
+    } else {
+      try {
+        const response = await this.provider.generate({
+          systemPrompt,
+          messages: convo,
+          tools,
+          maxTokens: 500,
+        });
+        toolCalls = response.toolCalls ?? [];
+        modelText = response.content ?? "";
+      } catch (err: any) {
+        providerFailed = true;
+        this.logger.error(`Provider error: ${err?.message}`);
+      }
     }
 
     // ---- tool execution loop -------------------------------------------------
@@ -282,6 +352,33 @@ export class MaitriOrchestratorService implements OnModuleInit {
       executed = { tool: tool.name, status: result.status, data: result.data };
 
       if (result.status === "error") {
+        // Failure recovery (spec I/50): a conflicting booking offers real
+        // alternative slots for the same date/doctor instead of dead-ending.
+        if (
+          tool.name === "create_appointment" &&
+          /conflict|already|overlap|unavailable|taken/i.test(result.error ?? "")
+        ) {
+          const altTool = this.tools.find((t) => t.name === "find_available_appointment_slots");
+          if (altTool) {
+            yield { type: "thinking", message: "That time is taken — finding alternatives" };
+            const alt = await this.executeTool(session.id, actor, altTool, {
+              date: String((call.arguments as any)?.appointmentDate ?? ""),
+              doctorId: (call.arguments as any)?.doctorId,
+            });
+            if (alt.status === "success" && Array.isArray(alt.data?.slots) && alt.data.slots.length) {
+              executed = { tool: altTool.name, status: "success", data: alt.data };
+              modelText =
+                `${String((call.arguments as any)?.startTime ?? "That time")} is unavailable.\n\nAvailable slots:\n` +
+                alt.data.slots
+                  .slice(0, 5)
+                  .map((s: any) => `• ${s.startTime}`)
+                  .join("\n") +
+                `\n\nWhich one should I use?`;
+              handled = true;
+              break;
+            }
+          }
+        }
         modelText = friendlyToolError(tool.name, result.error);
         handled = true;
         break;
@@ -308,6 +405,39 @@ export class MaitriOrchestratorService implements OnModuleInit {
       if (executed.tool === "navigate_to_module") {
         clientAction = buildClientAction(executed.data);
         if (!finalText) finalText = `Opened ${clientAction?.label ?? "the module"}.`;
+      }
+      // open_create_form hands the populated form to the HMS screen (spec 15).
+      if (executed.tool === "open_create_form") {
+        let fields: Record<string, unknown> = {};
+        try {
+          fields = JSON.parse(String((executed.data as any)?.fields ?? "{}"));
+        } catch {
+          fields = {};
+        }
+        clientAction = {
+          type: "client_action" as const,
+          action: "form_open" as any,
+          route: String((executed.data as any)?.target ?? ""),
+          params: { fields } as any,
+          label: "Form",
+        } as any;
+        finalText =
+          `Opened the ${(executed.data as any)?.target ?? ""} form` +
+          (Object.keys(fields).length
+            ? ` with ${Object.keys(fields).length} field(s) filled. Tell me the remaining details or say “submit”.`
+            : ".");
+        await this.savePendingForm(session.id, String((executed.data as any)?.target ?? ""));
+      }
+      // Remember listed slots so “10:30” continues the booking (spec I).
+      if (executed.tool === "find_available_appointment_slots" && Array.isArray(executed.data?.slots)) {
+        this.sessionSlots.set(session.id, {
+          date: String(executed.data.date ?? ""),
+          doctorId: executed.data.slots[0]?.doctorId,
+          times: executed.data.slots.map((s: any) => String(s.startTime)),
+        });
+      }
+      if (executed.tool === "create_appointment") {
+        this.sessionSlots.delete(session.id);
       }
       // Let the Gemma runtime humanize the reply from the real tool result,
       // with the deterministic composer as the always-correct fallback.
@@ -359,6 +489,15 @@ export class MaitriOrchestratorService implements OnModuleInit {
     // streaming goes; the deterministic path emits one final chunk.
     yield { type: "token", content: finalText };
     if (clientAction) yield clientAction;
+    if (clientFormUpdate) {
+      yield {
+        type: "client_action",
+        action: "form_update",
+        route: clientFormUpdate.target,
+        params: { fields: clientFormUpdate.fields },
+        label: "Form update",
+      };
+    }
     yield { type: "done", sessionId: session.id };
   }
 
@@ -509,6 +648,45 @@ export class MaitriOrchestratorService implements OnModuleInit {
     }
   }
 
+  /**
+   * Pending-form memory (spec 15/29): the route key of a form the assistant
+   * opened and the user is still filling across turns.
+   */
+  private async loadPendingForm(sessionId: string): Promise<string | null> {
+    const session = await this.prisma.aiSession.findUnique({
+      where: { id: sessionId },
+      select: { context: true },
+    });
+    const ctx: any = session?.context ?? {};
+    const opened = ctx.maitriPendingFormAt;
+    if (!opened || Date.now() - opened > 10 * 60 * 1000) return null;
+    return typeof ctx.maitriPendingForm === "string" ? ctx.maitriPendingForm : null;
+  }
+
+  private async savePendingForm(sessionId: string, target: string | null) {
+    try {
+      const session = await this.prisma.aiSession.findUnique({
+        where: { id: sessionId },
+        select: { context: true },
+      });
+      const ctx: any = session?.context ?? {};
+      const next = { ...ctx };
+      if (target) {
+        next.maitriPendingForm = target;
+        next.maitriPendingFormAt = Date.now();
+      } else {
+        delete next.maitriPendingForm;
+        delete next.maitriPendingFormAt;
+      }
+      await this.prisma.aiSession.update({
+        where: { id: sessionId },
+        data: { context: next as any },
+      });
+    } catch (err: any) {
+      this.logger.warn(`Maitri pending-form persistence failed: ${err?.message}`);
+    }
+  }
+
   private async recordMessages(
     sessionId: string,
     userMessage: string,
@@ -542,6 +720,40 @@ export function isOutOfScope(text: string): boolean {
     /\b(who (is|won)|what is the capital|prime minister|president of)\b/,
   ];
   return patterns.some((re) => re.test(t));
+}
+
+/**
+ * Detects a “field-value” message (spec 15/29): the user is supplying the
+ * remaining details for a form the assistant already opened — e.g.
+ * “Employee ID 2048.” or “Emergency department, phone 98…”. These short,
+ * data-like messages should continue the form instead of being re-interpreted.
+ */
+export function looksLikeFieldValue(text: string): boolean {
+  const t = text.trim();
+  if (!t || t.length > 160) return false;
+  // “field: value” / “field value” / “key = value” fragments
+  if (/^\s*[A-Za-z ][\w ]{0,30}\s*[:=]\s*.{1,80}$/.test(t)) return true;
+  if (/^\s*\d{2,}\s*$/.test(t)) {
+    return true;
+  }
+  // short line carrying typical form keywords
+  return /\b(id|phone|mobile|email|department|role|name|age|address|date|time)\b/i.test(t) &&
+    !/\b(find|search|show|open|book|create|how many|what|who)\b/i.test(t);
+}
+
+/** Extract the first JSON object embedded in free model text. */
+export function extractJsonObject(text: string): Record<string, unknown> | null {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  try {
+    const parsed = JSON.parse(text.slice(start, end + 1));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function buildSystemPrompt(actor: MaitriActor, context: MaitriClientContext): string {
@@ -738,6 +950,34 @@ export function composeResultReply(tool: string, data: any): string {
       const rows = Array.isArray(d) ? d : [];
       return rows.length ? `${rows.length} department(s) found.` : "No departments matched.";
     }
+    case "get_pending_bills": {
+      const pending = Array.isArray(d?.pending) ? d.pending : [];
+      const overdue = Array.isArray(d?.overdue) ? d.overdue : [];
+      if (!pending.length && !overdue.length) return "There are no pending or overdue bills right now.";
+      const parts: string[] = [];
+      if (pending.length) parts.push(`${pending.length} pending`);
+      if (overdue.length) parts.push(`${overdue.length} overdue`);
+      return `${parts.join(" and ")} bill(s) found.`;
+    }
+    case "search_doctor": {
+      const rows = Array.isArray(d) ? d : [];
+      if (!rows.length) return "I couldn't find a doctor matching that information.";
+      return rows.length === 1
+        ? `Found Dr. ${rows[0].name ?? ""}.`.replace(/\s+\./, ".")
+        : `Found ${rows.length} doctors, including Dr. ${rows[0].name ?? ""}.`;
+    }
+    case "reschedule_appointment": {
+      const when = d?.appointmentDate ? String(d.appointmentDate).slice(0, 10) : "";
+      return `Done. The appointment has been rescheduled${when ? ` to ${when}` : ""}${d?.startTime ? ` at ${d.startTime}` : ""}.`;
+    }
+    case "get_patient_visits": {
+      const rows = Array.isArray(d) ? d : [];
+      return rows.length ? `${rows.length} recent visit(s) on record.` : "No recent visits found for this patient.";
+    }
+    case "get_patient_reports": {
+      const rows = Array.isArray(d) ? d : [];
+      return rows.length ? `${rows.length} laboratory order(s)/report(s) found.` : "No laboratory reports found for this patient.";
+    }
     default:
       return "Done.";
   }
@@ -767,6 +1007,17 @@ function buildConfirmMessage(tool: MaitriTool, input: any): string {
 /** Map HMS service errors to honest, non-technical user copy (spec 24). */
 export function friendlyToolError(tool: string, message?: string): string {
   const m = (message ?? "").toLowerCase();
+  // Infrastructure/driver failures must never leak internals (contract D/§17).
+  if (
+    m.includes("invocation") ||
+    m.includes("can't reach") ||
+    m.includes("prisma") ||
+    m.includes("econnrefused") ||
+    m.includes("etimedout") ||
+    m.includes("connect ")
+  ) {
+    return "I couldn't complete that because the HMS service returned an error. Please try again.";
+  }
   if (m.includes("not found")) {
     return "I couldn't find that record in Maitri HMS.";
   }
@@ -776,14 +1027,20 @@ export function friendlyToolError(tool: string, message?: string): string {
   if (m.includes("unauthor") || m.includes("forbidden") || m.includes("permission")) {
     return "You don't have permission for that action.";
   }
+  // Validation-style failures: ask for the missing information instead of
+  // surfacing the raw message. Only match explicit validation phrasing —
+  // “Invalid” alone also appears in driver errors, which are handled above.
   if (
-    m.includes("valid") ||
     m.includes("required") ||
     m.includes("expected") ||
     m.includes("too small") ||
-    m.includes("too long")
+    m.includes("too long") ||
+    m.includes("string must") ||
+    m.includes("number must") ||
+    m.includes("invalid_type") ||
+    m.includes("invalid enum")
   ) {
-    return `I need a bit more information before I can continue${message ? `: ${message}` : "."}`;
+    return `I need a bit more information before I can continue${message ? `: ${message.slice(0, 120)}` : "."}`;
   }
   return "I couldn't complete that because the HMS service returned an error.";
 }

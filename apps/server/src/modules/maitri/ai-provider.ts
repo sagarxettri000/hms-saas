@@ -221,11 +221,13 @@ export class RuleBasedProvider implements AIProvider {
       [/\bsettings?\b/, "settings", "Settings"],
       [/\baudit\b/, "audit", "Audit logs"],
       [/\bnotifications?\b/, "notifications", "Notifications"],
-    ];
-
-    const wantsNav =
+    ];    const wantsNav =
       /\b(open|go to|take me|show me the|navigate|jump to)\b/.test(text) ||
-      (/\bshow\b/.test(text) && !/\bhow many|which|what|find|search\b/.test(text));
+      (/\bshow\b/.test(text) &&
+        !/\bhow many|which|what|find|search\b/.test(text) &&
+        // “show low stock / pending bills / available slots” are data queries,
+        // not navigation — the read-question rules below handle them.
+        !/\b(low|shortage|expir|stock|pending|bills?|invoices?|slots?|availab|visits?|reports?)\b/.test(text));
     if (wantsNav) {
       for (const [re, key, label] of navTargets) {
         if (re.test(text)) {
@@ -274,6 +276,36 @@ export class RuleBasedProvider implements AIProvider {
         if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
       }
     }
+    if (/\b(doctors?|physicians?|dr\.)\b/.test(text) && /\b(find|search|show|list)\b/.test(text) && !wantsNav) {
+      const query = extractQuery(lastUser, ["doctor", "doctors", "physician", "find", "search", "show", "list", "the"]);
+      const tool = tryMatch("search_doctor", query ? { query } : {});
+      if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
+    }
+    if (/\b(slots?|available|availability)\b/.test(text) && /\b(appointment|book|schedule|tomorrow|today)\b/.test(text) && !wantsNav) {
+      const date = /tomorrow/.test(text)
+        ? new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+      const tool = tryMatch("find_available_appointment_slots", { date });
+      if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
+    }
+    if (/\b(pending|unpaid|overdue)\b/.test(text) && /\b(bills?|invoices?)\b/.test(text)) {
+      const tool = tryMatch("get_pending_bills", {});
+      if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
+    }
+    if (/\b(visits?|visit history|timeline)\b/.test(text) && /\b(patient|her|his|their)\b/.test(text)) {
+      const patientId = (request as any).contextEntityId;
+      if (patientId) {
+        const tool = tryMatch("get_patient_visits", { patientId });
+        if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
+      }
+    }
+    if (/\b(reports?|lab reports?)\b/.test(text) && /\b(patient|her|his|their|latest)\b/.test(text) && !wantsNav) {
+      const patientId = (request as any).contextEntityId;
+      if (patientId) {
+        const tool = tryMatch("get_patient_reports", { patientId });
+        if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
+      }
+    }
     if (/\b(today'?s?)\b.*\bappointments?\b|\bappointments?\b.*\btoday\b/.test(text)) {
       const tool = tryMatch("get_todays_appointments", {});
       if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
@@ -285,9 +317,9 @@ export class RuleBasedProvider implements AIProvider {
 
     // --- explicit creation commands ---------------------------------------
     const emailMatch = lastUser.match(/[\w.+-]+@[\w-]+\.[\w.]+/);
-    const nameMatch = lastUser.match(
-      /\b(?:named|name|for)\s+([A-Z][a-z]+)(?:\s+([A-Z][a-z]+))?/,
-    );
+    const nameMatch =
+      lastUser.match(/\b(?:named|name|for)\s+([A-Z][a-z]+)(?:\s+([A-Z][a-z]+))?/i) ??
+      lastUser.match(/\b(?:add|create|register)\s+([A-Z][a-z]+)(?:\s+([A-Z][a-z]+))?/i);
     if (
       /\b(create|add|register)\b/.test(text) &&
       /\b(staff|user|account|employee)\b/.test(text) &&
@@ -313,6 +345,25 @@ export class RuleBasedProvider implements AIProvider {
       const tool = tryMatch("create_patient", {
         firstName: nameMatch[1],
         lastName: nameMatch[2] ?? nameMatch[1],
+      });
+      if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
+    }
+    // “Add Suman Thapa as a nurse” without an email → open the real HMS staff
+    // form prefilled (spec 15/29); the user supplies the rest or submits.
+    if (
+      /\b(add|create|new)\b/.test(text) &&
+      /\b(staff|nurse|doctor|account|user)\b/.test(text) &&
+      nameMatch &&
+      !emailMatch
+    ) {
+      const roleMatch = lastUser.match(/\b(?:as a|as an)?\s*(NURSE|DOCTOR|PHARMACIST|RECEPTIONIST|HR_MANAGER|LAB_TECHNICIAN)\b/i);
+      const tool = tryMatch("open_create_form", {
+        target: "staff",
+        fields: JSON.stringify({
+          firstName: nameMatch[1],
+          lastName: nameMatch[2] ?? "",
+          ...(roleMatch ? { role: roleMatch[1].toUpperCase() } : {}),
+        }),
       });
       if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
     }

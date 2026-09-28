@@ -94,6 +94,8 @@ export interface MaitriClientContext {
   currentModule?: string;
   currentEntity?: string;
   currentEntityId?: string;
+  /** Screen title so the assistant can reference what the user is viewing. */
+  screenTitle?: string;
   /** Selected record hints for natural references ("the first one", "these"). */
   selectedIds?: string[];
   /** Timezone identifier so the server resolves "today"/"tomorrow" correctly. */
@@ -130,6 +132,13 @@ export type MaitriStreamEvent =
       action: 'navigate' | 'form_open' | 'form_submit';
       route: string;
       params?: Record<string, unknown>;
+      label?: string;
+    }
+  | {
+      type: 'client_action';
+      action: 'form_update';
+      route: string;
+      params?: { fields: Record<string, unknown> };
       label?: string;
     }
   | { type: 'error'; message: string; code?: string }

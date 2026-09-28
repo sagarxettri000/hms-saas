@@ -4,18 +4,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { MaitriStreamEvent } from '@hms/shared';
 import { collectMaitriContext, streamMaitriChat } from '@/lib/maitri-client';
+import MaitriConversation from './MaitriConversation';
+import MaitriInput from './MaitriInput';
+import type { ConversationItem } from './types';
 
-interface ConversationItem {
-  id: string;
-  role: 'user' | 'assistant' | 'activity';
-  content: string;
-  state?: 'active' | 'done' | 'error';
-  navigateTo?: string;
-  navigateLabel?: string;
-  confirm?: {
-    toolCallId: string;
-    message: string;
+/** Map a registry module key to the HMS screen that owns its create form. */
+function moduleRoute(key: string): string {
+  const map: Record<string, string> = {
+    staff: '/hr',
+    patients: '/patients',
+    appointments: '/appointments',
+    departments: '/departments',
   };
+  return map[key] ?? `/${key}`;
 }
 
 /** Context-aware quick actions per HMS module (spec §6). */
@@ -42,6 +43,16 @@ const QUICK_ACTIONS_BY_MODULE: Record<string, { label: string; prompt: string }[
     { label: 'Bed status', prompt: 'How many beds are available?' },
     { label: "Today's appointments", prompt: "Show today's appointments" },
   ],
+};
+
+/** Entity-aware actions when the user is viewing a specific record (spec 6). */
+const ENTITY_ACTIONS: Record<string, { label: string; prompt: string }[]> = {
+  patient: [
+    { label: 'Summarize patient', prompt: 'Summarize this patient' },
+    { label: 'Recent visits', prompt: 'Show recent visits for this patient' },
+    { label: 'Recent reports', prompt: 'Show recent reports for this patient' },
+  ],
+  doctor: [{ label: 'Open slots', prompt: 'Find available slots for this doctor' }],
 };
 
 const DEFAULT_QUICK = [
@@ -78,10 +89,16 @@ export default function MaitriPanel({ onClose }: { onClose: () => void }) {
     [routeKey],
   );
 
-  const quickActions = useMemo(
-    () => QUICK_ACTIONS_BY_MODULE[moduleKey] ?? DEFAULT_QUICK,
-    [moduleKey],
-  );
+  const quickActions = useMemo(() => {
+    // On a record screen (e.g. /patients/123) offer record-specific actions.
+    const ctx = collectMaitriContext();
+    if (ctx.currentEntity && ctx.currentEntityId) {
+      const entityActions = ENTITY_ACTIONS[ctx.currentEntity];
+      if (entityActions) return entityActions;
+    }
+    return QUICK_ACTIONS_BY_MODULE[moduleKey] ?? DEFAULT_QUICK;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moduleKey]);
 
   // Keep the newest message visible while streaming.
   useEffect(() => {
@@ -180,6 +197,22 @@ export default function MaitriPanel({ onClose }: { onClose: () => void }) {
                   patchLast((last) =>
                     last.role === 'assistant'
                       ? { ...last, navigateTo: ev.route, navigateLabel: ev.label }
+                      : last,
+                  );
+                }
+                if (
+                  (ev.action === 'form_open' || ev.action === 'form_update') &&
+                  ev.route
+                ) {
+                  const fields = (ev.params as any)?.fields ?? {};
+                  patchLast((last) =>
+                    last.role === 'assistant'
+                      ? {
+                          ...last,
+                          navigateTo: moduleRoute(ev.route),
+                          navigateLabel: 'the form',
+                          formHandoff: { module: ev.route, fields },
+                        }
                       : last,
                   );
                 }
@@ -331,77 +364,26 @@ export default function MaitriPanel({ onClose }: { onClose: () => void }) {
         </header>
 
         <div className="maitri-conversation" ref={scrollRef}>
-          {items.length === 0 ? (
-            <div className="maitri-empty">
-              <div className="maitri-empty-title">✦ Maitri Assistant</div>
-              <div className="maitri-empty-sub">Your HMS, easier to use.</div>
-              <div className="maitri-empty-list">
-                <div>Ask me to:</div>
-                <div>• Find a patient</div>
-                <div>• Open an HMS module</div>
-                <div>• Check appointments or beds</div>
-                <div>• Perform authorized HMS actions</div>
-              </div>
-            </div>
-          ) : (
-            items.map((item) => {
-              if (item.role === 'activity') {
-                return (
-                  <div key={item.id} className={`maitri-activity ${item.state ?? ''}`}>
-                    <span className="maitri-activity-dot" aria-hidden="true" />
-                    <span>{item.content}</span>
-                    {item.state === 'active' && (
-                      <span className="maitri-dots" aria-hidden="true">
-                        <i /><i /><i />
-                      </span>
-                    )}
-                  </div>
+          <MaitriConversation
+            items={items}
+            onNavigate={(route) => {
+              onClose();
+              router.push(route);
+            }}
+            onFormHandoff={(route, moduleKey, fields) => {
+              try {
+                sessionStorage.setItem(
+                  'maitriFormPrefill',
+                  JSON.stringify({ module: moduleKey, fields }),
                 );
+              } catch {
+                /* storage unavailable — form still opens unpopulated */
               }
-              if (item.role === 'user') {
-                return (
-                  <div key={item.id} className="maitri-msg-user">
-                    {item.content}
-                  </div>
-                );
-              }
-              return (
-                <div
-                  key={item.id}
-                  className={`maitri-msg-ai ${item.state === 'error' ? 'error' : ''}`}
-                >
-                  <div className="maitri-msg-text">{item.content}</div>
-                  {item.navigateTo && (
-                    <button
-                      className="maitri-link-btn"
-                      onClick={() => {
-                        onClose();
-                        router.push(item.navigateTo!);
-                      }}
-                    >
-                      {item.navigateLabel ? `Open ${item.navigateLabel}` : 'Open'}
-                    </button>
-                  )}
-                  {item.confirm && (
-                    <div className="maitri-confirm-row">
-                      <button
-                        className="btn btn-sm maitri-btn-danger"
-                        onClick={() => runConfirm(item.confirm!.toolCallId, true)}
-                      >
-                        Confirm
-                      </button>
-                      <button
-                        className="btn btn-sm btn-secondary"
-                        onClick={() => runConfirm(item.confirm!.toolCallId, false)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
+              onClose();
+              router.push(route);
+            }}
+            onConfirm={runConfirm}
+          />
         </div>
 
         <div className="maitri-quick">
@@ -419,42 +401,16 @@ export default function MaitriPanel({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        <div className="maitri-inputbar">
-          <button
-            className={`maitri-mic ${listening ? 'listening' : ''}`}
-            onClick={toggleVoice}
-            aria-label={listening ? 'Stop listening' : 'Start voice input'}
-            title={listening ? 'Stop listening' : 'Voice input'}
-            type="button"
-          >
-            {listening ? '●' : '🎙'}
-          </button>
-          <textarea
-            ref={inputRef}
-            className="maitri-input"
-            placeholder={listening ? 'Listening…' : 'Ask Maitri anything in HMS…'}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            rows={1}
-            aria-label="Message Maitri Assistant"
-            disabled={busy}
-          />
-          {busy ? (
-            <button className="maitri-send stop" onClick={stop} aria-label="Stop generating">
-              ■
-            </button>
-          ) : (
-            <button
-              className="maitri-send"
-              onClick={() => void send(input)}
-              disabled={!input.trim()}
-              aria-label="Send message"
-            >
-              ➤
-            </button>
-          )}
-        </div>
+        <MaitriInput
+          input={input}
+          onInputChange={setInput}
+          onKeyDown={onKeyDown}
+          onSend={() => void send(input)}
+          onStop={stop}
+          onToggleVoice={toggleVoice}
+          listening={listening}
+          busy={busy}
+        />
       </aside>
     </>
   );

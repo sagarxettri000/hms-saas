@@ -71,6 +71,15 @@ export interface MaitriTool extends Omit<MaitriToolSpec, "inputSchema"> {
 const P = (module: string, action: string): MaitriRequiredPermission =>
   ({ module, action } as MaitriRequiredPermission);
 
+/**
+ * Free-text cap for strings the MODEL extracts from the user's message.
+ * The cap is a prompt-injection cost bound (spec 17): any document/record
+ * content echoed into a tool argument stays small, and handlers never
+ * interpret these strings as anything but data.
+ */
+const untrustedText = (description: string) =>
+  z.string().min(1).max(300).describe(description);
+
 const VIEW_TODAY = () => {
   const d = new Date();
   const iso = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
@@ -411,14 +420,38 @@ export function buildToolRegistry(deps: MaitriToolDeps): MaitriTool[] {
       activityLabel: "Cancelling appointment",
       inputSchema: z.object({
         appointmentId: z.string().min(1),
-        reason: z.string().min(3).max(300),
+        reason: untrustedText(
+          "Why the appointment is being cancelled",
+        ).optional(),
       }),
       handler: async (input, scope) => {
         return deps.appointments.cancel(
           scope.tenantId,
           input.appointmentId,
-          input.reason,
+          input.reason ?? "Cancelled via Maitri Assistant",
           scope.userId,
+        );
+      },
+    },
+    {
+      name: "reschedule_appointment",
+      description:
+        "Move an appointment to a new date/time using the HMS reschedule rules (conflict-checked). Not destructive.",
+      module: "appointments",
+      requiredPermissions: [P("appointments", "EDIT")],
+      auditLevel: "normal",
+      activityLabel: "Rescheduling appointment",
+      inputSchema: z.object({
+        appointmentId: z.string().min(1),
+        newDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        newStartTime: z.string().regex(/^\d{2}:\d{2}$/),
+      }),
+      handler: async (input, scope) => {
+        return deps.appointments.reschedule(
+          scope.tenantId,
+          input.appointmentId,
+          new Date(`${input.newDate}T00:00:00`),
+          input.newStartTime,
         );
       },
     },
@@ -686,6 +719,135 @@ export function buildToolRegistry(deps: MaitriToolDeps): MaitriTool[] {
     // =======================================================================
     // DEPARTMENTS (read-only lookup used by conversation flows)
     // =======================================================================
+    {
+      name: "search_doctor",
+      description:
+        "Search doctors by name or filter by department id. Use before booking to resolve a doctor.",
+      module: "doctors",
+      requiredPermissions: [P("doctors", "VIEW")],
+      auditLevel: "low",
+      activityLabel: "Searching doctors",
+      inputSchema: z.object({
+        query: z.string().max(120).optional(),
+        departmentId: z.string().optional(),
+        limit: z.number().int().min(1).max(10).optional().default(5),
+      }),
+      handler: async (input, scope) => {
+        const res = await deps.doctors.findAll(scope.tenantId, {
+          search: input.query,
+          departmentId: input.departmentId,
+          limit: input.limit ?? 5,
+        });
+        return compactList(res)
+          .slice(0, 10)
+          .map((d: any) => ({
+            id: d.id,
+            name: d.user
+              ? `${d.user.firstName ?? ""} ${d.user.lastName ?? ""}`.trim()
+              : (d.name ?? null),
+            specialty: d.specialty ?? null,
+            department: d.department?.name ?? null,
+          }));
+      },
+    },
+    {
+      name: "get_patient_visits",
+      description:
+        "A patient's recent visit history (encounters timeline) from the HMS EMR timeline.",
+      module: "patients",
+      requiredPermissions: [P("patients", "VIEW")],
+      auditLevel: "normal",
+      activityLabel: "Loading visit history",
+      inputSchema: z.object({ patientId: z.string().min(1) }),
+      handler: async (input, scope) => {
+        await deps.visibility.assertPatientRecordAccess(scope.user, input.patientId, {
+          reason: "Maitri assistant visit history",
+          module: "maitri/get_patient_visits",
+        });
+        const timeline = await deps.patients.getTimeline(scope.tenantId, input.patientId);
+        return compactList(timeline).slice(0, 15);
+      },
+    },
+    {
+      name: "get_patient_reports",
+      description:
+        "A patient's recent laboratory orders and report documents.",
+      module: "laboratory",
+      requiredPermissions: [P("patients", "VIEW"), P("laboratory", "VIEW")],
+      auditLevel: "normal",
+      activityLabel: "Loading patient reports",
+      inputSchema: z.object({ patientId: z.string().min(1) }),
+      handler: async (input, scope) => {
+        await deps.visibility.assertPatientRecordAccess(scope.user, input.patientId, {
+          reason: "Maitri assistant reports lookup",
+          module: "maitri/get_patient_reports",
+        });
+        const orders = await deps.laboratory.findOrders(scope.tenantId, {
+          patientId: input.patientId,
+          limit: 10,
+        });
+        return compactList(orders).map((o: any) => ({
+          id: o.id,
+          orderNumber: o.orderNumber,
+          status: o.status,
+          orderedAt: o.orderedAt,
+        }));
+      },
+    },
+    {
+      name: "get_pending_bills",
+      description:
+        "List invoices with a PENDING or OVERDUE status, newest first.",
+      module: "billing",
+      requiredPermissions: [P("billing", "VIEW")],
+      auditLevel: "normal",
+      activityLabel: "Loading pending bills",
+      inputSchema: z.object({
+        limit: z.number().int().min(1).max(10).optional().default(5),
+      }),
+      handler: async (input, scope) => {
+        const res = await deps.billing.findInvoices(scope.tenantId, {
+          status: "PENDING",
+          limit: input.limit ?? 5,
+        });
+        const overdue = await deps.billing.findInvoices(scope.tenantId, {
+          status: "OVERDUE",
+          limit: input.limit ?? 5,
+        });
+        const row = (i: any) => ({
+          id: i.id,
+          invoiceNumber: i.invoiceNumber,
+          patient: i.patient
+            ? [i.patient.firstName, i.patient.lastName].filter(Boolean).join(" ")
+            : null,
+          total: i.total ?? i.grandTotal ?? null,
+          status: i.status,
+        });
+        return {
+          pending: compactList(res).slice(0, 10).map(row),
+          overdue: compactList(overdue).slice(0, 10).map(row),
+        };
+      },
+    },
+    {
+      name: "open_create_form",
+      description:
+        "Open a create-record form on an HMS screen with the given fields prefilled (e.g. staff/patient/appointment forms). The user sees the populated form and can review or submit. Nothing is written by this tool.",
+      module: "navigation",
+      requiredPermissions: [],
+      clientOnly: true,
+      auditLevel: "normal",
+      activityLabel: "Opening form",
+      inputSchema: z.object({
+        target: z
+          .string()
+          .describe("Module route key, e.g. staff, patients, appointments"),
+        fields: untrustedText("Prefill values as JSON object").describe(
+          'JSON object of field values, e.g. {"firstName":"Suman","lastName":"Thapa","role":"NURSE"}',
+        ),
+      }),
+      handler: async (input) => input,
+    },
     {
       name: "search_department",
       description:

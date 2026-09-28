@@ -1196,7 +1196,7 @@ export default function EntityPage(props: EntityPageProps) {
     headerActions,
     detailHref,
     initialTab,
-    initialCreateValues,
+    initialCreateValues: initialCreateValuesProp,
     autoOpenCreate,
     params,
   } = props;
@@ -1206,6 +1206,26 @@ export default function EntityPage(props: EntityPageProps) {
     if (autoOpenCreate && !showCreate && effectiveFields?.length) {
       const t = setTimeout(() => setShowCreate(true), 400);
       return () => clearTimeout(t);
+    }
+    // Maitri Assistant handoff (spec 15): when the assistant opens this
+    // screen with prefilled fields, auto-open the existing create modal with
+    // those values applied and clear the one-shot handoff. No new form
+    // component — the same CreateModal the HMS UI uses.
+    try {
+      const raw = sessionStorage.getItem('maitriFormPrefill');
+      if (raw) {
+        sessionStorage.removeItem('maitriFormPrefill');
+        const handoff = JSON.parse(raw);
+        if (handoff?.fields && effectiveFields?.length) {
+          setInitialCreateValues((prev: Record<string, any>) => ({
+            ...prev,
+            ...handoff.fields,
+          }));
+          setTimeout(() => setShowCreate(true), 400);
+        }
+      }
+    } catch {
+      /* ignore malformed handoff */
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1217,6 +1237,9 @@ export default function EntityPage(props: EntityPageProps) {
   }, []);
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [initialCreateValues, setInitialCreateValues] = useState<
+    Record<string, any> | undefined
+  >(initialCreateValuesProp);
   const [editingRow, setEditingRow] = useState<Row | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);

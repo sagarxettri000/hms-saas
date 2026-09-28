@@ -2,6 +2,8 @@ import {
   isOutOfScope,
   composeResultReply,
   friendlyToolError,
+  looksLikeFieldValue,
+  extractJsonObject,
 } from "./maitri-orchestrator.service";
 import { RuleBasedProvider } from "./ai-provider";
 import {
@@ -185,6 +187,105 @@ describe("composeResultReply", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Form continuation detection (spec 15/29): field-value messages continue an
+// open form instead of being re-interpreted as new commands
+// ---------------------------------------------------------------------------
+
+describe("looksLikeFieldValue", () => {
+  it.each([
+    "Employee ID 2048",
+    "department: Emergency",
+    "phone 9801234567",
+    "2048",
+  ])("treats as form detail: %s", (msg) => {
+    expect(looksLikeFieldValue(msg)).toBe(true);
+  });
+
+  it.each([
+    "find patient Sita",
+    "how many beds are available?",
+    "open pharmacy",
+  ])("does not treat commands as form details: %s", (msg) => {
+    expect(looksLikeFieldValue(msg)).toBe(false);
+  });
+});
+
+describe("extractJsonObject", () => {
+  it("extracts the first JSON object from surrounding text", () => {
+    expect(extractJsonObject('Sure: {"firstName":"Suman"} done')).toEqual({
+      firstName: "Suman",
+    });
+  });
+
+  it("returns null for non-JSON text", () => {
+    expect(extractJsonObject("no json here")).toBeNull();
+    expect(extractJsonObject("{broken")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fallback coverage for the new contract tools
+// ---------------------------------------------------------------------------
+
+describe("rule-based fallback: form opening and new reads", () => {
+  const fullTools = [
+    { name: "navigate_to_module", description: "", inputSchema: {} },
+    { name: "search_patient", description: "", inputSchema: {} },
+    { name: "search_doctor", description: "", inputSchema: {} },
+    { name: "find_available_appointment_slots", description: "", inputSchema: {} },
+    { name: "get_pending_bills", description: "", inputSchema: {} },
+    { name: "open_create_form", description: "", inputSchema: {} },
+    { name: "create_staff", description: "", inputSchema: {} },
+  ] as any;
+
+  let msg: () => string = () => "";
+  function providerWith(tools: any[]) {
+    const p = new RuleBasedProvider();
+    return p.generate({
+      systemPrompt: "test",
+      messages: [{ role: "user", content: msg() }],
+      tools,
+    });
+  }
+
+  it("opens the real staff form prefilled when email is unknown", async () => {
+    msg = () => "Add Suman Thapa as a nurse";
+    const res = await providerWith(fullTools);
+    expect(res.toolCalls![0].name).toBe("open_create_form");
+    expect(res.toolCalls![0].arguments.target).toBe("staff");
+    const fields = JSON.parse(String(res.toolCalls![0].arguments.fields));
+    expect(fields.firstName).toBe("Suman");
+    expect(fields.role).toBe("NURSE");
+  });
+
+  it("prefers direct creation when the email is provided", async () => {
+    msg = () => "Create staff Sita Karki email s.karki@nbmaitri.com role NURSE";
+    const res = await providerWith(fullTools);
+    expect(res.toolCalls![0].name).toBe("create_staff");
+  });
+
+  it("maps pending bill questions to the billing tool", async () => {
+    msg = () => "show pending bills";
+    const res = await providerWith(fullTools);
+    expect(res.toolCalls![0].name).toBe("get_pending_bills");
+  });
+
+  it("maps doctor lookups to search_doctor", async () => {
+    msg = () => "find doctor Sharma";
+    const res = await providerWith(fullTools);
+    expect(res.toolCalls![0].name).toBe("search_doctor");
+    expect(String(res.toolCalls![0].arguments.query)).toContain("Sharma");
+  });
+
+  it("maps slot requests to find_available_appointment_slots with a date", async () => {
+    msg = () => "find available slots tomorrow";
+    const res = await providerWith(fullTools);
+    expect(res.toolCalls![0].name).toBe("find_available_appointment_slots");
+    expect(res.toolCalls![0].arguments.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Error mapping (spec 24): no raw stack traces to users
 // ---------------------------------------------------------------------------
 
@@ -203,5 +304,15 @@ describe("friendlyToolError", () => {
     const reply = friendlyToolError("x", "ECONNREFUSED 10.0.0.1:5432 at /app/src/db.ts:42");
     expect(reply).not.toContain("ECONNREFUSED");
     expect(reply).not.toContain("/app/src");
+  });
+
+  it("never leaks Prisma invocation errors, even with the word 'Invalid'", () => {
+    const reply = friendlyToolError(
+      "get_low_stock_medicines",
+      "Invalid `prisma.inventoryItem.findMany()` invocation:\nCan't reach database server at `db.prisma.io:5432`",
+    );
+    expect(reply).not.toContain("prisma");
+    expect(reply).not.toContain("invocation");
+    expect(reply).toMatch(/HMS service returned an error/);
   });
 });

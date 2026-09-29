@@ -38,6 +38,23 @@ export default function HrPage() {
   const [savingStaff, setSavingStaff] = useState(false);
   const [staffForm, setStaffForm] = useState({ firstName: '', lastName: '', email: '', role: 'NURSE', departmentId: '' });
 
+  // Maitri Assistant handoff (spec 15): when the assistant opens this screen
+  // with prefilled staff fields, seed the existing add-staff form with them
+  // (one-shot; the same controlled form the HMS UI submits through).
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('maitriFormPrefill');
+      if (raw && JSON.parse(raw)?.module === 'staff') {
+        const { fields } = JSON.parse(raw);
+        sessionStorage.removeItem('maitriFormPrefill');
+        setStaffForm((prev) => ({ ...prev, ...fields }));
+        setShowAddStaff(true);
+      }
+    } catch {
+      /* ignore malformed handoff */
+    }
+  }, []);
+
   const [departments, setDepartments] = useState<any[]>([]);
   const [loadingDepts, setLoadingDepts] = useState(false);
 

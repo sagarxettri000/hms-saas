@@ -32,6 +32,8 @@ import { DepartmentsService } from "../departments/departments.service";
 const CONTEXT_MAX_MESSAGES = 12;
 const SESSION_IDLE_MS = 2 * 60 * 60 * 1000; // 2h idle expiry
 const CONFIRM_TTL_MS = 5 * 60 * 1000;
+/** Per-tool execution ceiling; keeps every turn bounded (§31.10/§31.13). */
+const TOOL_TIMEOUT_MS = 30_000;
 
 export interface MaitriActor {
   id: string;
@@ -64,8 +66,10 @@ export class MaitriOrchestratorService implements OnModuleInit {
    */
   private sessionSlots = new Map<
     string,
-    { date: string; doctorId?: string; doctorName?: string; times: string[] }
+    { date: string; doctorId?: string; doctorName?: string; times: string[]; patientId?: string }
   >();
+  /** Session entity memory: patient resolved by the last single-result search. */
+  private sessionPatient = new Map<string, string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -106,6 +110,7 @@ export class MaitriOrchestratorService implements OnModuleInit {
         if (pending.expiresAt < now) this.pendingConfirmations.delete(id);
       }
       if (this.sessionSlots.size > 500) this.sessionSlots.clear();
+      if (this.sessionPatient.size > 500) this.sessionPatient.clear();
     }, 60_000).unref?.();
   }
 
@@ -202,13 +207,23 @@ export class MaitriOrchestratorService implements OnModuleInit {
     }
 
     // ---- cross-turn continuation (spec 15/29/I) ----------------------------
-    // A bare “10:30” right after offered slots resumes the same booking
-    // instead of forcing the user to repeat patient/doctor/date.
+    // A bare “10:30” (or a confirmation like “yes book it”) right after
+    // offered slots resumes the same booking instead of making the user
+    // repeat patient/doctor/date.
     const rememberedSlots = this.sessionSlots.get(session.id);
     let effectiveMessage = userMessage;
-    if (rememberedSlots && /^\s*([01]?\d|2[0-3]):[0-5]\d\s*$/.test(userMessage)) {
+    if (
+      rememberedSlots &&
+      /^\s*([01]?\d|2[0-3]):[0-5]\d\s*$/.test(userMessage)
+    ) {
       effectiveMessage = `__slot_pick__ ${rememberedSlots.date} ${userMessage.trim()}${rememberedSlots.doctorId ? ` ${rememberedSlots.doctorId}` : ""}`;
       yield { type: "thinking", message: "Continuing with the selected time" };
+    } else if (
+      rememberedSlots?.patientId &&
+      /^\s*(yes|yeah|ok(?:ay)?|sure|book it|confirm it|do it|please do)\b/i.test(userMessage)
+    ) {
+      effectiveMessage = `__context_booking__ ${rememberedSlots.date} ${rememberedSlots.patientId}${rememberedSlots.doctorId ? ` ${rememberedSlots.doctorId}` : ""}`;
+      yield { type: "thinking", message: "Booking the appointment" };
     } else if (rememberedSlots && userMessage.trim().length > 0) {
       this.sessionSlots.delete(session.id);
     }
@@ -238,6 +253,27 @@ export class MaitriOrchestratorService implements OnModuleInit {
     let modelText = "";
     let providerFailed = false;
     let clientFormUpdate: { target: string; fields: Record<string, unknown> } | null = null;
+    // Bare confirmation ("yes book it") with remembered patient + slot list:
+    // book deterministically BEFORE the provider sees the message (the
+    // fallback provider would otherwise match "book it" as a fresh slots
+    // query for today — the exact bug this intercept fixes).
+    if (
+      rememberedSlots?.patientId &&
+      /^\s*(yes|yeah|ok(?:ay)?|sure|book it|confirm it|do it|please do)\b/i.test(userMessage)
+    ) {
+      toolCalls = [
+        {
+          name: "create_appointment",
+          arguments: {
+            patientId: rememberedSlots.patientId,
+            appointmentDate: rememberedSlots.date,
+            startTime: rememberedSlots.times?.[0] ?? "09:00",
+            ...(rememberedSlots.doctorId ? { doctorId: rememberedSlots.doctorId } : {}),
+          },
+        },
+      ];
+      yield { type: "thinking", message: "Booking the appointment" };
+    }
     if (effectiveMessage.startsWith("__slot_pick__")) {
       // Deterministic continuation: no model call needed to pick a slot.
       const [, date, time, doctorId] = effectiveMessage.split(/\s+/);
@@ -247,6 +283,25 @@ export class MaitriOrchestratorService implements OnModuleInit {
           arguments: {
             appointmentDate: date,
             startTime: time,
+            ...(doctorId ? { doctorId } : {}),
+            // Patient remembered earlier in this conversation (search or
+            // route context) — bare-time picks book for the same patient.
+            ...(rememberedSlots?.patientId ? { patientId: rememberedSlots.patientId } : {}),
+          },
+        },
+      ];
+    } else if (effectiveMessage.startsWith("__context_booking__")) {
+      // “yes book it” after offered slots (§50): use remembered context.
+      // Usually already handled by the intercept above; kept as a guard so
+      // the synthetic message never reaches the provider.
+      const [, date, patientId, doctorId] = effectiveMessage.split(/\s+/);
+      toolCalls = [
+        {
+          name: "create_appointment",
+          arguments: {
+            patientId,
+            appointmentDate: date,
+            startTime: rememberedSlots?.times?.[0] ?? "09:00",
             ...(doctorId ? { doctorId } : {}),
           },
         },
@@ -404,7 +459,9 @@ export class MaitriOrchestratorService implements OnModuleInit {
       // Navigation tools emit a client_action so the web app actually routes.
       if (executed.tool === "navigate_to_module") {
         clientAction = buildClientAction(executed.data);
-        if (!finalText) finalText = `Opened ${clientAction?.label ?? "the module"}.`;
+        if (clientAction) {
+          finalText = `Opened ${clientAction.label}.`;
+        }
       }
       // open_create_form hands the populated form to the HMS screen (spec 15).
       if (executed.tool === "open_create_form") {
@@ -428,13 +485,28 @@ export class MaitriOrchestratorService implements OnModuleInit {
             : ".");
         await this.savePendingForm(session.id, String((executed.data as any)?.target ?? ""));
       }
-      // Remember listed slots so “10:30” continues the booking (spec I).
+      // Remember listed slots so “10:30” / “yes book it” continues the
+      // booking (spec I). Patient comes from the conversation context that
+      // the model already resolved (mergedContext.currentEntityId).
       if (executed.tool === "find_available_appointment_slots" && Array.isArray(executed.data?.slots)) {
         this.sessionSlots.set(session.id, {
           date: String(executed.data.date ?? ""),
           doctorId: executed.data.slots[0]?.doctorId,
           times: executed.data.slots.map((s: any) => String(s.startTime)),
+          patientId:
+            mergedContext.currentEntityId ?? this.sessionPatient.get(session.id) ?? undefined,
         });
+      }
+      // Session entity memory (§15): a single-result patient search resolves
+      // the patient for follow-ups like “book her tomorrow at 10:30” even
+      // when the client route context carries no current entity.
+      if (
+        executed.tool === "search_patient" &&
+        Array.isArray(executed.data) &&
+        executed.data.length === 1 &&
+        executed.data[0]?.id
+      ) {
+        this.sessionPatient.set(session.id, String(executed.data[0].id));
       }
       if (executed.tool === "create_appointment") {
         this.sessionSlots.delete(session.id);
@@ -590,13 +662,23 @@ export class MaitriOrchestratorService implements OnModuleInit {
     }
     const input = parsed.data as any;
     try {
-      const data = await tool.handler(input, {
-        tenantId: actor.tenantId,
-        userId: actor.id,
-        role: actor.role,
-        user: actor,
-        context: {} as MaitriClientContext,
-      });
+      // Bounded execution (§31.10): a hung HMS service/DB must not leave the
+      // user in a permanent “thinking” state — fail honestly instead.
+      const data = await Promise.race([
+        tool.handler(input, {
+          tenantId: actor.tenantId,
+          userId: actor.id,
+          role: actor.role,
+          user: actor,
+          context: {} as MaitriClientContext,
+        }),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("TOOL_TIMEOUT: the HMS service did not respond in time")),
+            TOOL_TIMEOUT_MS,
+          ),
+        ),
+      ]);
       await this.auditToolCall({
         sessionId,
         actor,
@@ -908,9 +990,18 @@ export function composeResultReply(tool: string, data: any): string {
     case "find_available_appointment_slots": {
       const n = Number(d.count ?? 0);
       const doc = d.doctor ? ` for ${d.doctor}` : "";
-      return n
-        ? `Found ${n} available slot(s)${doc} on ${d.date}.`
-        : `No open slots${doc} on ${d.date}.`;
+      if (!n) return `No open slots${doc} on ${d.date}.`;
+      // With a preferred time, surface the nearest options directly (§50):
+      // “10:00 AM is unavailable” style recovery.
+      if (d.preferredTime) {
+        const times = (d.slots ?? []).slice(0, 4).map((s: any) => s.startTime);
+        const exact = times.includes(d.preferredTime);
+        const list = times.map((t: string) => `• ${t}`).join("\n");
+        return exact
+          ? `${d.preferredTime} is available${doc} on ${d.date}. Shall I book it?`
+          : `Nearby open slots${doc} on ${d.date}:\n${list}\nWhich one should I use?`;
+      }
+      return `Found ${n} available slot(s)${doc} on ${d.date}.`;
     }
     case "create_appointment": {
       const when = d.appointmentDate ? String(d.appointmentDate).slice(0, 10) : "";

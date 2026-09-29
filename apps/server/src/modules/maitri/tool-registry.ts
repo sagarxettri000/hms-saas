@@ -157,11 +157,23 @@ export function buildToolRegistry(deps: MaitriToolDeps): MaitriTool[] {
             deps.visibility.buildErIsolationFilter(),
           ],
         };
-        const result = await deps.patients.findAll(scope.tenantId, {
+        // Full-string search first (exact phrase match on any field). If that
+        // finds nothing (e.g. “srijana basnet” spans two columns), retry with
+        // the first token so “find patient srijana basnet” still matches —
+        // same tolerance the global search box gets (§39).
+        let result = await deps.patients.findAll(scope.tenantId, {
           query: input.query,
           limit: input.limit ?? 5,
           visibilityFilter,
         });
+        if (!compactPatients({ data: result.data }).length && input.query.trim().includes(" ")) {
+          const firstToken = input.query.trim().split(/\s+/)[0];
+          result = await deps.patients.findAll(scope.tenantId, {
+            query: firstToken,
+            limit: input.limit ?? 5,
+            visibilityFilter,
+          });
+        }
         // Same PHI masking as the HMS UI path — the AI never sees more.
         const masked = deps.patients.maskPatientPhi(scope.role, result.data);
         return compactPatients({ data: masked });
@@ -333,44 +345,88 @@ export function buildToolRegistry(deps: MaitriToolDeps): MaitriTool[] {
       module: "appointments",
       requiredPermissions: [P("appointments", "VIEW")],
       auditLevel: "low",
-      activityLabel: "Checking availability",
-      inputSchema: z.object({
-        date: z
-          .string()
-          .regex(/^\d{4}-\d{2}-\d{2}$/)
-          .describe("ISO date, e.g. 2026-09-29"),
-        doctorName: z.string().max(120).optional(),
-        doctorId: z.string().optional(),
-        departmentId: z.string().optional(),
-      }),
-      handler: async (input, scope) => {
-        let doctorId = input.doctorId;
+      activityLabel: "Checking availability",        inputSchema: z.object({
+          date: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/)
+            .describe("ISO date, e.g. 2026-09-29"),
+          doctorName: z.string().max(120).optional(),
+          doctorId: z.string().optional(),
+          departmentId: z.string().optional(),
+          preferredTime: z
+            .string()
+            .regex(/^\d{2}:\d{2}$/)
+            .optional()
+            .describe("Preferred HH:MM time; narrows slots to nearest options"),
+        }),
+        handler: async (input, scope) => {
+        // Resolve which doctors to query: explicit id/name, else up to 5
+        // active doctors so "find slots tomorrow" reflects the whole hospital.
+        let doctorIds: string[] = [];
         let doctorName: string | null = null;
-        if (!doctorId && input.doctorName) {
+        if (input.doctorId) {
+          doctorIds = [input.doctorId];
+          const doc: any = await deps.doctors.findById(scope.tenantId, input.doctorId);
+          doctorName = doc?.user
+            ? `${doc.user.firstName ?? ""} ${doc.user.lastName ?? ""}`.trim()
+            : null;
+        } else if (input.doctorName) {
           const docs = await deps.doctors.findAll(scope.tenantId, {
             search: input.doctorName,
             limit: 1,
           });
           const first = compactList(docs)[0];
-          if (!first) return { slots: [], count: 0, note: `No doctor matching “${input.doctorName}” was found.` };
-          doctorId = first.id;
+          if (!first)
+            return { slots: [], count: 0, note: `No doctor matching “${input.doctorName}” was found.` };
+          doctorIds = [first.id];
+          doctorName = first.name ?? null;
+        } else {
+          const docs = await deps.doctors.findAll(scope.tenantId, { limit: 2 });
+          doctorIds = compactList(docs).map((d: any) => d.id).slice(0, 2);
         }
-        if (doctorId) {
-          const doc: any = await deps.doctors.findById(scope.tenantId, doctorId);
-          doctorName = doc?.user
-            ? `${doc.user.firstName ?? ""} ${doc.user.lastName ?? ""}`.trim()
+
+        // The weekly-schedule slot engine (DoctorsService.getAvailability) is
+        // the HMS source of truth for open booking windows. Query per doctor
+        // (bounded: first 2 doctors) so a slow/unreachable DB cannot stall a
+        // whole turn — earlier failures degrade to the remaining doctors.
+        const merged: any[] = [];
+        for (const docId of doctorIds.slice(0, 2)) {
+          const avail = (await deps.doctors
+            .getAvailability(scope.tenantId, docId, new Date(`${input.date}T00:00:00`))
+            .catch(() => null)) as any;
+          if (avail?.available && Array.isArray(avail.slots)) {
+            merged.push(
+              ...avail.slots.map((s: any) => ({
+                doctorId: docId,
+                startTime: s.startTime,
+                endTime: s.endTime,
+              })),
+            );
+          }
+        }
+        merged.sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)));
+        // Preferred time (§50 recovery): rank nearest options first so the
+        // user sees 10:30/10:15/10:45 rather than the whole 09:00–17:00 grid.
+        const ranked = input.preferredTime
+          ? [...merged].sort(
+              (a, b) =>
+                Math.abs(String(a.startTime).localeCompare(input.preferredTime!)) -
+                Math.abs(String(b.startTime).localeCompare(input.preferredTime!)),
+            )
+          : merged;
+        if (!doctorName && merged.length) {
+          const firstDoc: any = await deps.doctors.findById(scope.tenantId, merged[0].doctorId);
+          doctorName = firstDoc?.user
+            ? `${firstDoc.user.firstName ?? ""} ${firstDoc.user.lastName ?? ""}`.trim()
             : null;
         }
-        const res = await deps.appointments.getAvailability(scope.tenantId, {
-          doctorId,
-          departmentId: input.departmentId,
-          date: input.date,
-        });
         return {
           date: input.date,
           doctor: doctorName,
-          count: res.count,
-          slots: (res.slots ?? []).slice(0, 20),
+          doctorsChecked: doctorIds.length,
+          count: merged.length,
+          ...(input.preferredTime ? { preferredTime: input.preferredTime } : {}),
+          slots: ranked.slice(0, 20),
         };
       },
     },

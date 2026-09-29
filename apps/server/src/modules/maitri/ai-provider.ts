@@ -288,6 +288,30 @@ export class RuleBasedProvider implements AIProvider {
       const tool = tryMatch("find_available_appointment_slots", { date });
       if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
     }
+    // Bare confirmations ("yes book it") are continuation turns — the
+    // orchestrator books from remembered slots; never re-run a slots query.
+    const isBareConfirmation =
+      /^\s*(yes|yeah|ok(?:ay)?|sure|book it|confirm it|do it|please do)[\s!.]*$/i.test(lastUser.trim());
+    // “book her tomorrow at 10:30” → resolve the patient from context, then
+    // check real slots for that date (the reply offers them; the model/
+    // orchestrator continues with create_appointment once a slot is chosen).
+    if (/\b(book|schedule|appointment for)\b/.test(text) && !wantsNav && !isBareConfirmation) {
+      const timeMatch = lastUser.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+      const date = /tomorrow/.test(text)
+        ? new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+      const entity: any = (request as any).context ?? {};
+      const contextPatientId =
+        (entity as any).currentEntity === "patient" ? (entity as any).currentEntityId : undefined;
+      const tool = tryMatch("find_available_appointment_slots", {
+        date,
+        ...(timeMatch
+          ? { preferredTime: `${String(Number(timeMatch[1])).padStart(2, "0")}:${timeMatch[2]}` }
+          : {}),
+        ...(contextPatientId ? { _contextPatientId: contextPatientId } : {}),
+      });
+      if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
+    }
     if (/\b(pending|unpaid|overdue)\b/.test(text) && /\b(bills?|invoices?)\b/.test(text)) {
       const tool = tryMatch("get_pending_bills", {});
       if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };

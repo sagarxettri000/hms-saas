@@ -79,9 +79,27 @@ export default function MaitriPanel({ onClose }: { onClose: () => void }) {
   const sessionIdRef = useRef<string | null>(null);
   const recognitionRef = useRef<any>(null);
 
-  // Re-derive quick actions when the underlying HMS screen changes.
+  // Re-derive quick actions when the underlying HMS screen changes — including
+  // assistant-driven client-side navigations (§31.3 context awareness).
   useEffect(() => {
-    setRouteKey(window.location.pathname + window.location.search);
+    const read = () => setRouteKey(window.location.pathname + window.location.search);
+    read();
+    const origPush = window.history.pushState.bind(window.history);
+    const origReplace = window.history.replaceState.bind(window.history);
+    window.history.pushState = (...args: any[]) => {
+      origPush(...(args as Parameters<typeof origPush>));
+      read();
+    };
+    window.history.replaceState = (...args: any[]) => {
+      origReplace(...(args as Parameters<typeof origReplace>));
+      read();
+    };
+    window.addEventListener('popstate', read);
+    return () => {
+      window.history.pushState = origPush;
+      window.history.replaceState = origReplace;
+      window.removeEventListener('popstate', read);
+    };
   }, []);
 
   const moduleKey = useMemo(
@@ -131,6 +149,31 @@ export default function MaitriPanel({ onClose }: { onClose: () => void }) {
       const controller = new AbortController();
       abortRef.current = controller;
 
+      // Watchdog (§31.10/§31.13): if no event arrives within 45s, surface an
+      // honest error instead of leaving the user in a stuck “thinking” state.
+      // Real activity (thinking/tool/result events) keeps resetting it.
+      let watchdog: ReturnType<typeof setTimeout> | null = null;
+      const RESET_WATCHDOG_MS = 45_000;
+      const resetWatchdog = () => {
+        if (watchdog) clearTimeout(watchdog);
+        watchdog = setTimeout(() => {
+          controller.abort();
+          patchLast((last) =>
+            last.role === 'activity'
+              ? {
+                  id: last.id,
+                  role: 'assistant' as const,
+                  content:
+                    'The HMS service is taking too long to respond. Please try again in a moment.',
+                  state: 'error' as const,
+                }
+              : last,
+          );
+          setBusy(false);
+        }, RESET_WATCHDOG_MS);
+      };
+      resetWatchdog();
+
       const patchLast = (fn: (last: ConversationItem) => ConversationItem | null) => {
         setItems((prev) => {
           if (prev.length === 0) return prev;
@@ -151,6 +194,7 @@ export default function MaitriPanel({ onClose }: { onClose: () => void }) {
         },
         {
           onEvent: (ev) => {
+            resetWatchdog();
             switch (ev.type) {
               case 'session':
                 sessionIdRef.current = ev.sessionId;
@@ -194,6 +238,9 @@ export default function MaitriPanel({ onClose }: { onClose: () => void }) {
               }
               case 'client_action': {
                 if (ev.action === 'navigate' && ev.route) {
+                  // §14: navigation is performed immediately — the assistant
+                  // operates the HMS, it does not hand out instructions.
+                  router.push(ev.route);
                   patchLast((last) =>
                     last.role === 'assistant'
                       ? { ...last, navigateTo: ev.route, navigateLabel: ev.label }
@@ -257,6 +304,7 @@ export default function MaitriPanel({ onClose }: { onClose: () => void }) {
         controller.signal,
       );
 
+      if (watchdog) clearTimeout(watchdog);
       setBusy(false);
       abortRef.current = null;
     },

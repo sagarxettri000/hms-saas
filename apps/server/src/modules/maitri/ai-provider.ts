@@ -195,6 +195,22 @@ export class RuleBasedProvider implements AIProvider {
     const text = lastUser.toLowerCase();
     const tools = request.tools ?? [];
 
+    // Dangerous-verb gate (spec 33): SQL, shell, code-execution, filesystem and
+    // credential requests are never mapped to HMS tools — they get an explicit
+    // decline. Defense in depth: the registry also contains no such tool, and
+    // the orchestrator re-authorizes every call server-side.
+    if (
+      /\bselect\s+\*|\bdrop\s+table|\bdelete\s+from|\binsert\s+into|\bupdate\s+\w+\s+set|\bsql\b/.test(text) ||
+      /\b(shell|terminal|bash|powershell|sudo|python|javascript)\b/.test(text) ||
+      /\.env\b|\/etc\/|\bpasswd\b|jwt secret|api ?key|connection string|database (password|uri|url)|environment variables?/.test(text)
+    ) {
+      return {
+        content:
+          "I can't run commands, query databases directly or reveal credentials. I can help only with Maitri HMS operations, records and workflows.",
+        finishReason: "stop",
+      };
+    }
+
     const tryMatch = (name: string, args: Record<string, unknown>) => {
       const tool = tools.find((t) => t.name === name);
       return tool ? { name, arguments: args } : null;

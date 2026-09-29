@@ -355,7 +355,7 @@ export function buildToolRegistry(deps: MaitriToolDeps): MaitriTool[] {
           departmentId: z.string().optional(),
           preferredTime: z
             .string()
-            .regex(/^\d{2}:\d{2}$/)
+            .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
             .optional()
             .describe("Preferred HH:MM time; narrows slots to nearest options"),
         }),
@@ -447,7 +447,7 @@ export function buildToolRegistry(deps: MaitriToolDeps): MaitriTool[] {
           .describe("ISO date, e.g. 2026-09-29"),
         startTime: z
           .string()
-          .regex(/^\d{2}:\d{2}$/)
+          .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
           .describe("24h HH:MM, e.g. 10:30"),
         type: z.string().max(40).optional(),
         reason: z.string().max(300).optional(),
@@ -500,7 +500,7 @@ export function buildToolRegistry(deps: MaitriToolDeps): MaitriTool[] {
       inputSchema: z.object({
         appointmentId: z.string().min(1),
         newDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        newStartTime: z.string().regex(/^\d{2}:\d{2}$/),
+        newStartTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
       }),
       handler: async (input, scope) => {
         return deps.appointments.reschedule(

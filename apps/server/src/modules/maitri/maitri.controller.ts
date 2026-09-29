@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  PayloadTooLargeException,
   Post,
   Req,
   Res,
@@ -9,6 +10,7 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
+import { Throttle, ThrottlerGuard } from "@nestjs/throttler";
 import type {
   MaitriChatRequest,
   MaitriConfirmRequest,
@@ -56,12 +58,21 @@ export class MaitriController {
 
   /** Chat turn as an incremental SSE stream of MaitriStreamEvent frames. */
   @Post("chat")
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiOperation({ summary: "Send a message to Maitri Assistant (SSE stream)" })
   async chatSse(
     @Req() req: any,
     @Res() res: Response,
     @Body() body: MaitriChatRequest,
   ) {
+    if (String(body?.message ?? "").length > 4000) {
+      res.status(413).json({
+        statusCode: 413,
+        message: "Message too long for the assistant.",
+      });
+      return;
+    }
     const actor = this.actorFrom(req);
     res.status(200);
     res.setHeader("Content-Type", "text/event-stream");
@@ -103,11 +114,16 @@ export class MaitriController {
 
   /** Non-streaming fallback returning the full event list as JSON. */
   @Post("chat/json")
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiOperation({ summary: "Send a message to Maitri Assistant (JSON)" })
   async chatJson(
     @Req() req: any,
     @Body() body: MaitriChatRequest,
   ) {
+    if (String(body?.message ?? "").length > 4000) {
+      throw new PayloadTooLargeException("Message too long for the assistant.");
+    }
     const actor = this.actorFrom(req);
     const events: MaitriStreamEvent[] = [];
     for await (const ev of this.orchestrator.chatTurn(

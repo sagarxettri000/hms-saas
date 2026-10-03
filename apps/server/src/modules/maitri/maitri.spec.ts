@@ -316,3 +316,83 @@ describe("friendlyToolError", () => {
     expect(reply).toMatch(/HMS service returned an error/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Panel quick-action phrases: every chip in MaitriPanel must reach its data
+// tool in offline mode (these are the exact strings the UI sends).
+// ---------------------------------------------------------------------------
+
+describe("rule-based fallback: panel quick-action phrases", () => {
+  const tools = [
+    { name: "navigate_to_module", description: "", inputSchema: {} },
+    { name: "get_todays_appointments", description: "", inputSchema: {} },
+    { name: "get_bed_availability", description: "", inputSchema: {} },
+    { name: "get_todays_collections", description: "", inputSchema: {} },
+    { name: "get_patient_summary", description: "", inputSchema: {} },
+    { name: "get_patient_visits", description: "", inputSchema: {} },
+    { name: "get_patient_reports", description: "", inputSchema: {} },
+    { name: "search_patient", description: "", inputSchema: {} },
+    { name: "find_available_appointment_slots", description: "", inputSchema: {} },
+  ] as any;
+
+  const ask = (message: string, extra: Record<string, unknown> = {}) =>
+    new RuleBasedProvider().generate({
+      systemPrompt: "test",
+      messages: [{ role: "user", content: message }],
+      tools,
+      ...extra,
+    });
+
+  it("“Show today’s appointments” lists them instead of navigating", async () => {
+    const res = await ask("Show today's appointments");
+    expect(res.toolCalls![0].name).toBe("get_todays_appointments");
+  });
+
+  it("bare “show appointments” still navigates to the module", async () => {
+    const res = await ask("show appointments");
+    expect(res.toolCalls![0].name).toBe("navigate_to_module");
+    expect(res.toolCalls![0].arguments.target).toBe("appointments");
+  });
+
+  it("“book appointment today” stays a booking, not the appointments list", async () => {
+    const res = await ask("book appointment today");
+    expect(res.toolCalls![0].name).toBe("find_available_appointment_slots");
+  });
+
+  it("“show available beds” queries bed availability", async () => {
+    const res = await ask("show me available beds");
+    expect(res.toolCalls![0].name).toBe("get_bed_availability");
+  });
+
+  it("“What are today’s collections?” maps to the billing tool", async () => {
+    const res = await ask("What are today's collections?");
+    expect(res.toolCalls![0].name).toBe("get_todays_collections");
+  });
+
+  it("“Summarize this patient” uses the on-screen patient", async () => {
+    const res = await ask("Summarize this patient", { contextEntityId: "p1" });
+    expect(res.toolCalls![0].name).toBe("get_patient_summary");
+    expect(res.toolCalls![0].arguments.patientId).toBe("p1");
+  });
+
+  it("“Show recent visits for this patient” reads the record, never a junk search", async () => {
+    const res = await ask("Show recent visits for this patient", {
+      context: { currentEntity: "patient", currentEntityId: "p2" },
+    });
+    expect(res.toolCalls![0].name).toBe("get_patient_visits");
+    expect(res.toolCalls![0].arguments.patientId).toBe("p2");
+  });
+
+  it("“Show recent reports for this patient” reads the record", async () => {
+    const res = await ask("Show recent reports for this patient", {
+      contextEntityId: "p3",
+    });
+    expect(res.toolCalls![0].name).toBe("get_patient_reports");
+    expect(res.toolCalls![0].arguments.patientId).toBe("p3");
+  });
+
+  it("plain patient search is unaffected by the read guards", async () => {
+    const res = await ask("find patient Sita Rai");
+    expect(res.toolCalls![0].name).toBe("search_patient");
+  });
+});

@@ -338,6 +338,13 @@ export class MaitriOrchestratorService implements OnModuleInit {
           messages: convo,
           tools,
           maxTokens: 500,
+          // Screen context for the offline rules (visits/reports/summary,
+          // booking continuation) — hints only, never authorization.
+          context: mergedContext,
+          contextEntityId:
+            mergedContext.currentEntityId ??
+            this.sessionPatient.get(session.id) ??
+            undefined,
         });
         toolCalls = response.toolCalls ?? [];
         modelText = response.content ?? "";

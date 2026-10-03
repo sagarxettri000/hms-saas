@@ -216,6 +216,17 @@ export class RuleBasedProvider implements AIProvider {
       return tool ? { name, arguments: args } : null;
     };
 
+    // --- read-first: “show today’s appointments” asks for the list, not the
+    // screen (the panel’s own quick-action chip sends this exact phrase).
+    // Booking and explicit-navigation phrasings keep their behaviour below.
+    if (
+      /\b(today'?s?)\b.*\bappointments?\b|\bappointments?\b.*\btoday\b/.test(text) &&
+      !/\b(book|schedule|reschedule|cancel|create|new|open|go to)\b/.test(text)
+    ) {
+      const tool = tryMatch("get_todays_appointments", {});
+      if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
+    }
+
     // --- navigation --------------------------------------------------------
     const navTargets: [RegExp, string, string][] = [
       [/\b(dashboard|overview|home)\b/, "dashboard", "Dashboard"],
@@ -241,9 +252,11 @@ export class RuleBasedProvider implements AIProvider {
       /\b(open|go to|take me|show me the|navigate|jump to)\b/.test(text) ||
       (/\bshow\b/.test(text) &&
         !/\bhow many|which|what|find|search\b/.test(text) &&
-        // “show low stock / pending bills / available slots” are data queries,
-        // not navigation — the read-question rules below handle them.
-        !/\b(low|shortage|expir|stock|pending|bills?|invoices?|slots?|availab|visits?|reports?)\b/.test(text));
+        // “show low stock / pending bills / available beds / expiring stock /
+        // today’s collections” are data queries, not navigation — the
+        // read-question rules below handle them. Prefix terms use \w* so
+        // “available”/“expiring” actually match past the word boundary.
+        !/\b(low|shortage|expir\w*|stock|pending|bills?|invoices?|slots?|availab\w*|visits?|reports?|collections?)\b/.test(text));
     if (wantsNav) {
       for (const [re, key, label] of navTargets) {
         if (re.test(text)) {
@@ -259,7 +272,7 @@ export class RuleBasedProvider implements AIProvider {
     // --- read questions ----------------------------------------------------
     if (
       /\b(bed|beds)\b/.test(text) &&
-      /\b(availab|free|occupanc|status|how many)\b/.test(text)
+      /\b(availab\w*|free|occupanc\w*|status|how many)\b/.test(text)
     ) {
       const tool = tryMatch("get_bed_availability", {});
       if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
@@ -281,7 +294,10 @@ export class RuleBasedProvider implements AIProvider {
     if (
       /\b(find|search|show|open)\b/.test(text) &&
       /\bpatient|mrn|registration\b/.test(text) &&
-      !wantsNav
+      !wantsNav &&
+      // “show recent VISITS / reports / SUMMARY for this patient” are record
+      // reads handled by the dedicated rules below, not a fresh patient search.
+      !/\b(visits?|reports?|summar\w*|history|timeline)\b/.test(text)
     ) {
       const query = extractQuery(lastUser, [
         "patient", "patients", "find", "search", "show", "open", "mrn",
@@ -318,7 +334,9 @@ export class RuleBasedProvider implements AIProvider {
         : new Date().toISOString().slice(0, 10);
       const entity: any = (request as any).context ?? {};
       const contextPatientId =
-        (entity as any).currentEntity === "patient" ? (entity as any).currentEntityId : undefined;
+        (entity as any).currentEntity === "patient"
+          ? (entity as any).currentEntityId
+          : (request as any).contextEntityId;
       const tool = tryMatch("find_available_appointment_slots", {
         date,
         ...(timeMatch
@@ -333,22 +351,35 @@ export class RuleBasedProvider implements AIProvider {
       if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
     }
     if (/\b(visits?|visit history|timeline)\b/.test(text) && /\b(patient|her|his|their)\b/.test(text)) {
-      const patientId = (request as any).contextEntityId;
+      const patientId =
+        (request as any).contextEntityId ?? (request as any).context?.currentEntityId;
       if (patientId) {
         const tool = tryMatch("get_patient_visits", { patientId });
         if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
       }
     }
     if (/\b(reports?|lab reports?)\b/.test(text) && /\b(patient|her|his|their|latest)\b/.test(text) && !wantsNav) {
-      const patientId = (request as any).contextEntityId;
+      const patientId =
+        (request as any).contextEntityId ?? (request as any).context?.currentEntityId;
       if (patientId) {
         const tool = tryMatch("get_patient_reports", { patientId });
         if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
       }
     }
-    if (/\b(today'?s?)\b.*\bappointments?\b|\bappointments?\b.*\btoday\b/.test(text)) {
-      const tool = tryMatch("get_todays_appointments", {});
+    // “What are today’s collections?” — panel billing chip (offline mode).
+    if (/\bcollections?\b/.test(text) && /\btoday'?s?\b|\bcollected today\b/.test(text)) {
+      const tool = tryMatch("get_todays_collections", {});
       if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
+    }
+    // “Summarize this patient” — panel entity chip; needs the on-screen
+    // record (client context, now threaded through the request).
+    if (/\b(summar\w*|summary)\b/.test(text) && /\b(patient|her|his|their)\b/.test(text)) {
+      const patientId =
+        (request as any).contextEntityId ?? (request as any).context?.currentEntityId;
+      if (patientId) {
+        const tool = tryMatch("get_patient_summary", { patientId });
+        if (tool) return { content: "", toolCalls: [tool], finishReason: "tool_calls" };
+      }
     }
     if (/\bpending\b.*\blabs?\b|\blabs?\b.*\bpending\b/.test(text)) {
       const tool = tryMatch("get_pending_lab_orders", {});

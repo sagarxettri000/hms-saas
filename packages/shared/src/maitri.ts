@@ -176,6 +176,10 @@ export interface AIProviderGenerateRequest {
   tools?: MaitriToolSpec[];
   maxTokens?: number;
   temperature?: number;
+  /** Client screen context (hints only; authorization stays server-side). */
+  context?: MaitriClientContext;
+  /** Shorthand for context.currentEntityId — the record currently on screen. */
+  contextEntityId?: string;
 }
 
 export interface AIProviderToolCall {

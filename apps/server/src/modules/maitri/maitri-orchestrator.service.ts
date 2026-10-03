@@ -328,8 +328,10 @@ export class MaitriOrchestratorService implements OnModuleInit {
           modelText = `I noted that. The ${formTarget} form is still open — tell me the remaining details or say “submit” when ready.`;
         }
       } catch (err: any) {
-        providerFailed = true;
-        this.logger.error(`Provider error: ${err?.message}`);
+        // Extraction is best-effort: keep the form open with guidance rather
+        // than surfacing a provider error to the user.
+        this.logger.error(`Form extraction provider error: ${err?.message}`);
+        modelText = `The ${formTarget} form is still open — tell me the remaining details or say “submit” when ready.`;
       }
     } else {
       try {
@@ -349,8 +351,30 @@ export class MaitriOrchestratorService implements OnModuleInit {
         toolCalls = response.toolCalls ?? [];
         modelText = response.content ?? "";
       } catch (err: any) {
-        providerFailed = true;
-        this.logger.error(`Provider error: ${err?.message}`);
+        // Graceful degradation: a hosted-runtime outage (or bad key) must
+        // never break the assistant — the deterministic rules take over the
+        // turn, so Maitri keeps working in offline mode until the provider
+        // recovers.
+        this.logger.error(
+          `Provider error: ${err?.message} — falling back to rule-based turn`,
+        );
+        try {
+          const fallback = await new RuleBasedProvider().generate({
+            systemPrompt,
+            messages: convo,
+            tools,
+            maxTokens: 500,
+            context: mergedContext,
+            contextEntityId:
+              mergedContext.currentEntityId ??
+              this.sessionPatient.get(session.id) ??
+              undefined,
+          });
+          toolCalls = fallback.toolCalls ?? [];
+          modelText = fallback.content ?? "";
+        } catch {
+          providerFailed = true;
+        }
       }
     }
 
